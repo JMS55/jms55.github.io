@@ -87,7 +87,7 @@ indie game-usable renderer with much fewer caveats, and much fancier lighting an
 Take Slime Rancher, a hit indie game from 2017. [This post](https://pixelalchemy.dev/posts/a-frame-of-slime-rancher) goes into
 detail on the tricks and rendering techniques the game used to achieve its graphics. Bevy 0.11 has support for almost all of the listed techniques! The only thing we're missing are decals, and refraction (although there's a PR open that implements screen-space refaction!).
 
-I would specifically like to note the _amount_ of people working on rendering features, and how it's increased over time. It's a great sign to see that rendering isin't the domain of only 1 or 2 dedicated developers. Rather, we have a fairly large amount of people contributing major rendering features and improvements.
+I would specifically like to note the _amount_ of people working on rendering features, and how it's increased over time. It's a great sign to see that rendering isn't the domain of only 1 or 2 dedicated developers. Rather, we have a fairly large amount of people contributing major rendering features and improvements.
 
 Too often, I feel rendering is seen as a kind of opaque witchcraft. To some extent, I feel that perception is true. Writing a shader (GPU program) is not like writing a program for the CPU in Rust. The graphics APIs themselves (in our case, wgpu) are not the most intuitive, and are often subject to compatibility or performance constraints that lead to poor ergonomics. Furthermore, even if you can write a shader, and know the graphics APIs, it's not always clear _how_ to assemble all that together into a performant, compatible, ergonomic renderer.
 
@@ -152,7 +152,7 @@ The solution is of course for us to invest more time in writing those features a
 
 ### Bevy editor
 
-This isin't quite rendering related, but like everyone else, I'm eagerly awaiting bevy_editor. It'll be super useful for testing out rendering features, as clicking through GUI buttons is much easier than writing a system to manually toggle several features on and off with keypresses and rendering an in-game UI to show the enabled settings.
+This isn't quite rendering related, but like everyone else, I'm eagerly awaiting bevy_editor. It'll be super useful for testing out rendering features, as clicking through GUI buttons is much easier than writing a system to manually toggle several features on and off with keypresses and rendering an in-game UI to show the enabled settings.
 
 I'm also really looking forward to _developing_ Bevy's editor. I originally joined this project to do just that, and somehow ended up working on rendering instead! I mentioned before my Rust gamedev experience, but I also have a lot of experience with Rust UI dev and UI dev in general.
 
