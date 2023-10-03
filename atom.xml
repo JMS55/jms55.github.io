@@ -1,0 +1,191 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en">
+    <title>JMS55&#x27;s Blog</title>
+    <link href="https://jms55.github.io/atom.xml" rel="self" type="application/atom+xml"/>
+    <link href="https://jms55.github.io"/>
+    <generator uri="https://www.getzola.org/">Zola</generator>
+    <updated>2023-09-12T00:00:00+00:00</updated>
+    <id>https://jms55.github.io/atom.xml</id>
+    <entry xml:lang="en">
+        <title>Bevy&#x27;s Third Birthday - Reflections on Rendering</title>
+        <published>2023-09-12T00:00:00+00:00</published>
+        <updated>2023-09-12T00:00:00+00:00</updated>
+        <author>
+          <name>JMS55</name>
+        </author>
+        <link rel="alternate" href="https://jms55.github.io/posts/2023-09-12-bevy-third-birthday/" type="text/html"/>
+        <id>https://jms55.github.io/posts/2023-09-12-bevy-third-birthday/</id>
+        
+        <content type="html">&lt;blockquote&gt;
+&lt;p&gt;Written in response to &lt;a href=&quot;https:&#x2F;&#x2F;bevyengine.org&#x2F;news&#x2F;bevys-third-birthday&quot;&gt;Bevy&#x27;s Third Birthday&lt;&#x2F;a&gt;.&lt;&#x2F;p&gt;
+&lt;&#x2F;blockquote&gt;
+&lt;h1 id=&quot;introduction&quot;&gt;Introduction&lt;a class=&quot;anchor&quot; aria-hidden=&quot;true&quot; href=&quot;#introduction&quot; hidden=&quot;&quot;&gt;#&lt;&#x2F;a&gt;
+&lt;&#x2F;h1&gt;
+&lt;blockquote&gt;
+&lt;p&gt;You can skip this section if you&#x27;re only interested in hearing about Bevy - we&#x27;ll get to that in a minute.&lt;&#x2F;p&gt;
+&lt;&#x2F;blockquote&gt;
+&lt;h2 id=&quot;who-am-i&quot;&gt;Who am I?&lt;a class=&quot;anchor&quot; aria-hidden=&quot;true&quot; href=&quot;#who-am-i&quot; hidden=&quot;&quot;&gt;#&lt;&#x2F;a&gt;
+&lt;&#x2F;h2&gt;
+&lt;p&gt;Hi, I&#x27;m JMS55, and I&#x27;ve been working on Bevy&#x27;s 3D renderer for the past ~10 months.&lt;&#x2F;p&gt;
+&lt;p&gt;I&#x27;ve also been involved in the Rust gamedev community for a long time:&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;I have been using Rust since pre-1.0 (around ~7 years ago).&lt;&#x2F;li&gt;
+&lt;li&gt;Tried out Piston when it first came out; same with Amythest.&lt;&#x2F;li&gt;
+&lt;li&gt;Contributed a (very tiny) bit to &lt;a href=&quot;https:&#x2F;&#x2F;veloren.net&quot;&gt;Veloren&lt;&#x2F;a&gt;.&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;a href=&quot;https:&#x2F;&#x2F;github.com&#x2F;JMS55&#x2F;botnet#botnet&quot;&gt;Wrote a demo&lt;&#x2F;a&gt; for a cool RTS simulation kind of game where you program your units via Rust-compiled-to-WASM (and would love to get back to it at some point), using Wasmtime and Macroquad.&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;a href=&quot;https:&#x2F;&#x2F;github.com&#x2F;JMS55&#x2F;sandbox#sandbox&quot;&gt;Wrote a falling sand game&lt;&#x2F;a&gt; using pixels, wgpu, and imgui-rs (I also tried egui and yakui). I wrote the shaders for it in GLSL - this was before wgpu started using WGSL!&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;p&gt;&lt;a href=&quot;https:&#x2F;&#x2F;github.com&#x2F;parasyte&#x2F;pixels&quot;&gt;Pixels&lt;&#x2F;a&gt; was the first time I ever made a non-trivial contribution to an open source library. Now, I&#x27;m working on Bevy pretty much daily!&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;contributing-to-bevy&quot;&gt;Contributing to Bevy&lt;a class=&quot;anchor&quot; aria-hidden=&quot;true&quot; href=&quot;#contributing-to-bevy&quot; hidden=&quot;&quot;&gt;#&lt;&#x2F;a&gt;
+&lt;&#x2F;h2&gt;
+&lt;p&gt;First, some overall thoughts on my experience contributing to Bevy.&lt;&#x2F;p&gt;
+&lt;p&gt;It&#x27;s been exceedingly rewarding to work on an open source project with this kind of community. Before Bevy, I mainly worked on my own projects, and inevitably got burnt out. It&#x27;s hard to maintain motivation when you&#x27;re the only one involved. It&#x27;s been super energizing getting to bounce ideas off of the other amazing developers working on Bevy!&lt;&#x2F;p&gt;
+&lt;p&gt;Additionally, seeing code I write translate directly into real-world use is awesome. Thank you to all the other developers and users of Bevy!&lt;&#x2F;p&gt;
+&lt;p&gt;If you&#x27;re a user of Bevy, and are thinking about getting involved in Bevy&#x27;s development, I highly recommended it! One of the great things about Bevy is it&#x27;s modularity and focus on ECS. &amp;quot;Engine code&amp;quot; and &amp;quot;user code&amp;quot; are not substantially different. If you&#x27;ve used Bevy before, chances are you can write code &lt;em&gt;for&lt;&#x2F;em&gt; Bevy.&lt;&#x2F;p&gt;
+&lt;p&gt;Quoting Cart, &amp;quot;Bevy users &lt;em&gt;are&lt;&#x2F;em&gt; bevy developers, they just don&#x27;t know it yet&amp;quot;. The developers and community are super friendly. Feel free to join our &lt;a href=&quot;https:&#x2F;&#x2F;discord.com&#x2F;invite&#x2F;bevy&quot;&gt;Discord&lt;&#x2F;a&gt;, pick a topic you find interesting - say, #rendering-dev :) - and starting asking lots of questions!&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;post-overview&quot;&gt;Post overview&lt;a class=&quot;anchor&quot; aria-hidden=&quot;true&quot; href=&quot;#post-overview&quot; hidden=&quot;&quot;&gt;#&lt;&#x2F;a&gt;
+&lt;&#x2F;h2&gt;
+&lt;p&gt;With that out of the way: this blog post will be my reflection on nearly a year of Bevy development (Bevy 0.9-dev to 0.12-dev). Specifically, bevy_pbr, bevy_core_pipeline, and bevy_render, along with some related crates such as wgpu and naga. I (mostly) won&#x27;t be talking about the ECS, 2D renderer, UI, and other areas of Bevy.&lt;&#x2F;p&gt;
+&lt;p&gt;I&#x27;ll be covering what I (and others) worked on, what went well, important items we need to spend time developing, and some new features I&#x27;m excited to work on in the coming months.&lt;&#x2F;p&gt;
+&lt;h1 id=&quot;this-year&quot;&gt;This Year&lt;a class=&quot;anchor&quot; aria-hidden=&quot;true&quot; href=&quot;#this-year&quot; hidden=&quot;&quot;&gt;#&lt;&#x2F;a&gt;
+&lt;&#x2F;h1&gt;
+&lt;h2 id=&quot;what-we-achieved&quot;&gt;What we achieved&lt;a class=&quot;anchor&quot; aria-hidden=&quot;true&quot; href=&quot;#what-we-achieved&quot; hidden=&quot;&quot;&gt;#&lt;&#x2F;a&gt;
+&lt;&#x2F;h2&gt;
+&lt;p&gt;This year, I&#x27;ve worked on and merged the following features:&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;Bloom (In collaboration with others) (Bevy 0.9, 0.10)&lt;&#x2F;li&gt;
+&lt;li&gt;EnvironmentMapLight (IBL) (Bevy 0.10)&lt;&#x2F;li&gt;
+&lt;li&gt;Temporal antialiasing (TAA) (Bevy 0.11)&lt;&#x2F;li&gt;
+&lt;li&gt;Screen-space ambient occlusion (SSAO) (Bevy 0.11)&lt;&#x2F;li&gt;
+&lt;li&gt;Skybox (Bevy 0.11)&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;p&gt;I&#x27;ve also worked on, and either didn&#x27;t end up merging or am still working on:&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;Percentage-closer filtering (PCF) for smoothing out the edges of shadows&lt;&#x2F;li&gt;
+&lt;li&gt;Automated EnvironmentMapLight generation (replacing glTF-IBL-Sampler)&lt;&#x2F;li&gt;
+&lt;li&gt;Support for AMD&#x27;s FSR and Nvidia&#x27;s DLSS upscalers&lt;&#x2F;li&gt;
+&lt;li&gt;Multithreaded rendering for improved performance&lt;&#x2F;li&gt;
+&lt;li&gt;Clear coat layer for StandardMaterial&lt;&#x2F;li&gt;
+&lt;li&gt;GPU pass timing overlay for profiling the renderer (GPU timestamps)&lt;&#x2F;li&gt;
+&lt;li&gt;Ergonomic improvements for the renderer internals&lt;&#x2F;li&gt;
+&lt;li&gt;Real-time fully dynamic global illumination (more on this later!)&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;p&gt;and many other smaller PRs not interesting enough to mention, new examples contributed, discussion posts and conversations, bug investigations, performance profiling sessions, and reviewing other peoples&#x27; PRs.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;https:&#x2F;&#x2F;jms55.github.io&#x2F;posts&#x2F;2023-09-12-bevy-third-birthday&#x2F;ssao.png&quot; alt=&quot;ssao&quot; &#x2F;&gt;
+&lt;img src=&quot;https:&#x2F;&#x2F;jms55.github.io&#x2F;posts&#x2F;2023-09-12-bevy-third-birthday&#x2F;taa.png&quot; alt=&quot;taa&quot; &#x2F;&gt;
+&lt;img src=&quot;https:&#x2F;&#x2F;jms55.github.io&#x2F;posts&#x2F;2023-09-12-bevy-third-birthday&#x2F;bloom.png&quot; alt=&quot;bloom&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;Additional major rendering features that we merged, but that I did not directly work on include:&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;Fast approximate antialiasing (FXAA)&lt;&#x2F;li&gt;
+&lt;li&gt;Depth and normal prepasses&lt;&#x2F;li&gt;
+&lt;li&gt;Cascaded shadow maps (CSM)&lt;&#x2F;li&gt;
+&lt;li&gt;Fog effects&lt;&#x2F;li&gt;
+&lt;li&gt;Better tonemapping&lt;&#x2F;li&gt;
+&lt;li&gt;Morph targets&lt;&#x2F;li&gt;
+&lt;li&gt;A complete revamp of rendering system sets&lt;&#x2F;li&gt;
+&lt;li&gt;Ergonomic improvements for render node APIs&lt;&#x2F;li&gt;
+&lt;li&gt;Many performance improvements&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;h2 id=&quot;things-i-feel-went-well&quot;&gt;Things I feel went well&lt;a class=&quot;anchor&quot; aria-hidden=&quot;true&quot; href=&quot;#things-i-feel-went-well&quot; hidden=&quot;&quot;&gt;#&lt;&#x2F;a&gt;
+&lt;&#x2F;h2&gt;
+&lt;p&gt;Overall, I&#x27;m fairly satisfied both with what Bevy has accomplished, and what I&#x27;ve personally learned and accomplished this year.&lt;&#x2F;p&gt;
+&lt;p&gt;Bevy has gone from &amp;quot;we have some basic PBR shaders with analytic direct lighting&amp;quot; to ~70% of the way to a fully production-ready,
+indie game-usable renderer with much fewer caveats, and much fancier lighting and post processing!&lt;&#x2F;p&gt;
+&lt;p&gt;Take Slime Rancher, a hit indie game from 2017. &lt;a href=&quot;https:&#x2F;&#x2F;pixelalchemy.dev&#x2F;posts&#x2F;a-frame-of-slime-rancher&quot;&gt;This post&lt;&#x2F;a&gt; goes into
+detail on the tricks and rendering techniques the game used to achieve its graphics. Bevy 0.11 has support for almost all of the listed techniques! The only thing we&#x27;re missing are decals, and refraction (although there&#x27;s a PR open that implements screen-space refaction!).&lt;&#x2F;p&gt;
+&lt;p&gt;I would specifically like to note the &lt;em&gt;amount&lt;&#x2F;em&gt; of people working on rendering features, and how it&#x27;s increased over time. It&#x27;s a great sign to see that rendering isn&#x27;t the domain of only 1 or 2 dedicated developers. Rather, we have a fairly large amount of people contributing major rendering features and improvements.&lt;&#x2F;p&gt;
+&lt;p&gt;Too often, I feel rendering is seen as a kind of opaque witchcraft. To some extent, I feel that perception is true. Writing a shader (GPU program) is not like writing a program for the CPU in Rust. The graphics APIs themselves (in our case, wgpu) are not the most intuitive, and are often subject to compatibility or performance constraints that lead to poor ergonomics. Furthermore, even if you can write a shader, and know the graphics APIs, it&#x27;s not always clear &lt;em&gt;how&lt;&#x2F;em&gt; to assemble all that together into a performant, compatible, ergonomic renderer.&lt;&#x2F;p&gt;
+&lt;p&gt;Here&#x27;s where the &amp;quot;but&amp;quot; comes: I don&#x27;t think it&#x27;s that much worse than programming any other part of a game engine in general. Designing a complete UI system, or an ECS, or a physics library, etc, is rarely a simple one person job. Designing a rendering engine is much the same.&lt;&#x2F;p&gt;
+&lt;p&gt;Bevy has been able to consistently attract new rendering developers, often with little or no professional rendering experience. To me, that&#x27;s an encouraging sign that we&#x27;re doing something right. We may not rival Unity&#x27;s or Godot&#x27;s renderers &lt;em&gt;now&lt;&#x2F;em&gt;, but in another year, I&#x27;m confident that we&#x27;ll surpass them in a few areas, and at least match them in most of the important ones :)&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;things-i-feel-we-need-to-work-on&quot;&gt;Things I feel we need to work on&lt;a class=&quot;anchor&quot; aria-hidden=&quot;true&quot; href=&quot;#things-i-feel-we-need-to-work-on&quot; hidden=&quot;&quot;&gt;#&lt;&#x2F;a&gt;
+&lt;&#x2F;h2&gt;
+&lt;p&gt;Now that&#x27; we&#x27;ve covered what I felt went well, it&#x27;s time to talk about things we need to improve on. These are pain points either I or other developers have consistently faced, or things I&#x27;ve seen users brought up many times.&lt;&#x2F;p&gt;
+&lt;p&gt;In no specific order, here are some things I feel we need to prioritize.&lt;&#x2F;p&gt;
+&lt;h3 id=&quot;more-dynamic-comprehensive-and-accessible-test-scenes&quot;&gt;More dynamic, comprehensive, and accessible test scenes&lt;a class=&quot;anchor&quot; aria-hidden=&quot;true&quot; href=&quot;#more-dynamic-comprehensive-and-accessible-test-scenes&quot; hidden=&quot;&quot;&gt;#&lt;&#x2F;a&gt;
+&lt;&#x2F;h3&gt;
+&lt;p&gt;Most rendering development is currently done with either dedicated Bevy example scenes, or Lumberyard&#x27;s Bistro or Intel&#x27;s Sponza scenes.
+The former tend to be too simple for more intensive rendering tests, and the latter are difficult to setup, and don&#x27;t have the dynamism a real game would have. Furthermore, we don&#x27;t have any scenes that excercise &lt;em&gt;all&lt;&#x2F;em&gt; of Bevy&#x27;s rendering features at once, and how they might interact.&lt;&#x2F;p&gt;
+&lt;p&gt;It would be great to get more test scenes that are easy to setup and tweak, demonstrate many of Bevy&#x27;s rendering features working in tandem, and overall provide real-world uses cases that we can test against, rather than toy scenes. Currently, thoroughly exercising a new rendering feature or performance change requires almost as much work as writing the feature itself. To some extent, I&#x27;m asking us to develop a small game, focused on polished rendering and animation.&lt;&#x2F;p&gt;
+&lt;h3 id=&quot;performance&quot;&gt;Performance&lt;a class=&quot;anchor&quot; aria-hidden=&quot;true&quot; href=&quot;#performance&quot; hidden=&quot;&quot;&gt;#&lt;&#x2F;a&gt;
+&lt;&#x2F;h3&gt;
+&lt;p&gt;A fact that is probably surprising to developers without much experience in rendering is that Bevy&#x27;s renderer performance is currently heavily CPU-limited - not GPU-limited, as you might expect. There&#x27;s two factor to this:&lt;&#x2F;p&gt;
+&lt;ol&gt;
+&lt;li&gt;Bevy is inefficent with how it stores and uses rendering data&lt;&#x2F;li&gt;
+&lt;li&gt;Bevy makes too many draw calls, and does too much state binding changes between draws&lt;&#x2F;li&gt;
+&lt;&#x2F;ol&gt;
+&lt;p&gt;In order to become a serious renderer, we&#x27;ll need to dramatically improve our CPU performance. Thankfully, we have a &lt;em&gt;lot&lt;&#x2F;em&gt; of changes in progress towards this goal. Many core parts of the renderer that have been neglected in favor of working on new features are being revamped and improved. Expect large performance gains in Bevy 0.12, and probably 0.13.&lt;&#x2F;p&gt;
+&lt;p&gt;Long-term, we&#x27;ll want to support GPU-driven rendering, where the GPU handles almost all of the rendering work. An extreme example of this kind of architecture is Unreal Engine&#x27;s Nanite, which is capable of rendering micro-poly meshes. We (almost certainly) won&#x27;t go &lt;em&gt;that&lt;&#x2F;em&gt; far, but implementing 60% of the techniques (bindless, draw indirect, compute-based rasterizer, compute-based fustrum culling, two pass occlusion culling, and also asset streaming) should give us 90% of the benefit, and allow complex scenes with many orders of magnitude greater amounts of meshes. This is an exciting area to work on, and there&#x27;s a lot to do!&lt;&#x2F;p&gt;
+&lt;h3 id=&quot;documentation&quot;&gt;Documentation&lt;a class=&quot;anchor&quot; aria-hidden=&quot;true&quot; href=&quot;#documentation&quot; hidden=&quot;&quot;&gt;#&lt;&#x2F;a&gt;
+&lt;&#x2F;h3&gt;
+&lt;p&gt;While performance and new features have been steadily improving, documentation, not so much. The docs for bevy_render, bevy_core_pipeline, and bevy_pbr are, uhh, sparse at best. Frequent questions I see include &amp;quot;how do I do &amp;lt;custom kind of rendering&amp;gt;, which should be a fairly routine kind of extension, but I have no idea where to start integrating it with Bevy&amp;quot;, &amp;quot;what shader imports are available&amp;quot;, &amp;quot;what does this error mean&amp;quot;, and &amp;quot;my rendering looks bad &#x2F; performance is bad, how do I improve this and understand why?&amp;quot;&lt;&#x2F;p&gt;
+&lt;p&gt;We need to write more API docs, more module docs, and more long-form guides on how Bevy&#x27;s renderer is structured and how to achieve common tasks. This is something I&#x27;ve been wanting to work on, but much like blogging, I&#x27;ve discovered writing clear, useful docs is quite hard. This is a great area of new Bevy devs to get involved in!&lt;&#x2F;p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;As an aside, this is my first blog post. It&#x27;s been something I&#x27;ve been meaning to do for many years, but never actually gotten around to doing. Writing a blog post is a &lt;em&gt;lot&lt;&#x2F;em&gt; of work, and there&#x27;s the temptation to polish the writing until it&#x27;s perfect. Doing so would leave me no time to actually work on rendering!, so I&#x27;m going ahead and publishing this despite the fact that it&#x27;s not perfect :)&lt;&#x2F;p&gt;
+&lt;&#x2F;blockquote&gt;
+&lt;h3 id=&quot;ease-of-use&quot;&gt;Ease of use&lt;a class=&quot;anchor&quot; aria-hidden=&quot;true&quot; href=&quot;#ease-of-use&quot; hidden=&quot;&quot;&gt;#&lt;&#x2F;a&gt;
+&lt;&#x2F;h3&gt;
+&lt;p&gt;Similarly to the above section, while our features may be pretty good, internally, they&#x27;re not that great to write. The main rendering pass APIs are too abstract, and go through many traits, generic systems, and levels of indirection that greatly complicate understanding the renderer.&lt;&#x2F;p&gt;
+&lt;p&gt;Writing new post processing or lighting passes involves a &lt;em&gt;lot&lt;&#x2F;em&gt; of boilerplate, especially around bind groups and resource&#x2F;pipeline creation.&lt;&#x2F;p&gt;
+&lt;p&gt;These two things are also a large barrier to entry in getting new contributors to work on rendering.&lt;&#x2F;p&gt;
+&lt;p&gt;Finally, the core Material code is brittle and not very extensible. A Bevy user&#x27;s options are to either use StandardMaterial, or write a completely custom material from scratch. There&#x27;s no easy way to do something like take the StandardMaterial, but animate the texture UVs according to this shader fragment, and then pass the result into some other shader fragment. Furthermore, writing the shader for a custom material involves some complicated coordination between vertex and fragment stage input and output types, and data bindings. Mismatched bindings or types is a common source of confusing errors for authors of custom materials. People have floated some ideas on how to improve this, but not a ton of concrete code yet. It&#x27;s something we&#x27;ll need to work on going forwards.&lt;&#x2F;p&gt;
+&lt;h3 id=&quot;review-speed&quot;&gt;Review speed&lt;a class=&quot;anchor&quot; aria-hidden=&quot;true&quot; href=&quot;#review-speed&quot; hidden=&quot;&quot;&gt;#&lt;&#x2F;a&gt;
+&lt;&#x2F;h3&gt;
+&lt;p&gt;We have too many open PRs, and not enough reviewers! Reviews take a &lt;em&gt;long&lt;&#x2F;em&gt; time. Part of this is the fact that like I talked about above, rendering boilerplate can get pretty gnarly. Reviewing a rendering PR often involves one session to review the CPU-side code changes, and another entirely to review the GPU-side code. If we can improve rendering boilerplate, we will not only make it easier to write new features, but shorten the (currently fairly substantial) review time each feature has to go through before it can be merged.&lt;&#x2F;p&gt;
+&lt;p&gt;Another issue is testing. Testing rendering does not lend itself well to unit tests. You need a variety of scenes, setups, and specific GPU and OS platforms (platform-specific bugs are sadly common, and feature support and performance widely varies). This all slows down reviews, and often we miss fairly impactful rendering bugs anyways.&lt;&#x2F;p&gt;
+&lt;h3 id=&quot;ecosystem-investment&quot;&gt;Ecosystem investment&lt;a class=&quot;anchor&quot; aria-hidden=&quot;true&quot; href=&quot;#ecosystem-investment&quot; hidden=&quot;&quot;&gt;#&lt;&#x2F;a&gt;
+&lt;&#x2F;h3&gt;
+&lt;p&gt;First, I&#x27;d like to thank the maintainers of the wgpu and naga crates, of which bevy_render sits atop, for their awesome work. Bevy&#x27;s renderer would not be possible without them!&lt;&#x2F;p&gt;
+&lt;p&gt;These crates, however, form an entirely new graphics API&#x2F;toolchain, with a focus on wide compatibility and API safety. They don&#x27;t currently support some of the latest GPU features such as ray tracing, mesh shaders, threadgroup&#x2F;wave&#x2F;warp intrinsics, async compute, and mutable binding arrays (bindless textures), or have specific caveats. This is totally understandable after all - not many developers want or need these things, and it&#x27;s not WebGPU&#x27;s focus.&lt;&#x2F;p&gt;
+&lt;p&gt;The solution is of course for us to invest more time in writing those features and helping them out ourselves :). I&#x27;m not sure how we foster it, but it would be great to see more investment in wgpu, naga, and naga_oil from Bevy&#x27;s developers.&lt;&#x2F;p&gt;
+&lt;h3 id=&quot;bevy-editor&quot;&gt;Bevy editor&lt;a class=&quot;anchor&quot; aria-hidden=&quot;true&quot; href=&quot;#bevy-editor&quot; hidden=&quot;&quot;&gt;#&lt;&#x2F;a&gt;
+&lt;&#x2F;h3&gt;
+&lt;p&gt;This isn&#x27;t quite rendering related, but like everyone else, I&#x27;m eagerly awaiting bevy_editor. It&#x27;ll be super useful for testing out rendering features, as clicking through GUI buttons is much easier than writing a system to manually toggle several features on and off with keypresses and rendering an in-game UI to show the enabled settings.&lt;&#x2F;p&gt;
+&lt;p&gt;I&#x27;m also really looking forward to &lt;em&gt;developing&lt;&#x2F;em&gt; Bevy&#x27;s editor. I originally joined this project to do just that, and somehow ended up working on rendering instead! I mentioned before my Rust gamedev experience, but I also have a lot of experience with Rust UI dev and UI dev in general.&lt;&#x2F;p&gt;
+&lt;p&gt;The key missing parts are twofold:&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;An ergonomic, reactive, pretty, capable, and scalable UI system&lt;&#x2F;li&gt;
+&lt;li&gt;Concrete direction on how the editor will actually operate (as a seperate process with message passing, as a bevy_app plugin to the game process, etc)&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;p&gt;I&#x27;m interested in doing the work of designing the UI for the editor and writing all the UI code and features, but not so much figuring out the basic foundations. Hopefully others will take on this task :)&lt;&#x2F;p&gt;
+&lt;h1 id=&quot;things-i-m-excited-to-work-on-in-the-next-year&quot;&gt;Things I&#x27;m excited to work on in the next year(?)&lt;a class=&quot;anchor&quot; aria-hidden=&quot;true&quot; href=&quot;#things-i-m-excited-to-work-on-in-the-next-year&quot; hidden=&quot;&quot;&gt;#&lt;&#x2F;a&gt;
+&lt;&#x2F;h1&gt;
+&lt;p&gt;Finally, I&#x27;d like to mention some things I&#x27;m excited to work on! Some of these I&#x27;ve already talked about, and others less so:&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;FSR &#x2F; DLSS&lt;&#x2F;li&gt;
+&lt;li&gt;Procedural skybox&lt;&#x2F;li&gt;
+&lt;li&gt;Bevy editor&lt;&#x2F;li&gt;
+&lt;li&gt;GPU driven rendering&lt;&#x2F;li&gt;
+&lt;li&gt;Profiling tools and system&#x2F;entity tracing and statistics&lt;&#x2F;li&gt;
+&lt;li&gt;OpenPBR material&lt;&#x2F;li&gt;
+&lt;li&gt;Raytraced direct lighting (ReSTIR DI &#x2F; RTX DI)&lt;&#x2F;li&gt;
+&lt;li&gt;Screen-space reflections, indirect lighting, and SSAO improvements&lt;&#x2F;li&gt;
+&lt;li&gt;Global illumination&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;h2 id=&quot;bevy-solari&quot;&gt;Bevy Solari&lt;a class=&quot;anchor&quot; aria-hidden=&quot;true&quot; href=&quot;#bevy-solari&quot; hidden=&quot;&quot;&gt;#&lt;&#x2F;a&gt;
+&lt;&#x2F;h2&gt;
+&lt;p&gt;It&#x27;s not something I&#x27;ve mentioned at all yet, but one of the things I&#x27;ve been spending a &lt;em&gt;lot&lt;&#x2F;em&gt; of time on the past several months is a project I&#x27;m calling bevy_solari.&lt;&#x2F;p&gt;
+&lt;p&gt;Bevy currently has support for direct lighting - i.e., simulating the light coming from a light source, and hitting a surface. In real life however, light dosen&#x27;t just stop at the first surface it hits. Light bounces around a scene, leading to mirror or blurry reflections, color bleeding, micro-shadows, and more. Simulating these many bounces of light is called global illumination (GI), and tends to be very expensive and slow to do in real time. Without GI, however, lighting tends to look kinda off, and a lot less prettier.&lt;&#x2F;p&gt;
+&lt;p&gt;Most games tend to approximate global illumination via baked static lighting methods such as lightmaps, irradiance volumes, and environment maps, as well as very limited dynamic methods such as planar reflections, light&#x2F;reflection probes, and screen-space raytracing. Of these, Bevy currently only supports environment maps and SSAO, although I know that some people are working on implementing the other methods.&lt;&#x2F;p&gt;
+&lt;p&gt;Thanks to recent advances in GPU hardware and algorithm development, however, fully dynamic, real time global illumination has become feasible. The field is rapidly developing, but there&#x27;s been many promising approaches including Tomasz Stachowiak&#x27;s Kajiya, DDGI, Unreal Engine&#x27;s Lumen (as seen in Unreal&#x27;s Lumen in the Land of Nanite demo, as well as Fornite), Nvidia&#x27;s ReSTIR GI &#x2F; RTX GI (as seen in Cyberpunk 2077), AMD&#x27;s GI-1.0, and Alexander Sannikov&#x27;s Radiance Cascades (as seen in the recent Path of Exile 2). It&#x27;s a &lt;em&gt;super&lt;&#x2F;em&gt; exciting area of research, and something I&#x27;ve been having an absolute (and sometimes frustrating!) blast learning.&lt;&#x2F;p&gt;
+&lt;p&gt;There&#x27;s too much literature and detail to cover here (it deserves, and may eventually get, its own blog post), but suffice it to say that I&#x27;ve been working on my own GI system for Bevy inspired by many of these techniques. It utilizes GPU hardware-accelerated raytracing, and is targeted at high end GPUs. It&#x27;s not going to be released any time soon, partially due to wgpu lacking official raytracing support, and partially due to the massive amount of work and experimentation I still need to do. However, it&#x27;s open source, so feel free to try the &lt;a href=&quot;https:&#x2F;&#x2F;github.com&#x2F;JMS55&#x2F;bevy&#x2F;tree&#x2F;solari&quot;&gt;demo example here&lt;&#x2F;a&gt;. Run &lt;code&gt;cargo run --example solari&lt;&#x2F;code&gt; from the repo root.&lt;&#x2F;p&gt;
+&lt;p&gt;Below are some static screenshots of the renderer, but keep in mind that this is all running in realtime on a Nvidia RTX 3080 GPU, and is fully dynamic with movable camera, lights, and objects :)&lt;&#x2F;p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;Bevy Solari in a cornell box scene - with GI
+&lt;img src=&quot;https:&#x2F;&#x2F;jms55.github.io&#x2F;posts&#x2F;2023-09-12-bevy-third-birthday&#x2F;solari.png&quot; alt=&quot;bevy_solari in a cornell box scene&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;&#x2F;blockquote&gt;
+&lt;blockquote&gt;
+&lt;p&gt;Direct light only - no GI
+&lt;img src=&quot;https:&#x2F;&#x2F;jms55.github.io&#x2F;posts&#x2F;2023-09-12-bevy-third-birthday&#x2F;solari_direct_only.png&quot; alt=&quot;bevy_solari - direct light only - no GI&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;&#x2F;blockquote&gt;
+&lt;blockquote&gt;
+&lt;p&gt;Indirect irradiance debug view
+&lt;img src=&quot;https:&#x2F;&#x2F;jms55.github.io&#x2F;posts&#x2F;2023-09-12-bevy-third-birthday&#x2F;solari_indirect.png&quot; alt=&quot;bevy_solari - indirect irradiance debug view&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;&#x2F;blockquote&gt;
+&lt;blockquote&gt;
+&lt;p&gt;World irradiance cache debug view
+&lt;img src=&quot;https:&#x2F;&#x2F;jms55.github.io&#x2F;posts&#x2F;2023-09-12-bevy-third-birthday&#x2F;solari_world_cache.png&quot; alt=&quot;bevy_solari - world irradiance cache debug view&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;&#x2F;blockquote&gt;
+</content>
+        
+    </entry>
+</feed>
