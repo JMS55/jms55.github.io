@@ -1,6 +1,6 @@
 +++
 title = "Bevy's Third Birthday - Reflections on Rendering"
-date = "2023-12-09"
+date = "2023-09-12"
 
 [taxonomies]
 tags = ["bevy"]

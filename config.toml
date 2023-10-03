@@ -29,7 +29,7 @@ show_post_meta = true
 default_toc_open = false
 edit_post_url = "https://github.com/JMS55/jms55.github.io/tree/main"
 #copyright = ""
-date_format = "%d/%m/%Y"
+date_format = "%m/%d/%Y"
 navigation = [
     { url = "$BASE_URL/archive", title = "Archive" },
     { url = "$BASE_URL/tags", title = "Tags" },
