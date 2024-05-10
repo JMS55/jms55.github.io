@@ -96,7 +96,7 @@ Here's where the "but" comes: I don't think it's that much worse than programmin
 Bevy has been able to consistently attract new rendering developers, often with little or no professional rendering experience. To me, that's an encouraging sign that we're doing something right. We may not rival Unity's or Godot's renderers _now_, but in another year, I'm confident that we'll surpass them in a few areas, and at least match them in most of the important ones :)
 
 ## Things I feel we need to work on
-Now that' we've covered what I felt went well, it's time to talk about things we need to improve on. These are pain points either I or other developers have consistently faced, or things I've seen users brought up many times.
+Now that we've covered what I felt went well, it's time to talk about things we need to improve on. These are pain points either I or other developers have consistently faced, or things I've seen users brought up many times.
 
 In no specific order, here are some things I feel we need to prioritize.
 
