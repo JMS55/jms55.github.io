@@ -13,9 +13,9 @@ Bevy 0.14 releases soon, and with it, the release of an experimental virtual geo
 
 In this blog post, I'm going to give a technical deep dive into Bevy's new "meshlet" feature, what improvements it bring, techniques I tried that did or did not work out, and what I'm looking to improve on in the future. There's a lot that I've learned (and a _lot_ of code I've written and rewritten multiple times), and I'd like to share what I learned in the hope that it will help others.
 
-I'd also like to take a moment to thank [LVSTRI](https://github.com/LVSTRI) and [jglrxavpok](https://jglrxavpok.github.io) for their experience with virtual geometry, [atlv24](https://github.com/atlv24) for their help in several areas, especially for their work on wgpu/naga for some missing features I needed, other Bevy developers for testing and reviewing my PRs, Unreal Engine(Brian Karis, Rune Stubbe, Graham Wihlidal) for their _excellent_ and highly detailed [SIGGRAPH presentation](https://advances.realtimerendering.com/s2021/Karis_Nanite_SIGGRAPH_Advances_2021_final.pdf), and many more people than I can name who provided advice on the project.
+I'd also like to take a moment to thank [LVSTRI](https://github.com/LVSTRI) and [jglrxavpok](https://jglrxavpok.github.io) for their experience with virtual geometry, [atlv24](https://github.com/atlv24) for their help in several areas, especially for their work on wgpu/naga for some missing features I needed, other Bevy developers for testing and reviewing my PRs, Unreal Engine (Brian Karis, Rune Stubbe, Graham Wihlidal) for their _excellent_ and highly detailed [SIGGRAPH presentation](https://advances.realtimerendering.com/s2021/Karis_Nanite_SIGGRAPH_Advances_2021_final.pdf), and many more people than I can name who provided advice on the project.
 
-Code for this feature can be found [on my github](https://github.com/JMS55/bevy/tree/cecd7647c8631d2fdbd3eef9c2ce937deb28dec4/crates/bevy_pbr/src/meshlet).
+Code for this feature can be found [on my github](https://github.com/JMS55/bevy/tree/cecd7647c8631d2fdbd3eef9c2ce937deb28dec4/crates/bevy_pbr/src/meshlet) in the `crates/bevy_pbr/src/meshlet` folder.
 
 If you're already familiar with Nanite, feel free to skip the next few sections of background info until you get to the Bevy-specific parts.
 
@@ -57,7 +57,7 @@ There's also another issue I've saved for last. Despite all the culling and batc
 
 With the introduction of Unreal Engine 5 in 2021 came the introduction of a new technique called [Nanite](https://dev.epicgames.com/documentation/en-us/unreal-engine/nanite-virtualized-geometry-in-unreal-engine). Nanite is a system where you can pre-process your non-deforming opaque meshes, and at runtime be able to very efficiently render them, largely solving the above problems with draw counts, memory limits, high-poly mesh rasterization, and the deficiencies of traditional LODs.
 
-Nanite works by first splitting your base mesh into a series of meshlets - small, independent clusters of triangles. Nanite then takes those clusters, simplifies them to use less triangles, and then groups the clusters themselves into a set of _new_ clusters. By repeating this process, you get a tree of clusters where the leaves of the tree form the base mesh, and the root of the tree forms a simplfied approximation of the base mesh.
+Nanite works by first splitting your base mesh into a series of meshlets - small, independent clusters of triangles. Nanite then takes those clusters, simplifies them to use less triangles, and then groups the clusters themselves into a set of _new_ clusters. By repeating this process, you get a tree of clusters where the leaves of the tree form the base mesh, and the root of the tree forms a simplified approximation of the base mesh.
 
 Now at runtime, we don't just have to render one level (LOD) of the tree. We can choose specific clusters from different levels of the tree so that if you're close to one part of the mesh, it'll render many high resolution clusters. If you're far from a different part of the mesh, however, then that part will use a couple low resolution clusters that are cheaper to render. Unlike traditional LODs, which are all or nothing, part of the mesh can be low resolution, part of the mesh can be high resolution, and a third part can be somewhere in between, all at the time same time, all on a very granular level.
 
@@ -69,19 +69,21 @@ I mentioned before that meshes have to be opaque, and can't deform or animate (f
 
 ## Virtual Geometry in Bevy
 
-Now that the background is out of the way, lets talk about Bevy. For Bevy 0.14, I've written an initial implementation that largely copies the basic ideas of how Nanite works, without implementing every single optimization and technique. Currently, the feature is called meshlets. In a minute, I'll get into the actual frame breakdown and code for meshlets, but first lets start with the user-facing API.
+Now that the background is out of the way, lets talk about Bevy. For Bevy 0.14, I've written an initial implementation that largely copies the basic ideas of how Nanite works, without implementing every single optimization and technique. Currently, the feature is called meshlets (likely to change to virtual_geometry or something else in the future). In a minute, I'll get into the actual frame breakdown and code for meshlets, but first lets start with the user-facing API.
 
 Users wanting to use meshlets should compile with the `meshlet` cargo feature at runtime, and `meshlet_processor` cargo feature for pre-processing meshes (again, more on how that works later) into the special meshlet-specific format the meshlet renderer uses.
 
-Enabling the meshlet feature unlocks a new module: `bevy::pbr::experimental::meshlet`.
+Enabling the `meshlet` feature unlocks a new module: `bevy::pbr::experimental::meshlet`.
 
-Users should first call `MeshletMesh::from_mesh()` (again, you need the `meshlet_processor` feature enabled) to pre-process their mesh. This step is _very_ slow, and should be done once ahead of time, and then saved to a meshlet_mesh file. Unfortunately, due to [missing capabilities](https://github.com/bevyengine/bevy/discussions/13078) in Bevy's asset system, there's currently no easy way to just automatically convert a whole GLTF using Bevy's built-in asset processing feature.
-
-Next, add `MeshletPlugin` to your app:
+First step, add `MeshletPlugin` to your app:
 
 ```rust
 app.add_plugins(MeshletPlugin);
 ```
+
+Next, preprocess your `Mesh` into a `MeshletMesh`. Currently, this needs to be done manually via  `MeshletMesh::from_mesh()` (again, you need the `meshlet_processor` feature enabled). This step is _very_ slow, and should be done once ahead of time, and then saved to an asset file. Note that there are limitations on the types of meshes and materials supported, make sure to read the docs.
+
+I'm also in the [middle of working on](https://github.com/bevyengine/bevy/pull/13431) an asset processor system to automatically convert entire glTF scenes, but it's not quite ready yet.
 
 Now, spawn your entities. In the same vein as `MeshMaterialBundle`, there's a `MeshletMeshMaterialBundle`, which uses a `MeshletMesh` instead of the typical `Mesh`.
 
@@ -132,6 +134,116 @@ GPU timings were measured on a RTX 3080 _locked to base clock speeds_, rendering
 (TODO: Picture of NSight screen capture)
 
 ## Mesh Conversion
+
+The first step, before we can render anything, is to convert all meshes to meshlet meshes. I talked about the user-facing API earlier on, but in this section we'll dive into what `MeshletMesh::from_mesh()` is doing under the hood in `from_mesh.rs`.
+
+The high level steps are as follows:
+1. Build LOD 0 meshlets
+2. For each meshlet, find the set of all edges making up the triangles within the meshlet
+3. For each meshlet, find the set of connected meshlets (share an edge)
+4. Divide meshlets into groups of roughly 4
+5. For each group of meshlets, build a new list of triangles approximating the original group
+6. For each simplified group, break them apart into new meshlets
+7. Repeat steps 3-7 using the set of new meshlets, unless we ran out of meshlets to simplify
+
+### Build LOD 0 Meshlets
+
+We're starting with a generic triangle mesh, so the first step is to group its triangles into an initial set of meshlets. No simplification or modification of the mesh is involved - we're simply splitting up the original mesh into a set meshlets that would render exactly the same.
+
+The crate `meshopt-rs` provides Rust bindings to the excellent `meshoptimizer` library, which provides a nice `build_meshlets()` function for us.
+
+```rust
+// Split the mesh into an initial list of meshlets (LOD 0)
+let vertex_buffer = mesh.get_vertex_buffer_data();
+let vertex_stride = mesh.get_vertex_size() as usize;
+let vertices = VertexDataAdapter::new(&vertex_buffer, vertex_stride, 0).unwrap();
+let mut meshlets = compute_meshlets(&indices, &vertices);
+```
+
+We also need some bounding spheres for each meshlet. The culling bounding sphere is straightforward - `compute_meshlet_bounds()`, again from `meshopt-rs`, will give us a bounding sphere encompassing the meshlet that we can use for frustum and occlusion culling later on.
+
+The `self_lod` and `parent_lod` bounding spheres need a lot more explanation.
+
+As we simplify each group of meshlets into new meshlets, we will deform the mesh slightly. That deformity adds up over time, eventually giving a very visibly different mesh from the original. However, when viewing the very simplified mesh from far away, due to perspective the difference will be much less noticable. While we would want to view the original (or close to the original) mesh close-up, at longer distances we can get away with rendering a much simpler version of the mesh.
+
+So, how to choose the right LOD level, or in our case, the right LOD tree cut? The LOD cut will be based on the simplification error of each meshlet along the cut, with the goal being to select a cut that is impercetibly different from the original mesh at the distance we're viewing the mesh at.
+
+For reasons I'll get into later, we're going to treat the error as a bounding sphere around the meshlet, with the radius being the error. We're also going to want two of these: one for the current meshlet itself, and one for the less-simplified version of the meshlet that we simplified into the current meshlet (the current meshlet's parent in the LOD tree).
+
+LOD 0 meshlets, being the original representation of the mesh, have no error (0.0). They also have no parent meshlet, which we will represent with an infinite amount of error (f32::MAX), again for reasons I will get into later.
+
+```rust
+let mut bounding_spheres = meshlets
+    .iter()
+    .map(|meshlet| compute_meshlet_bounds(meshlet, &vertices))
+    .map(convert_meshlet_bounds)
+    .map(|bounding_sphere| MeshletBoundingSpheres {
+        self_culling: bounding_sphere,
+        self_lod: MeshletBoundingSphere {
+            center: bounding_sphere.center,
+            radius: 0.0,
+        },
+        parent_lod: MeshletBoundingSphere {
+            center: bounding_sphere.center,
+            radius: f32::MAX,
+        },
+    })
+    .collect::<Vec<_>>();
+```
+
+### Find Meshlet Edges
+
+Now that we have our initial set of meshlets, we can start simplifying.
+
+The first step is to find the set of triangle edges that make up each meshlet. This can be done with a simple loop over triangles, building a hashset of edges where each edge is ordered such that the smaller numbered vertex comes before the larger number vertex. This ensures that we don't accidently add both (v1, v2) and (v2, v1), which conceptually are the same edge. Each triangle has 3 vertices and 3 edges.
+
+```rust
+let mut meshlet_triangle_edges = HashMap::new();
+for i in meshlet.triangles.chunks(3) {
+    let v0 = meshlet.vertices[i[0] as usize];
+    let v1 = meshlet.vertices[i[1] as usize];
+    let v2 = meshlet.vertices[i[2] as usize];
+
+    meshlet_triangle_edges.insert((v0.min(v1), v0.max(v1)));
+    meshlet_triangle_edges.insert((v0.min(v2), v0.max(v2)));
+    meshlet_triangle_edges.insert((v1.min(v2), v1.max(v2)));
+}
+```
+
+### Find Connected Meshlets
+
+Next, we need to find the meshlets that connect to each other.
+
+A meshlet will be considered as connected to another meshlet if both meshlets share at least one edge.
+
+In the previous step, we built a set of edges for each meshlet. Finding if two meshlets share any edges can be done by simply taking the intersection of their two edge sets, and checking if the resulting set is not empty.
+
+We will also store the _amount_ of shared edges between two meshlets, giving a heuristic for how "connected" each meshlet is to another. This is simply the size of the intersection set.
+
+Overally, we will build a list per meshlet, containing tuples of (meshlet_id, shared_edge_count) for each meshlet connected to the current meshlet.
+
+```rust
+for (meshlet_id1, meshlet_id2) in simplification_queue.tuple_combinations() {
+    let shared_edge_count = triangle_edges_per_meshlet[&meshlet_id1]
+        .intersection(&triangle_edges_per_meshlet[&meshlet_id2])
+        .count();
+
+    if shared_edge_count != 0 {
+        connected_meshlets_per_meshlet
+            .get_mut(&meshlet_id1)
+            .unwrap()
+            .push((meshlet_id2, shared_edge_count));
+        connected_meshlets_per_meshlet
+            .get_mut(&meshlet_id2)
+            .unwrap()
+            .push((meshlet_id1, shared_edge_count));
+    }
+}
+```
+
+### Partition Meshlets Into Groups
+
+TODO
 
 ## Fill Cluster Buffers
 
