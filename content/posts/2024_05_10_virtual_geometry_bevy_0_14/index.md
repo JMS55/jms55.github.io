@@ -119,25 +119,17 @@ fn fragment(@builtin(position) frag_coord: vec4<f32>) -> @location(0) vec4<f32> 
 }
 ```
 
-# Frame Breakdown
+# Mesh Conversion
 
-We've finally arrived at the portion of this post where we'll dive into the code and see how everything works under the hood.
-
-The frame capture we'll be looking at is this scene with ~3100 Stanford Bunnies. Five of the bunnies are using unique PBR materials, while the rest use the same debug material that visualizes the clusters/triangles of the mesh. Each bunny is made of (TODO) triangles, with (TODO) clusters at LOD 0.
-
-GPU timings were measured on a RTX 3080 _locked to base clock speeds_, rendering at 1080p.
-
-(TODO: Picture of frame with triangles)
-
-(TODO: Picture of frame with clusters)
-
-(TODO: Picture of NSight screen capture)
-
-## Mesh Conversion
+We're now going to start the portion of this blog post going into how everything is implemented.
 
 The first step, before we can render anything, is to convert all meshes to meshlet meshes. I talked about the user-facing API earlier on, but in this section we'll dive into what `MeshletMesh::from_mesh()` is doing under the hood in `from_mesh.rs`.
 
-The high level steps are as follows:
+This section will be a bit dry, lacking commentary on why I did things, in favor of just describing the algorithm itself. The reason is that I don't have many unique insights into the conversion process. The steps taken are pretty much just copied from Nanite. If you're interested in understanding it more, definitely check out the original Nanite presentation.
+
+Feel free to skip ahead to the frame breakdown section.
+
+The high level steps for converting a mesh are as follows:
 1. Build LOD 0 meshlets
 2. For each meshlet, find the set of all edges making up the triangles within the meshlet
 3. For each meshlet, find the set of connected meshlets (share an edge)
@@ -146,7 +138,9 @@ The high level steps are as follows:
 6. For each simplified group, break them apart into new meshlets
 7. Repeat steps 3-7 using the set of new meshlets, unless we ran out of meshlets to simplify
 
-### Build LOD 0 Meshlets
+(TODO: Picture of algorithm)
+
+## Build LOD 0 Meshlets
 
 We're starting with a generic triangle mesh, so the first step is to group its triangles into an initial set of meshlets. No simplification or modification of the mesh is involved - we're simply splitting up the original mesh into a set meshlets that would render exactly the same.
 
@@ -191,7 +185,7 @@ let mut bounding_spheres = meshlets
     .collect::<Vec<_>>();
 ```
 
-### Find Meshlet Edges
+## Find Meshlet Edges
 
 Now that we have our initial set of meshlets, we can start simplifying.
 
@@ -210,7 +204,7 @@ for i in meshlet.triangles.chunks(3) {
 }
 ```
 
-### Find Connected Meshlets
+## Find Connected Meshlets
 
 Next, we need to find the meshlets that connect to each other.
 
@@ -241,26 +235,158 @@ for (meshlet_id1, meshlet_id2) in simplification_queue.tuple_combinations() {
 }
 ```
 
-### Partition Meshlets Into Groups
+## Partition Meshlets Into Groups
 
-TODO
+Now that we know which meshlets are connected, the next step is to group them together. We're going to aim for 4 meshlets per group, although there's no way of guaranteeing that.
+
+How should we determinewhich meshlets go in which group?
+
+You can view the connected meshlet sets as a graph. Each meshlet is a node, and bidirectional edges connect one meshlet to another in the graph if we determined that they were connected earlier. The weight of each edge is the amount of shared edges between the two meshlet nodes.
+
+Partitioning the meshlets into groups is now a matter of partitioning the graph. I use the `metis-rs` crate which provides Rust bindings to the `METIS` library. The edge weights will be used so that meshlets with a high shared edge count are more likely to be group together.
+
+The code to format this data for metis is a bit complicated, but in the end we have a list of groups, where each group is a list of meshlets.
+
+## Simplify Groups
+
+Now for an important step, and the most tricky.
+
+We take each group, and merge the triangles of the underlying meshlets together into one large list of triangles, forming a new mesh.
+
+Now, we can simplify this new mesh into a lower-resolution (faster to render) version. Meshopt again provides a helpful `simplify()` function for us. Finally, less triangles to render!
+
+In addition to the new mesh, we get an "error" value, describing how much the mesh deformed by when simplifying.
+
+The quadratic error metric (QEM) returned from simplifying is a somewhat meaningless value, but we can use `simplify_scale()` to get an object-space value. This value is _still_ fairly meaningless, but we can treat it as the maximum amount of object-space distance a vertex displaced by during simplification.
+
+The error represents displacement from the meshlets we simplified, but we want the displacement from the original (LOD 0) meshlets. We can add the max error of the meshlets that went into building the current meshlet group (child nodes of the parent node that we're currently building in the LOD tree) to make the error relative to LOD 0.
+
+If this all feels handwavy to you, that's because it is. And this is vertex positions only; we haven't even considered UV error during simplification, or how the mesh's eventual material influences perceptual differences between LOD levels. Perceptual simplification is an unsolved problem in computer graphics, and for now Bevy only uses positions for simplification.
+
+You'll have to take my word for it that using the error like this works. You'll see how it gets used to pick the LOD level during runtime in a later section. For now, we'll take the group error and build a bounding sphere out of it, and assign it as the parent LOD bounding sphere for the group's (parent node, higher LOD) underlying meshlets (child nodes, lower LOD).
+
+```rust
+// Simplify the group to ~50% triangle count
+let Some((simplified_group_indices, mut group_error)) =
+    simplify_meshlet_groups(group_meshlets, &meshlets, &vertices, lod_level)
+else {
+    continue;
+};
+
+// Add the maximum child error to the parent error to make parent error cumulative from LOD 0
+// (we're currently building the parent from its children)
+group_error += group_meshlets.iter().fold(group_error, |acc, meshlet_id| {
+    acc.max(bounding_spheres[*meshlet_id].self_lod.radius)
+});
+
+// Build a new LOD bounding sphere for the simplified group as a whole
+let mut group_bounding_sphere = convert_meshlet_bounds(compute_cluster_bounds(
+    &simplified_group_indices,
+    &vertices,
+));
+group_bounding_sphere.radius = group_error;
+
+// For each meshlet in the group set their parent LOD bounding sphere to that of the simplified group
+for meshlet_id in group_meshlets {
+    bounding_spheres[*meshlet_id].parent_lod = group_bounding_sphere;
+}
+```
+
+## Split Groups
+
+Finally, the last step is to take the large mesh formed from simplifying the entire meshlet group, and split it into a set of brand new meshlets.
+
+This is in fact the same process as splitting the original mesh into meshlets.
+
+If everything went optimally, we should have gone from the original 4 meshlets per group, to 2 new meshlets per group with 50% less triangles overall.
+
+For each new meshlet, we'll calculate a bounding sphere for culling, assign the self_lod bounding sphere as that of the group,and the parent_lod bounding sphere again as uninitialized.
+
+```rust
+// Build new meshlets using the simplified group
+let new_meshlets_count = split_simplified_groups_into_new_meshlets(
+    &simplified_group_indices,
+    &vertices,
+    &mut meshlets,
+);
+
+// Calculate the culling bounding sphere for the new meshlets and set their LOD bounding spheres
+let new_meshlet_ids = (meshlets.len() - new_meshlets_count)..meshlets.len();
+bounding_spheres.extend(
+    new_meshlet_ids
+        .map(|meshlet_id| {
+            compute_meshlet_bounds(meshlets.get(meshlet_id), &vertices)
+        })
+        .map(convert_meshlet_bounds)
+        .map(|bounding_sphere| MeshletBoundingSpheres {
+            self_culling: bounding_sphere,
+            self_lod: group_bounding_sphere,
+            parent_lod: MeshletBoundingSphere {
+                center: group_bounding_sphere.center,
+                radius: f32::MAX,
+            },
+        }),
+);
+```
+
+We can repeat this whole process several times, ideally getting down to a single meshlet forming the root of the LOD tree. In practice, we can't currently get to that point for most meshes.
+
+# Frame Breakdown
+
+With the asset processing part out of the way, we can finally move onto the more interesting runtime code section.
+
+The frame capture we'll be looking at is this scene with ~3100 Stanford Bunnies. Five of the bunnies are using unique PBR materials, while the rest use the same debug material that visualizes the clusters/triangles of the mesh. Each bunny is made of (TODO) triangles, with (TODO) clusters at LOD 0.
+
+GPU timings were measured on a RTX 3080 locked to base clock speeds, rendering at 1080p.
+
+(TODO: Picture of frame with triangles)
+
+(TODO: Picture of frame with clusters)
+
+(TODO: Picture of NSight screen capture)
 
 ## Fill Cluster Buffers
 
+TODO
+
 ## Culling (First Pass)
+
+TODO
 
 ## Raster (First Pass)
 
+TODO
+
 ## Downsample Depth
+
+TODO
 
 ## Culling (Second Pass)
 
+TODO
+
 ## Raster (Second Pass)
+
+TODO
 
 ## Copy Material Depth
 
+TODO
+
 ## Downsample Depth (Again)
 
-## Material Draws
+TODO
+
+## Material Shading
+
+TODO
 
 # Future Work
+
+TODO
+* Conversion improvements (vertex welding, distance heuristic, attribute-aware simplification, performance improvements)
+* Per-instance LOD process / persistent culling to eliminate the brute-force dispatch over every possible cluster
+* Implicit tangents and octahedral-encoded normals
+* Software raster and mesh shaders
+* Compute-based material shading with VRS (link to Nanite's new presentation)
+* Streaming
