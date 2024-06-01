@@ -335,7 +335,7 @@ We can repeat this whole process several times, ideally getting down to a single
 
 With the asset processing part out of the way, we can finally move onto the more interesting runtime code section.
 
-The frame capture we'll be looking at is this scene with ~3100 Stanford Bunnies. Five of the bunnies are using unique PBR materials, while the rest use the same debug material that visualizes the clusters/triangles of the mesh. Each bunny is made of (TODO) triangles, with (TODO) clusters at LOD 0.
+The frame capture we'll be looking at is this scene with (TODO) Stanford Bunnies. Five of the bunnies are using unique PBR materials, while the rest use the same debug material that visualizes the clusters/triangles of the mesh. Each bunny is made of (TODO) triangles, with (TODO) meshlets at LOD 0, and (TODO) meshlets total in the LOD tree.
 
 GPU timings were measured on a RTX 3080 locked to base clock speeds, rendering at 1080p.
 
@@ -345,9 +345,98 @@ GPU timings were measured on a RTX 3080 locked to base clock speeds, rendering a
 
 (TODO: Picture of NSight screen capture)
 
+## Terminology
+
+First, some terminology:
+* `asset buffers` - When a new MeshletMesh asset is loaded, we copy the buffers it's made of into large suballocated buffers. All the vertex data, meshlet data, bounding spheres, etc for multiple MeshletMesh assets are packed together into one large buffer per type.
+* `instance` - A single Bevy entity with a MeshletMesh and Material.
+* `instance uniform` - A transform matrix and mesh flags for an instance.
+* `material` - A combination of pipeline and bind group used for shading fragments.
+* `meshlet` - A single meshlet from within a MeshletMesh asset, pointing to data within the asset buffers (more or less).
+* `cluster` - A single render-able piece of an entity. Each cluster is associated with an instance and a meshlet.
+    * All of our shaders will operate on clusters, and _not_ on meshlets. You can think of these like an instance of a meshlet for a specific entity, in the same way you can have an instance of a class in object-oriented programming languages.
+    * Up to this point I've been using meshlet and cluster interchangeably. From now on, they have seperate, defined meanings.
+* `view` - A perspective or orthographic camera with an associated depth buffer and optional color output. The main camera is a view, and additional views are dynamically generated for rendering shadowmaps.
+* `id` - A u32 index into a buffer.
+
 ## Fill Cluster Buffers
 
-TODO
+Now the first pass we're going to look at might be surprising.
+
+Over the course of the frame, for each cluster we will need its instance (giving us a transform and material), along with its meshlet (giving us vertex data and bounding spheres).
+
+While the cluster itself is implicit (each thread or workgroup of a shader will handle one cluster, with the global thread/workgroup ID being the cluster ID), we need some method of telling the GPU what the instance and meshlet for each cluster is.
+
+I.e., we need an array of instance IDs and meshlet IDs such that we can do `let cluster_instance = instances[cluster_instance_ids[cluster_id]]` and `let cluster_meshlet = meshlets[cluster_meshlet_ids[cluster_id]]`.
+
+The naive method would be to simply write out these two buffers from the CPU and transfer them to the GPU. This how things initially worked, and it worked fine for my simple initial test scene with a single bunny, but I very quickly ran into performance problems when trying to scale up to render 3000 bunnies.
+
+Each ID is a 4-byte u32, and it's two IDs per cluster. That's 8 bytes per cluster.
+
+With (TODO) bunnies in the scene, and (TODO) meshlets per bunny, that's 8 * (TODO) * (TODO) bytes total = (TODO) MB/GB total.
+
+For dedicated GPUs, uploading data from the system's RAM to the GPU's VRAM is done over PCIe. PCIe x16 Gen3 max bandwidth is 16 GB/s.
+
+Ignoring data copying costs and other overhead, and assuming max PCIe bandwidth, that would mean it would take (TODO)ms to upload cluster data. That's (TODO) / 16.6 = (TODO)% of our frame budget gone, before we've even rendered anything! Obviously, we need a better method.
+
+---
+
+Instead of uploading per-cluster data, we're going to stick to uploading only per-instance data. Specifically, two buffers called `instance_meshlet_counts_prefix_sum`, and `instance_meshlet_slice_starts`.
+
+The former will contain a prefix sum (calculated on the CPU while writing out the buffer) of how many meshlets each instance is made of. The latter will contain the index of where in the meshlet asset buffer each instance's list of meshlets begin.
+
+(TODO: Example scene and buffer contents)
+
+We're uploading only 8 bytes per _instance_, and not per _cluster_, which is much, much cheaper. (TODO: Math for how much data we uploaded for the X instances in the frame we're looking at)
+
+Now that the GPU has this data, we can have the GPU write out the `cluster_instance_ids` and `cluster_meshlet_ids` buffers from a compute shader. Max VRAM<->VRAM bandwidth on my RTX 3080 is a whopping 760.3 GB/s; ~47.5x faster than the 16 GB/s of bandwidth we had over PCIe.
+
+Each thread of the compute shader will handle one cluster, and do a binary search over the prefix sum array to find to what instance it belongs to.
+
+Binary search might seem surprising - it's multiple dependent divergent memory accesses within a thread. However, it's very coherent _across_ threads within the subgroup, and scales extremely well (O log n) with the number of instances in the scene. In practice, while it could be improved, the performance of this pass has not been a bottleneck.
+
+Now that we know what instance the cluster belongs to, it's trivial to calculate the meshlet index of the cluster within the instance's meshlet mesh asset. Adding that to the instance's meshlet_slice_start using the other buffer we uploaded gives us the global meshlet index within the overall meshlet asset buffer. The thread can then write out the two calculated IDs for the cluster.
+
+This is the only pass that runs once per-frame. The rest of the passes all run once per-view.
+
+```rust
+/// Writes out instance_id and meshlet_id to the global buffers for each cluster in the scene.
+
+@compute
+@workgroup_size(128, 1, 1) // 128 threads per workgroup, 1 cluster per thread
+fn fill_cluster_buffers(
+    @builtin(workgroup_id) workgroup_id: vec3<u32>,
+    @builtin(num_workgroups) num_workgroups: vec3<u32>,
+    @builtin(local_invocation_id) local_invocation_id: vec3<u32>
+) {
+    // Calculate the cluster ID for this thread
+    let cluster_id = local_invocation_id.x + 128u * dot(workgroup_id, vec3(num_workgroups.x * num_workgroups.x, num_workgroups.x, 1u));
+    if cluster_id >= cluster_count { return; }
+
+    // Binary search to find the instance this cluster belongs to
+    var left = 0u;
+    var right = arrayLength(&meshlet_instance_meshlet_counts_prefix_sum) - 1u;
+    while left <= right {
+        let mid = (left + right) / 2u;
+        if meshlet_instance_meshlet_counts_prefix_sum[mid] <= cluster_id {
+            left = mid + 1u;
+        } else {
+            right = mid - 1u;
+        }
+    }
+    let instance_id = right;
+
+    // Find the meshlet ID for this cluster within the instance's MeshletMesh
+    let meshlet_id_local = cluster_id - meshlet_instance_meshlet_counts_prefix_sum[instance_id];
+
+    // Find the overall meshlet ID in the global meshlet buffer
+    let meshlet_id = meshlet_id_local + meshlet_instance_meshlet_slice_starts[instance_id];
+
+    // Write results to buffers
+    meshlet_cluster_instance_ids[cluster_id] = instance_id;
+    meshlet_cluster_meshlet_ids[cluster_id] = meshlet_id;
+}
+```
 
 ## Culling (First Pass)
 
@@ -385,7 +474,7 @@ TODO
 
 TODO
 * Conversion improvements (vertex welding, distance heuristic, attribute-aware simplification, performance improvements)
-* Per-instance LOD process / persistent culling to eliminate the brute-force dispatch over every possible cluster
+* Per-instance LOD process / persistent culling to eliminate the brute-force dispatch over every possible cluster, and the fill clusters step
 * Implicit tangents and octahedral-encoded normals
 * Software raster and mesh shaders
 * Compute-based material shading with VRS (link to Nanite's new presentation)
