@@ -15,7 +15,7 @@ In this blog post, I'm going to give a technical deep dive into Bevy's new "mesh
 
 I'd also like to take a moment to thank [LVSTRI](https://github.com/LVSTRI) and [jglrxavpok](https://jglrxavpok.github.io) for their experience with virtual geometry, [atlv24](https://github.com/atlv24) for their help in several areas, especially for their work on wgpu/naga for some missing features I needed, other Bevy developers for testing and reviewing my PRs, Unreal Engine (Brian Karis, Rune Stubbe, Graham Wihlidal) for their _excellent_ and highly detailed [SIGGRAPH presentation](https://advances.realtimerendering.com/s2021/Karis_Nanite_SIGGRAPH_Advances_2021_final.pdf), and many more people than I can name who provided advice on the project.
 
-Code for this feature can be found [on my github](https://github.com/JMS55/bevy/tree/cecd7647c8631d2fdbd3eef9c2ce937deb28dec4/crates/bevy_pbr/src/meshlet) in the `crates/bevy_pbr/src/meshlet` folder.
+Code for this feature can be found [on the Bevy github](https://github.com/bevyengine/bevy/tree/ab2add64fa79d20cddbad7d54124b197eaa2f305/crates/bevy_pbr/src/meshlet).
 
 If you're already familiar with Nanite, feel free to skip the next few sections of background info until you get to the Bevy-specific parts.
 
@@ -381,7 +381,7 @@ Ignoring data copying costs and other overhead, and assuming max PCIe bandwidth,
 
 ---
 
-Instead of uploading per-cluster data, we're going to stick to uploading only per-instance data. Specifically, two buffers called `instance_meshlet_counts_prefix_sum`, and `instance_meshlet_slice_starts`.
+Instead of uploading per-cluster data, we're going to stick to uploading only per-instance data. Specifically, two buffers called `instance_meshlet_counts_prefix_sum` and `instance_meshlet_slice_starts`.
 
 The former will contain a prefix sum (calculated on the CPU while writing out the buffer) of how many meshlets each instance is made of. The latter will contain the index of where in the meshlet asset buffer each instance's list of meshlets begin.
 
@@ -440,6 +440,86 @@ fn fill_cluster_buffers(
 
 ## Culling (First Pass)
 
+### Two Pass Occlusion Culling
+
+I mentioned earlier that frustum culling is not sufficent for complex scenes. With meshlets, we're going to have a _lot_ of geometry in view at once. Rendering all of that is way too expensive, and unnecessary. It's a complete waste to spend time rendering a bunch of detailed rocks and trees, only to draw a wall in front of it later on (overdraw).
+
+Two pass occlusion culling is the method that we're going to use to reduce overdraw. We're going to start by drawing all the clusters that actually contributed to the rendered image last frame, under the assumption that those are a good approximation of what will contribute to the rendered image _this_ frame. That's the first pass. The,n we can build an depth pyramid (mipmapped depth buffer), and use that to cull all the clusters that we didn't look at in the first pass, i.e. that didn't render last frame. The clusters that survive the culling get drawn. That's the second pass.
+
+In the example with the wall with the rocks and trees behind it, we could see that last frame the wall clusters contributed pixels to the final image, but none of the rock or tree clusters did. Therefore in the first pass, we would draw only the wall, and then build a depth pyramid from the resulting depth. In the second pass, we would test the remaining clusters (all the trees and rocks) against the depth pyramid, and see that they would still be occluded by the wall, and therefore we can skip drawing them. If there were some new rocks that came into view as we peeked around the corner, they'd be drawn here. The second pass functions as a cleanup pass, for rendering the objects that we missed in the first pass.
+
+Done correctly, two pass occlusion culling reduces the average amount of clusters we draw in a frame, saving rendering time without any visible artifacts.
+
+### Initial Cluster Processing
+
+Before we start looking at the algorithm steps and code, I'd like to note that this shader is very performance and bug sensitive. I've written and rewritten it several times. While the concepts are simple, it's easy to break the culling, and the choices in data management that we make here affect the rest of the rendering pipeline quite significantly.
+
+This is going to be a long and complicated shader, so let's dive into it.
+
+The first pass of occlusion culling is another compute shader dispatch with one thread per cluster. A minor detail that I didn't mention last time we saw this pattern, is that with millions of clusters in a scene, you would quickly hit the limit of the maximum number of workgroups you can spawn per dispatch dimension if you did a 1d dispatch over all clusters. To work around this, we instead we do a 3d dispatch with each dimension of size `ceil(cbrt(workgroup_count))`. We can then swizzle the workgroup and thread indices back to 1d in the shader.
+
+```rust
+@compute
+@workgroup_size(128, 1, 1) // 128 threads per workgroup, 1 cluster per thread
+fn cull_meshlets(
+    @builtin(workgroup_id) workgroup_id: vec3<u32>,
+    @builtin(num_workgroups) num_workgroups: vec3<u32>,
+    @builtin(local_invocation_id) local_invocation_id: vec3<u32>,
+) {
+// Calculate the cluster ID for this thread
+let cluster_id = local_invocation_id.x + 128u * dot(workgroup_id, vec3(num_workgroups.x * num_workgroups.x, num_workgroups.x, 1u));
+if cluster_id >= arrayLength(&meshlet_cluster_meshlet_ids) { return; }
+```
+
+Once we know what cluster this thread should process, the next step is to check instance culling. Bevy has the concept of render layers, where certain entities only render for certain views. Before rendering, we uploaded a bitmask of whether each instance was visible for the current view or not. In the shader, we'll just check that bitmask, and early-out if the cluster belongs to an instance that should be culled.
+
+The instance ID can be found via indexing into the per-cluster data buffer that we computed in the previous pass (fill cluster buffers).
+
+```rust
+// Check for instance culling
+    let instance_id = meshlet_cluster_instance_ids[cluster_id];
+#ifdef MESHLET_FIRST_CULLING_PASS
+    let bit_offset = instance_id % 32u;
+    let packed_visibility = meshlet_view_instance_visibility[instance_id / 32u];
+    let should_cull_instance = bool(extractBits(packed_visibility, bit_offset, 1u));
+    if should_cull_instance { return; }
+#endif
+```
+
+Assuming the cluster's instance was not culled, we can now start fetching the rest of the cluster's data for culling. The instance ID we found also gives us access to the instance uniform, and we can fetch the meshlet ID the same way we did the instance ID. With these two indices, we can also fetch the bounding sphere for the cluster's meshlet, and convert it from object to world space.
+
+```rust
+// Calculate world-space culling bounding sphere for the cluster
+let instance_uniform = meshlet_instance_uniforms[instance_id];
+let meshlet_id = meshlet_cluster_meshlet_ids[cluster_id];
+let world_from_local = affine3_to_square(instance_uniform.world_from_local);
+let world_scale = max(length(world_from_local[0]), max(length(world_from_local[1]), length(world_from_local[2])));
+let bounding_spheres = meshlet_bounding_spheres[meshlet_id];
+var culling_bounding_sphere_center = world_from_local * vec4(bounding_spheres.self_culling.center, 1.0);
+var culling_bounding_sphere_radius = world_scale * bounding_spheres.self_culling.radius;
+```
+
+A simple frustum test lets us cull out of view clusters (an early return means the cluster is culled).
+
+```rust
+// Frustum culling
+for (var i = 0u; i < 6u; i++) {
+    if dot(view.frustum[i], culling_bounding_sphere_center) + culling_bounding_sphere_radius <= 0.0 {
+        return;
+    }
+}
+```
+
+### LOD Selection
+
+TODO
+
+### Occlusion Culling Test
+
+TODO
+
+### Result Writeout
+
 TODO
 
 ## Raster (First Pass)
@@ -457,6 +537,8 @@ TODO
 ## Raster (Second Pass)
 
 TODO
+
+(TODO: Renderdoc overdraw visualization)
 
 ## Copy Material Depth
 
