@@ -13,6 +13,8 @@ Bevy 0.14 releases soon, and with it, the release of an experimental virtual geo
 
 In this blog post, I'm going to give a technical deep dive into Bevy's new "meshlet" feature, what improvements it bring, techniques I tried that did or did not work out, and what I'm looking to improve on in the future. There's a lot that I've learned (and a _lot_ of code I've written and rewritten multiple times), and I'd like to share what I learned in the hope that it will help others.
 
+This post is going to be _very_ long, so I suggest reading over it (and the Nanite slides) a couple of times to get a general overview of the pieces involved, before spending time analyzing individual steps. At the time of this writing, my blog theme dosen't have a table of concents sidebar that follows you as you scroll the page. I apologize for that. If you want to go back and reference previous sections as you read the post, I suggest using multiple browser tabs.
+
 I'd also like to take a moment to thank [LVSTRI](https://github.com/LVSTRI) and [jglrxavpok](https://jglrxavpok.github.io) for their experience with virtual geometry, [atlv24](https://github.com/atlv24) for their help in several areas, especially for their work on wgpu/naga for some missing features I needed, other Bevy developers for testing and reviewing my PRs, Unreal Engine (Brian Karis, Rune Stubbe, Graham Wihlidal) for their _excellent_ and highly detailed [SIGGRAPH presentation](https://advances.realtimerendering.com/s2021/Karis_Nanite_SIGGRAPH_Advances_2021_final.pdf), and many more people than I can name who provided advice on the project.
 
 Code for this feature can be found [on the Bevy github](https://github.com/bevyengine/bevy/tree/ab2add64fa79d20cddbad7d54124b197eaa2f305/crates/bevy_pbr/src/meshlet).
@@ -60,6 +62,8 @@ With the introduction of Unreal Engine 5 in 2021 came the introduction of a new 
 Nanite works by first splitting your base mesh into a series of meshlets - small, independent clusters of triangles. Nanite then takes those clusters, simplifies them to use less triangles, and then groups the clusters themselves into a set of _new_ clusters. By repeating this process, you get a tree of clusters where the leaves of the tree form the base mesh, and the root of the tree forms a simplified approximation of the base mesh.
 
 Now at runtime, we don't just have to render one level (LOD) of the tree. We can choose specific clusters from different levels of the tree so that if you're close to one part of the mesh, it'll render many high resolution clusters. If you're far from a different part of the mesh, however, then that part will use a couple low resolution clusters that are cheaper to render. Unlike traditional LODs, which are all or nothing, part of the mesh can be low resolution, part of the mesh can be high resolution, and a third part can be somewhere in between, all at the time same time, all on a very granular level.
+
+Additionally, the transitions between LODs can be virtually imperceptible and extremely smooth, without extra rendering work. Traditional LODs typically have to hide transitions with crossfaded opacity between two levels.
 
 (TODO: Slide from Nanite showing the cluster tree)
 
@@ -345,6 +349,17 @@ GPU timings were measured on a RTX 3080 locked to base clock speeds, rendering a
 
 (TODO: Picture of NSight screen capture)
 
+The frame can be broken down into the following steps:
+1. Fill cluster buffers
+2. Cluster culling first pass
+3. Raster visbuffer first pass
+4. Build depth pyramid for second pass
+5. Cluster culling second pass
+6. Raster visbuffer second pass
+7. Copy material depth
+8. Build depth pyramid for next frame
+9. Material shading
+
 ## Terminology
 
 First, some terminology:
@@ -440,11 +455,9 @@ fn fill_cluster_buffers(
 
 ## Culling (First Pass)
 
-### Two Pass Occlusion Culling
-
 I mentioned earlier that frustum culling is not sufficent for complex scenes. With meshlets, we're going to have a _lot_ of geometry in view at once. Rendering all of that is way too expensive, and unnecessary. It's a complete waste to spend time rendering a bunch of detailed rocks and trees, only to draw a wall in front of it later on (overdraw).
 
-Two pass occlusion culling is the method that we're going to use to reduce overdraw. We're going to start by drawing all the clusters that actually contributed to the rendered image last frame, under the assumption that those are a good approximation of what will contribute to the rendered image _this_ frame. That's the first pass. The,n we can build an depth pyramid (mipmapped depth buffer), and use that to cull all the clusters that we didn't look at in the first pass, i.e. that didn't render last frame. The clusters that survive the culling get drawn. That's the second pass.
+Two pass occlusion culling is the method that we're going to use to reduce overdraw. We're going to start by drawing all the clusters that actually contributed to the rendered image last frame, under the assumption that those are a good approximation of what will contribute to the rendered image _this_ frame. That's the first pass. Then, we can build a depth pyramid (mipmapped depth buffer), and use that to cull all the clusters that we didn't look at in the first pass, i.e. that didn't render last frame. The clusters that survive the culling get drawn. That's the second pass.
 
 In the example with the wall with the rocks and trees behind it, we could see that last frame the wall clusters contributed pixels to the final image, but none of the rock or tree clusters did. Therefore in the first pass, we would draw only the wall, and then build a depth pyramid from the resulting depth. In the second pass, we would test the remaining clusters (all the trees and rocks) against the depth pyramid, and see that they would still be occluded by the wall, and therefore we can skip drawing them. If there were some new rocks that came into view as we peeked around the corner, they'd be drawn here. The second pass functions as a cleanup pass, for rendering the objects that we missed in the first pass.
 
@@ -478,15 +491,13 @@ The instance ID can be found via indexing into the per-cluster data buffer that 
 ```rust
 // Check for instance culling
     let instance_id = meshlet_cluster_instance_ids[cluster_id];
-#ifdef MESHLET_FIRST_CULLING_PASS
     let bit_offset = instance_id % 32u;
     let packed_visibility = meshlet_view_instance_visibility[instance_id / 32u];
     let should_cull_instance = bool(extractBits(packed_visibility, bit_offset, 1u));
     if should_cull_instance { return; }
-#endif
 ```
 
-Assuming the cluster's instance was not culled, we can now start fetching the rest of the cluster's data for culling. The instance ID we found also gives us access to the instance uniform, and we can fetch the meshlet ID the same way we did the instance ID. With these two indices, we can also fetch the bounding sphere for the cluster's meshlet, and convert it from object to world space.
+Assuming the cluster's instance was not culled, we can now start fetching the rest of the cluster's data for culling. The instance ID we found also gives us access to the instance uniform, and we can fetch the meshlet ID the same way we did the instance ID. With these two indices, we can also fetch the culling bounding sphere for the cluster's meshlet, and convert it from local to world-space.
 
 ```rust
 // Calculate world-space culling bounding sphere for the cluster
@@ -512,15 +523,64 @@ for (var i = 0u; i < 6u; i++) {
 
 ### LOD Selection
 
-TODO
+Now that we know if a cluster is in view, the next question we need to ask is "Is this cluster's meshlet part of the right cut of the LOD tree?"
+
+The goal is to select the set of simplified meshlets such that at the distance we're viewing them from, they have less than 1 pixel of geometric difference from the original set of meshlets at LOD 0 (the base mesh). Note that we're accounting _only_ for geometric differences, and not taking into account material or lighting differences. Doing so is a _much_ harder problem.
+
+So, the question is then "how do we determine if the group this meshlet belongs to has less than 1 pixel of geometric error?"
+
+When building the meshlet groups during asset preprocessing, we stored the group error relative to the base mesh as the radius of the bounding sphere. We can convert this bounding sphere from local to world-space, project it to view-space, and then check how many pixels on the screen it takes up. If it's less than 1 pixel, then the cluster is imperceptibly different. We're essentially answering the question "if the mesh deformed by X meters, how many pixels of change is that when viewed from the current camera"?
+
+```rust
+// https://stackoverflow.com/questions/21648630/radius-of-projected-sphere-in-screen-space/21649403#21649403
+fn lod_error_is_imperceptible(sphere_center: vec3<f32>, sphere_radius: f32) -> bool {
+    let d2 = dot(sphere_center, sphere_center);
+    let r2 = sphere_radius * sphere_radius;
+    let sphere_diameter_uv = view.clip_from_view[0][0] * sphere_radius / sqrt(d2 - r2);
+    let view_size = f32(max(view.width, view.height));
+    let sphere_diameter_pixels = sphere_diameter_uv * view_size;
+    return sphere_diameter_pixels < 1.0;
+}
+```
+
+Knowing if the cluster has imperceptible error is not sufficent by itself. Say you have 4 sets of meshlets - the original one (group 0), and 3 progressively simplified versions (groups 1-3). If group 2 has imperceptible error for the current view, then so would groups 1 and 0. In fact, group 0 will _always_ have imperceptible error, given that it _is_ the base mesh.
+
+Given multiple sets of imperceptibly different meshlets, the best set to select is the one made of the fewest triangles (most simplified), which is the highest LOD.
+
+Given that we're processing each cluster in parallel, we can't communicate between them to choose the correct LOD cut. Instead, we can use a neat trick. We can design a procedure where each cluster evaluates some data, and decides independently whether it's at the correct LOD.
+
+The Nanite slides go into the theory more, but it boils down to checking if error is imperceptible for the current cluster, _and_ that its _parent's_ error is _not_ imperceptible. I.e. this is the most simple cluster we can choose with imperceptible error, and going up to it's even more simple parent would cause visible error.
+
+We can take the two LOD bounding spheres (the ones containing simplification error) for each meshlet, transform them to view-space, check if the error for each one is imperceptible or not, and then early-out if this cluster is not part of the correct LOD cut.
+
+```rust
+// Calculate view-space LOD bounding sphere for the meshlet
+let lod_bounding_sphere_center = world_from_local * vec4(bounding_spheres.self_lod.center, 1.0);
+let lod_bounding_sphere_radius = world_scale * bounding_spheres.self_lod.radius;
+let lod_bounding_sphere_center_view_space = (view.view_from_world * vec4(lod_bounding_sphere_center.xyz, 1.0)).xyz;
+
+// Calculate view-space LOD bounding sphere for the meshlet's parent
+let parent_lod_bounding_sphere_center = world_from_local * vec4(bounding_spheres.parent_lod.center, 1.0);
+let parent_lod_bounding_sphere_radius = world_scale * bounding_spheres.parent_lod.radius;
+let parent_lod_bounding_sphere_center_view_space = (view.view_from_world * vec4(parent_lod_bounding_sphere_center.xyz, 1.0)).xyz;
+
+// Check LOD cut (meshlet error imperceptible, and parent error not imperceptible)
+let lod_is_ok = lod_error_is_imperceptible(lod_bounding_sphere_center_view_space, lod_bounding_sphere_radius);
+let parent_lod_is_ok = lod_error_is_imperceptible(parent_lod_bounding_sphere_center_view_space, parent_lod_bounding_sphere_radius);
+if !lod_is_ok || parent_lod_is_ok { return; }
+```
 
 ### Occlusion Culling Test
+
+We've checked if the cluster is in view (frustum and render layer culling), as well as if it's part of the correct LOD cut. It's now time for the actual occlusion culling part of the first of the two passes for two pass occlusion culling.
+
+Our goal in the first pass is to render only clusters that were visible last frame.
 
 TODO
 
 ### Result Writeout
 
-TODO
+TODO (also mention that this is the end of the second pass/shader/dispatch in the frame, and that from fill cluster buffers until now is all one pass)
 
 ## Raster (First Pass)
 
