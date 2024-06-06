@@ -349,7 +349,7 @@ GPU timings were measured on a RTX 3080 locked to base clock speeds, rendering a
 
 (TODO: Picture of NSight screen capture)
 
-The frame can be broken down into the following steps:
+The frame can be broken down into the following passes:
 1. Fill cluster buffers
 2. Cluster culling first pass
 3. Raster visbuffer first pass
@@ -359,6 +359,8 @@ The frame can be broken down into the following steps:
 7. Copy material depth
 8. Build depth pyramid for next frame
 9. Material shading
+
+There's a lot to cover, so I'm going to try and keep it fairly brief in each section. The high level concepts of all of these passes (besides the first pass) are copied from Nanite, so check out their presentation for further details. I'll be trying to focus more on the lower level code and reasons why I implemented things the way that I did. My first attempt at a lot of these passes had bugs, and was way slower. The details and data flow is what takes the concept from a neat tech demo, to an actually usable and scalable renderer.
 
 ## Terminology
 
