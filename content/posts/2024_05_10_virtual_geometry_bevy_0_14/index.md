@@ -457,7 +457,7 @@ fn fill_cluster_buffers(
 
 I mentioned earlier that frustum culling is not sufficent for complex scenes. With meshlets, we're going to have a _lot_ of geometry in view at once. Rendering all of that is way too expensive, and unnecessary. It's a complete waste to spend time rendering a bunch of detailed rocks and trees, only to draw a wall in front of it later on (overdraw).
 
-Two pass occlusion culling is the method that we're going to use to reduce overdraw. We're going to start by drawing all the clusters that actually contributed to the rendered image last frame, under the assumption that those are a good approximation of what will contribute to the rendered image _this_ frame. That's the first pass. Then, we can build a depth pyramid (mipmapped depth buffer), and use that to cull all the clusters that we didn't look at in the first pass, i.e. that didn't render last frame. The clusters that survive the culling get drawn. That's the second pass.
+Two pass occlusion culling is the method that we're going to use to reduce overdraw. We're going to start by drawing all the clusters that actually contributed to the rendered image last frame, under the assumption that those are a good approximation of what will contribute to the rendered image _this_ frame. That's the first pass. Then, we can build a depth pyramid, and use that to cull all the clusters that we didn't look at in the first pass, i.e. that didn't render last frame. The clusters that survive the culling get drawn. That's the second pass.
 
 In the example with the wall with the rocks and trees behind it, we could see that last frame the wall clusters contributed pixels to the final image, but none of the rock or tree clusters did. Therefore in the first pass, we would draw only the wall, and then build a depth pyramid from the resulting depth. In the second pass, we would test the remaining clusters (all the trees and rocks) against the depth pyramid, and see that they would still be occluded by the wall, and therefore we can skip drawing them. If there were some new rocks that came into view as we peeked around the corner, they'd be drawn here. The second pass functions as a cleanup pass, for rendering the objects that we missed in the first pass.
 
@@ -574,13 +574,94 @@ if !lod_is_ok || parent_lod_is_ok { return; }
 
 We've checked if the cluster is in view (frustum and render layer culling), as well as if it's part of the correct LOD cut. It's now time for the actual occlusion culling part of the first of the two passes for two pass occlusion culling.
 
-Our goal in the first pass is to render only clusters that were visible last frame.
+Our goal in the first pass is to render only clusters that were visible last frame. One possible method would be to store another bitmask of whether each cluster was visible in the current frame, and read from it in the next frame. The problem with this is that it uses a good chunk of memory, and more importantly, does not play well with LODs. Before I implemented LODs I used this method, but with LODs, a cluster that was visible last frame might not be part of the LOD cut in this frame and therefore incorrect to render.
 
-TODO
+Instead of explicitly storing whether a cluster is visible, we're instead going to occlusion cull the clusters against the depth pyramid from the _previous_ frame. We can take the culling bounding sphere of the cluster, project it to view-space using the previous frame's set of transforms, and then project it to a screen-space axis-aligned bounding box (AABB). We can then compare the view-space depth of the bounding sphere's extents with every pixel of the depth buffer that the AABB we calculated covers. If all depth pixels show that there is geometry in front of the bounding sphere, then the mesh was not visible last frame, and therefore should not be rendered in the first occlusion culling pass.
+
+Of course sampling every pixel an AABB covers would be extremely expensive, and cache inefficient. Instead we'll use a depth _pyramid_, which is a mipmapped version of the depth buffer. Each pixel in MIP 1 corresponds to the min of 4 pixels from the MIP 0, each pixel in MIP 2 corresponds to the min of 4 pixels from MIP 1, etc down to a 1x1 layer. Now we only have to sample 4 pixels for each AABB, choosing the mip level that best fits the AABB onto a 2x2 quad. Don't worry about how we generate the depth pyramid, we'll talk about that more later.
+
+If any of that was confusing, read up on occlusion culling and depth pyramids. The important takeaway is that we're using the previous frame's depth pyramid in the first occlusion culling pass to find which clusters would have been visible last frame.
+
+```rust
+// Project the culling bounding sphere to view-space for occlusion culling
+let previous_world_from_local = affine3_to_square(instance_uniform.previous_world_from_local);
+let previous_world_from_local_scale = max(length(previous_world_from_local[0]), max(length(previous_world_from_local[1]), length(previous_world_from_local[2])));
+culling_bounding_sphere_center = previous_world_from_local * vec4(bounding_spheres.self_culling.center, 1.0);
+culling_bounding_sphere_radius = previous_world_from_local_scale * bounding_spheres.self_culling.radius;
+let culling_bounding_sphere_center_view_space = (view.view_from_world * vec4(culling_bounding_sphere_center.xyz, 1.0)).xyz;
+
+let aabb = project_view_space_sphere_to_screen_space_aabb(culling_bounding_sphere_center_view_space, culling_bounding_sphere_radius);
+// Halve the view-space AABB size as the depth pyramid is half the view size
+let depth_pyramid_size_mip_0 = vec2<f32>(textureDimensions(depth_pyramid, 0)) * 0.5;
+let width = (aabb.z - aabb.x) * depth_pyramid_size_mip_0.x;
+let height = (aabb.w - aabb.y) * depth_pyramid_size_mip_0.y;
+// Note: I've seen people use floor instead of ceil here, but it seems to result in culling bugs.
+//       The max(0, x) is also important.
+let depth_level = max(0, u32(ceil(log2(max(width, height)))));
+let depth_pyramid_size = vec2<f32>(textureDimensions(depth_pyramid, depth_level));
+let aabb_top_left = vec2<u32>(aabb.xy * depth_pyramid_size);
+
+// Note: I'd use a min sampler reduction here if it were available in wgpu.
+//       textureGather() can't be used either, as it dosen't let you specify a mip level.
+let depth_quad_a = textureLoad(depth_pyramid, aabb_top_left, depth_level).x;
+let depth_quad_b = textureLoad(depth_pyramid, aabb_top_left + vec2(1u, 0u), depth_level).x;
+let depth_quad_c = textureLoad(depth_pyramid, aabb_top_left + vec2(0u, 1u), depth_level).x;
+let depth_quad_d = textureLoad(depth_pyramid, aabb_top_left + vec2(1u, 1u), depth_level).x;
+let occluder_depth = min(min(depth_quad_a, depth_quad_b), min(depth_quad_c, depth_quad_d));
+
+// Check whether or not the cluster would be occluded if drawn
+var cluster_visible: bool;
+if view.clip_from_view[3][3] == 1.0 {
+    // Orthographic
+    let sphere_depth = view.clip_from_view[3][2] + (culling_bounding_sphere_center_view_space.z + culling_bounding_sphere_radius) * view.clip_from_view[2][2];
+    cluster_visible = sphere_depth >= occluder_depth;
+} else {
+    // Perspective
+    let sphere_depth = -view.clip_from_view[3][2] / (culling_bounding_sphere_center_view_space.z + culling_bounding_sphere_radius);
+    cluster_visible = sphere_depth >= occluder_depth;
+}
+```
 
 ### Result Writeout
 
-TODO (also mention that this is the end of the second pass/shader/dispatch in the frame, and that from fill cluster buffers until now is all one pass)
+We're finally at the end of the first occlusion culling pass/dispatch. As a reminder, everything from after the fill cluster buffers step until the end of this section is all one shader. I warned you it would be long!
+
+The last step for this pass is to write out the results of what clusters should render. This pass is just a compute shader - it dosen't actually render anything. We're just going to fill out the arguments for a single indirect draw command (more on this in the next pass).
+
+First, before we get to the indirect draw, we need to write out another piece of data. The second occlusion culling pass later will want to operate only on clusters in view, that passed the LOD test, and that were _not_ drawn in the first pass. That means we didn't early return during the frustum culling or LOD test, and that cluster_visible was false from the occlusion culling test.
+
+In order for the second occlusion pass to know which clusters satisfy these conditions, we'll write out another bitmask of 1 bit per cluster, with clusters that the second occlusion pass should operate on having their bit set to 1. An atomicOr takes care of setting each cluster's bit in parallel amongst all threads.
+
+```rust
+// Write if the cluster should be occlusion tested in the second pass
+if !cluster_visible {
+    let bit = 1u << cluster_id % 32u;
+    atomicOr(&meshlet_second_pass_candidates[cluster_id / 32u], bit);
+}
+```
+
+Now we have the final step of filling out the indirect draw data for the clusters that we _do_ want to draw in the first pass.
+
+We can do an atomicAdd on the DrawIndirectArgs::vertex_count with the meshlet's vertex count (triangle count * 3). This does two things:
+1. Adds more vertex invocations to the indirect draw for this cluster's triangles
+2. Reserves space in a large buffer for all of this cluster's triangles to write out a per-triangle number
+
+With the draw_triangle_buffer space reserved, we can then fill it with an encoded integer: 26 bits for the cluster ID, and 6 bits for the triangle ID within the cluster's meshlet. 6 bits gives us 2^6 = 64 possible values, which is perfect as when we were building meshlets during asset preprocessing, we limited each meshlet to max 64 vertices and 64 triangles.
+
+During vertex shading in the next pass, each vertex invocation will be able to use this buffer to know what triangle and cluster it belongs to.
+
+```rust
+// Append a list of this cluster's triangles to draw if not culled
+if cluster_visible {
+    let meshlet_triangle_count = meshlets[meshlet_id].triangle_count;
+    let buffer_start = atomicAdd(&draw_indirect_args.vertex_count, meshlet_triangle_count * 3u) / 3u;
+
+    let cluster_id_packed = cluster_id << 6u;
+    for (var triangle_id = 0u; triangle_id < meshlet_triangle_count; triangle_id++) {
+        draw_triangle_buffer[buffer_start + triangle_id] = cluster_id_packed | triangle_id;
+    }
+}
+```
 
 ## Raster (First Pass)
 
