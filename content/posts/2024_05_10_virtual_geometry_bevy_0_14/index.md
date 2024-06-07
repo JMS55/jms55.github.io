@@ -742,11 +742,21 @@ One important note is that we need to ensure that the depth pyramid is conservat
 
 ## Culling (Second Pass)
 
-TODO
+The second culling pass is where we decide whether to render the rest of the clusters - the ones that we didn't think were a good set of occluders for the scene, and decided to hold off on rendering.
+
+This culling pass is much the same as the first, with a few key differences:
+* We skip frustum and LOD culling, as we did it the first time
+* We operate only on the clusters that we explicitly marked as second pass candidates during the first culling pass
+* We use the current transforms, instead of last frame's
+* We occlusion cull using the depth pyramid generated from the previous pass
+
+By doing this, we can skip drawing any clusters that would be occluded by the existing geometry that we rendered in the first pass.
+
+As a result of this pass, we have another DrawIndirectArgs we can use to draw the remaining clusters.
 
 ## Raster (Second Pass)
 
-TODO
+This pass is identical to the first raster pass, just with the new set of clusters from the second culling pass.
 
 (TODO: Renderdoc overdraw visualization)
 
@@ -756,7 +766,7 @@ TODO
 
 ## Downsample Depth (Again)
 
-TODO
+For next frame's first culling pass, we're going to need the previous frame's depth pyramid. This is where we'll generate it. We'll use the same exact process that we used for the first depth downsample, but this time we'll use the depth buffer generated as a result of the second raster pass, instead of the first.
 
 ## Material Shading
 
