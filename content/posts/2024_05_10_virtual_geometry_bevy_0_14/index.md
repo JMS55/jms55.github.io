@@ -17,7 +17,7 @@ This post is going to be _very_ long, so I suggest reading over it (and the Nani
 
 I'd also like to take a moment to thank [LVSTRI](https://github.com/LVSTRI) and [jglrxavpok](https://jglrxavpok.github.io) for their experience with virtual geometry, [atlv24](https://github.com/atlv24) for their help in several areas, especially for their work on wgpu/naga for some missing features I needed, other Bevy developers for testing and reviewing my PRs, Unreal Engine (Brian Karis, Rune Stubbe, Graham Wihlidal) for their _excellent_ and highly detailed [SIGGRAPH presentation](https://advances.realtimerendering.com/s2021/Karis_Nanite_SIGGRAPH_Advances_2021_final.pdf), and many more people than I can name who provided advice on the project.
 
-Code for this feature can be found [on the Bevy github](https://github.com/bevyengine/bevy/tree/ab2add64fa79d20cddbad7d54124b197eaa2f305/crates/bevy_pbr/src/meshlet).
+Code for this feature can be found [on the Bevy github](https://github.com/bevyengine/bevy/tree/175e1462289c217ec57a3d3b9894a7c513890fa4/crates/bevy_pbr/src/meshlet).
 
 If you're already familiar with Nanite, feel free to skip the next few sections of background info until you get to the Bevy-specific parts.
 
@@ -341,7 +341,7 @@ With the asset processing part out of the way, we can finally move onto the more
 
 The frame capture we'll be looking at is this scene with (TODO) Stanford Bunnies. Five of the bunnies are using unique PBR materials, while the rest use the same debug material that visualizes the clusters/triangles of the mesh. Each bunny is made of (TODO) triangles, with (TODO) meshlets at LOD 0, and (TODO) meshlets total in the LOD tree.
 
-GPU timings were measured on a RTX 3080 locked to base clock speeds, rendering at 1080p.
+GPU timings were measured on a RTX 3080 locked to base clock speeds (so not as fast as you would actually get in practice), rendering at 1080p.
 
 (TODO: Picture of frame with triangles)
 
@@ -361,6 +361,8 @@ The frame can be broken down into the following passes:
 9. Material shading
 
 There's a lot to cover, so I'm going to try and keep it fairly brief in each section. The high level concepts of all of these passes (besides the first pass) are copied from Nanite, so check out their presentation for further details. I'll be trying to focus more on the lower level code and reasons why I implemented things the way that I did. My first attempt at a lot of these passes had bugs, and was way slower. The details and data flow is what takes the concept from a neat tech demo, to an actually usable and scalable renderer.
+
+I'll also be skipping a lot of the CPU-side data management, as it's fairly boring and subject to a future rewrite.
 
 ## Terminology
 
@@ -667,11 +669,76 @@ if cluster_visible {
 
 ## Raster (First Pass)
 
-TODO
+We've now determined what to draw, so it's time to draw it.
+
+As I mentioned in the previous section, we're doing a single draw_indirect() call to rasterize every single cluster at once, using the DrawIndirectArgs buffer we filled out in the previous pass.
+
+We're going to render to a few different render targets:
+* Depth buffer
+* Visibility buffer (optional, not rendered for shadow map views)
+* Material depth (optional, not rendered for shadow map views)
+
+The depth buffer is straightforward. The visibility buffer is a R32Uint texture storing the cluster ID + triangle ID packed together in the same way as during the culling pass. Material depth is a R16Uint texture storing the material ID. The visibility buffer and material depth textures will be used in a later pass for shading.
+
+Note that it would be better to skip writing material depth here, and write it out as part of the later copy material depth pass. This pass is going to change in the near future when I add software rasterization however (more on this soon), so for now I've left it as-is.
+
+I won't show the entire shader, but getting the triangle data to render for each vertex is fairly straightforward. The vertex invocation index can be used to index into the draw_triangle_buffer that we wrote out during the culling pass, giving us a packed cluster ID and triangle ID. The vertex invocation index % 3 gives us which vertex within the triangle this is, and then we can lookup the cluster's meshlet and instance data as normal. Vertex data can be obtained by following the tree of indices using the index ID and meshlet info.
+
+```rust
+@vertex
+fn vertex(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
+    let packed_ids = draw_triangle_buffer[vertex_index / 3u];
+
+    let cluster_id = packed_ids >> 6u;
+    let meshlet_id = meshlet_cluster_meshlet_ids[cluster_id];
+    let meshlet = meshlets[meshlet_id];
+
+    let triangle_id = extractBits(packed_ids, 0u, 6u);
+    let index_id = (triangle_id * 3u) + (vertex_index % 3u);
+    let index = get_meshlet_index(meshlet.start_index_id + index_id);
+    let vertex_id = meshlet_vertex_ids[meshlet.start_vertex_id + index];
+    let vertex = unpack_meshlet_vertex(meshlet_vertex_data[vertex_id]);
+
+    let instance_id = meshlet_cluster_instance_ids[cluster_id];
+    let instance_uniform = meshlet_instance_uniforms[instance_id];
+
+    // ...
+}
+```
+
+(TODO: Show rendered textures)
+
+---
+
+With the overview out of the way, the real topic to discuss for this pass is "why a single draw indirect?" There are several other possibilities I could have gone with:
+* Mesh shaders
+* Single draw indexed indirect after writing out an index buffer during the culling pass
+* Single draw indirect, with a cluster ID buffer, snapping extra vertex invocations to NaN
+* Multi draw indirect with a sub-draw per cluster
+* Multi draw indirect with a sub-draw per meshlet triangle count bin
+* Software rasterization
+
+Mesh shaders are sadly not supported by wgpu, so that's out. They would be the best option for taking advantage of GPU hardware.
+
+Single draw indexed indirect was what I originally used. It's about 10-20% faster (if I remember correctly, it's been a while) than the non-indexed variant I use now. However, that means we would need to allocate an index buffer for our worst case usage at 12 bytes/triangle. That's extremely expensive for the amount of geoemetry we want to deal with, and you'd quickly run into buffer size limits (~2gb on most platforms). You could dynamically allocate a new buffer size based on amount of rendered triangles after culling with some CPU readback and some heuristics, but that's more complicated and still very memory hungry. Single draw indirect with the 4 bytes/triangle draw_triangle_buffer that I ended up using is still expensive, but good enough to scrape by for now.
+
+Single draw indirect with a buffer of cluster IDs is also an option. Each meshlet has max 64 triangles, so we could spawn cluster_count * 64 * 3 vertex invocations. Vertex invocation index / (64 * 3) would give you an index into the cluster ID buffer, and triangle ID is easy to recover via some simple arithmetic. At 4 bytes/cluster, this option is _much_ cheaper in memory than any of the previous methods. The problem is how to handle excess vertex invocations. Not all meshlets will have a full 64 triangles. It's easy enough to have each vertex invocation check the meshlet's triangle count, and if it's not needed, write out a NaN position, causing the GPU to ignore the triangle. The problem is that this performed very poorly when I tested it. All those dummy NaN triangles took up valuable time that the GPU could be spent processing other triangles. Maybe performance would be better if I were able to get meshlets much closer to the max triangle count, or halving the max triangle count to 32 per meshlet to spawn less dummy triangles, but I ended up not perusing this method.
+
+Multi draw is also an option. We could write out a buffer with 1 DrawIndirectArgs per cluster, giving 16 bytes/cluster. Each sub-draw would contain exactly the right amount of vertex invocations per cluster. Each vertex invocation would be able to recover their cluster ID via the instance_id builtin, as we would set DrawIndirectArgs::first_instance to the cluster ID. On the CPU, this would still be a single draw call. In practice, I found this still performed poorly. While we are no longer bottlenecked by the GPU having to process dummy triangles, now the GPU's command processor has to process all these sub-commands. At 1 sub-command per cluster, that's a _lot_ of commands.
+
+An additional idea I thought of while writing this section is to bin each cluster by its meshlet triangle count. All clusters whose meshlets have 10 triangles would go in one bin, 12 triangles in a second bin, 46 triangles in a third bin, etc, for 63 bins total (we would never have a meshlet with 0 triangles). We could then write out a DrawIndirectArgs and list of cluster IDs per bin, and do a single multi_draw_indirect() call on the CPU, similiar to the last section. I haven't tested it out, but this seems like a decent option in theory. I believe Nanite does something similiar in recent versions of Unreal Engine 5 in order to support different types of vertex shaders.
+
+Finally, we could use software rasterization. We could write out a list of cluster IDs, spawn 1 workgroup per cluster, and have each workgroup manually rasterize the cluster via some linear algebra, bypassing fixed-function GPU hardware entirely. This is what Nanite does for over 90% of their clusters. Only large clusters and clusters needing depth clipping are rendered via hardware draws. Not only is this one of the most memory efficent options, it's faster than hardware draws for the majority of clusters (hence why Nanite uses it so heavily). Unfortunately, wgpu once again lacks support for a needed feature, this time 64bit texture atomics. The good news is that @atlv24 is working on adding support for this feature, and I'm looking forward to implementing software rendering in a future release of Bevy.
 
 ## Downsample Depth
 
-TODO
+With the first of the two passes of two pass occlusion culling rendered, it's time to prepare for the second pass. Namely, we need to generate a new depth pyramid based on the depth buffer we just rendered.
+
+For generating the depth pyramid, I ported the FidelityFX Single Pass Downsampler (SPD) to Bevy. SPD lets us perform the downsampling very efficiently, entirely in a single compute dispatch. You could use multiple raster passes, but that's extremely expensive in both CPU time (command recording and wgpu resource tracking), and GPU time (bandwidth reading/writing between passes, pipeline bubbles as the GPU spins up and down between passes).
+
+For now, we're actually using two compute dispatches, not one. Wgpu lacks support for globallycoherent buffers, so we have to split the dispatch in two to ensure writes made by the first are visible to the second. I also did not implement the subgroup version of SPD, as wgpu lacked support at the time (it has it now, minus quads, which SPD does need). Still very fast despite these small deficiencies.
+
+One important note is that we need to ensure that the depth pyramid is conservative. For non-power-of-two depth textures, for instance, we might need special handling of the downsampling. Same for when we sample the depth pyramid during occlusion culling. I haven't done anything special to handle this, but it seems to work well enough. I'm not entirely confident in the edge cases here.
 
 ## Culling (Second Pass)
 
