@@ -11,7 +11,7 @@ Bevy 0.14 releases soon, and with it, the release of an experimental virtual geo
 
 In this blog post, I'm going to give a technical deep dive into Bevy's new "meshlet" feature, what improvements it bring, techniques I tried that did or did not work out, and what I'm looking to improve on in the future. There's a lot that I've learned (and a _lot_ of code I've written and rewritten multiple times), and I'd like to share what I learned in the hope that it will help others.
 
-(TODO: Meshlet image)
+![Example scene for the meshlet renderer](showcase.png)
 
 This post is going to be _very_ long, so I suggest reading over it (and the Nanite slides) a couple of times to get a general overview of the pieces involved, before spending time analyzing individual steps. At the time of this writing, my blog theme dosen't have a table of contents sidebar that follows you as you scroll the page. I apologize for that. If you want to go back and reference previous sections as you read this post, I suggest using multiple browser tabs.
 
@@ -64,8 +64,6 @@ Nanite works by first splitting your base mesh into a series of meshlets - small
 Now at runtime, we don't just have to render one level (LOD) of the tree. We can choose specific clusters from different levels of the tree so that if you're close to one part of the mesh, it'll render many high resolution clusters. If you're far from a different part of the mesh, however, then that part will use a couple low resolution clusters that are cheaper to render. Unlike traditional LODs, which are all or nothing, part of the mesh can be low resolution, part of the mesh can be high resolution, and a third part can be somewhere in between - all at the time same time, all on a very granular level.
 
 Additionally, the transitions between LODs can be virtually imperceptible and extremely smooth, without extra rendering work. Traditional LODs typically have to hide transitions with crossfaded opacity between two levels.
-
-(TODO: Slide from Nanite showing the cluster tree)
 
 Combine this LOD technique with some per-cluster culling, a visibility buffer, streaming in and out of individual cluster data to prevent high memory usage, a custom rasterizer, and a whole bunch of others parts, and you end up with a renderer that _can_ deal with a scene made of 500 million triangles.
 
@@ -144,7 +142,7 @@ The high level steps for converting a mesh are as follows:
 6. For each simplified group, break them apart into new meshlets
 7. Repeat steps 3-7 using the set of new meshlets, unless we ran out of meshlets to simplify
 
-(TODO: Picture of algorithm)
+![Nanite LOD build steps](build_steps.png)
 
 ## Build LOD 0 Meshlets
 
@@ -341,26 +339,30 @@ We can repeat this whole process several times, ideally getting down to a single
 
 With the asset processing part out of the way, we can finally move onto the more interesting runtime code section.
 
-The frame capture we'll be looking at is this scene with (TODO) Stanford Bunnies. Five of the bunnies are using unique PBR materials, while the rest use the same debug material that visualizes the clusters/triangles of the mesh. Each bunny is made of (TODO) triangles, with (TODO) meshlets at LOD 0, and (TODO) meshlets total in the LOD tree.
+The frame capture we'll be looking at is this scene with 3092 Stanford Bunnies. Five of the bunnies are using unique PBR materials, while the rest use the same debug material that visualizes the clusters/triangles of the mesh. Each bunny is made of 144,042 triangles at LOD 0, with 4936 meshlets total in the LOD tree.
 
-GPU timings were measured on a RTX 3080 locked to base clock speeds (so not as fast as you would actually get in practice), rendering at 1080p.
+GPU timings were measured on a RTX 3080 locked to base clock speeds (so not as fast as you would actually get in practice), rendering at 2240x1260, averaged over 10 frames.
 
-(TODO: Picture of frame with triangles)
+> Clusters visualization
+![Clusters visualization](clusters.png)
+> Triangles visualization
+![Triangles visualization](triangles.png)
 
-(TODO: Picture of frame with clusters)
-
-(TODO: Picture of NSight screen capture)
+> NSight profile
+![NSight profile](nsight.png)
 
 The frame can be broken down into the following passes:
-1. Fill cluster buffers
-2. Cluster culling first pass
-3. Raster visbuffer first pass
-4. Build depth pyramid for second pass
-5. Cluster culling second pass
-6. Raster visbuffer second pass
-7. Copy material depth
-8. Build depth pyramid for next frame
-9. Material shading
+1. Fill cluster buffers (0.22ms)
+2. Cluster culling first pass (0.49ms)
+3. Raster visbuffer first pass (1.85ms +/- 0.33ms)
+4. Build depth pyramid for second pass (0.03ms)
+5. Cluster culling second pass (0.11ms)
+6. Raster visbuffer second pass (< 0.01ms)
+7. Copy material depth (0.04ms)
+8. Material shading (timings omitted as this is a poor test for materials)
+9. Build depth pyramid for next frame (0.03ms)
+
+Total time is ~2.78ms +/- 0.33ms.
 
 There's a lot to cover, so I'm going to try and keep it fairly brief in each section. The high level concepts of all of these passes (besides the first pass) are copied from Nanite, so check out their presentation for further details. I'll be trying to focus more on the lower level code and reasons why I implemented things the way that I did. My first attempt at a lot of these passes had bugs, and was way slower. The details and data flow is what takes the concept from a neat tech demo, to an actually usable and scalable renderer.
 
@@ -392,11 +394,11 @@ The naive method would be to simply write out these two buffers from the CPU and
 
 Each ID is a 4-byte u32, and it's two IDs per cluster. That's 8 bytes per cluster.
 
-With (TODO) bunnies in the scene, and (TODO) meshlets per bunny, that's 8 * (TODO) * (TODO) bytes total = (TODO) MB/GB total.
+With 3092 bunnies in the scene, and 4936 meshlets per bunny, that's 8 * 3092 * 4936 bytes total = ~122.10 MBs total.
 
 For dedicated GPUs, uploading data from the system's RAM to the GPU's VRAM is done over PCIe. PCIe x16 Gen3 max bandwidth is 16 GB/s.
 
-Ignoring data copying costs and other overhead, and assuming max PCIe bandwidth, that would mean it would take (TODO)ms to upload cluster data. That's (TODO) / 16.6 = (TODO)% of our frame budget gone, before we've even rendered anything! Obviously, we need a better method.
+Ignoring data copying costs and other overhead, and assuming max PCIe bandwidth, that would mean it would take ~7.63ms to upload cluster data. That's 7.63 / 16.6 = ~46% of our frame budget gone at 60fps, before we've even rendered anything! Obviously, we need a better method.
 
 ---
 
@@ -404,9 +406,7 @@ Instead of uploading per-cluster data, we're going to stick to uploading only pe
 
 The former will contain a prefix sum (calculated on the CPU while writing out the buffer) of how many meshlets each instance is made of. The latter will contain the index of where in the meshlet asset buffer each instance's list of meshlets begin.
 
-(TODO: Example scene and buffer contents)
-
-We're uploading only 8 bytes per _instance_, and not per _cluster_, which is much, much cheaper. (TODO: Math for how much data we uploaded for the X instances in the frame we're looking at)
+We're uploading only 8 bytes per _instance_, and not per _cluster_, which is much, much cheaper. Looking back at our scene, we're uploading 3092 * 8 bytes total = ~0.025 MBs total. This is a _huge_ improvement over the ~122.10 MBs from before.
 
 Now that the GPU has this data, we can have the GPU write out the `cluster_instance_ids` and `cluster_meshlet_ids` buffers from a compute shader. Max VRAM<->VRAM bandwidth on my RTX 3080 is a whopping 760.3 GB/s; ~47.5x faster than the 16 GB/s of bandwidth we had over PCIe.
 
@@ -706,7 +706,14 @@ fn vertex(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
 }
 ```
 
-(TODO: Show rendered textures)
+![Depth buffer](depth_buffer.png)
+![Visibility buffer](visbuffer.png)
+![Material depth](material_depth.png)
+
+> Quad overdraw from Renderdoc
+![Quad overdraw from Renderdoc](quad_overdraw.png)
+> Triangle size from Renderdoc
+![Triangle size from Renderdoc](triangle_size.png)
 
 ---
 
@@ -740,6 +747,8 @@ For now, we're actually using two compute dispatches, not one. Wgpu lacks suppor
 
 One important note is that we need to ensure that the depth pyramid is conservative. For non-power-of-two depth textures, for instance, we might need special handling of the downsampling. Same for when we sample the depth pyramid during occlusion culling. I haven't done anything special to handle this, but it seems to work well enough. I'm not entirely confident in the edge cases here.
 
+![Depth pyramid](depth_pyramid.png)
+
 ## Culling (Second Pass)
 
 The second culling pass is where we decide whether to render the rest of the clusters - the ones that we didn't think were a good set of occluders for the scene, and decided to hold off on rendering.
@@ -758,7 +767,7 @@ As a result of this pass, we have another DrawIndirectArgs we can use to draw th
 
 This pass is identical to the first raster pass, just with the new set of clusters from the second culling pass.
 
-(TODO: Renderdoc overdraw visualization)
+Given that the camera and scene is static, there is nothing to render in this pass.
 
 ## Copy Material Depth
 
@@ -778,10 +787,6 @@ fn copy_material_depth(in: FullscreenVertexOutput) -> @builtin(frag_depth) f32 {
     return f32(textureLoad(material_depth, vec2<i32>(in.position.xy), 0).r) / 65535.0;
 }
 ```
-
-## Downsample Depth (Again)
-
-For next frame's first culling pass, we're going to need the previous frame's depth pyramid. This is where we'll generate it. We'll use the same exact process that we used for the first depth downsample, but this time we'll use the depth buffer generated as a result of the second raster pass, instead of the first.
 
 ## Material Shading
 
@@ -864,6 +869,10 @@ fn resolve_vertex_output(frag_coord: vec4<f32>) -> VertexOutput {
 
     // ...
 }
+
+## Downsample Depth (Again)
+
+Lastly, for next frame's first culling pass, we're going to need the previous frame's depth pyramid. This is where we'll generate it. We'll use the same exact process that we used for the first depth downsample, but this time we'll use the depth buffer generated as a result of the second raster pass, instead of the first.
 
 # Future Work
 
