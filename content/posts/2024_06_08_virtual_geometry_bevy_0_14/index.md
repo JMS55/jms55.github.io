@@ -1,6 +1,6 @@
 +++
 title = "Virtual Geometry in Bevy 0.14"
-date = "2024-05-10"
+date = "2024-06-08"
 
 [taxonomies]
 tags = ["bevy", "virtual geometry"]
@@ -869,6 +869,7 @@ fn resolve_vertex_output(frag_coord: vec4<f32>) -> VertexOutput {
 
     // ...
 }
+```
 
 ## Downsample Depth (Again)
 
