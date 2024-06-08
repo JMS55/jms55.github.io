@@ -9,13 +9,13 @@ tags = ["bevy", "virtual geometry"]
 # Introduction
 Bevy 0.14 releases soon, and with it, the release of an experimental virtual geometry feature that I've been working on for several months.
 
-(TODO: Meshlet image)
-
 In this blog post, I'm going to give a technical deep dive into Bevy's new "meshlet" feature, what improvements it bring, techniques I tried that did or did not work out, and what I'm looking to improve on in the future. There's a lot that I've learned (and a _lot_ of code I've written and rewritten multiple times), and I'd like to share what I learned in the hope that it will help others.
 
-This post is going to be _very_ long, so I suggest reading over it (and the Nanite slides) a couple of times to get a general overview of the pieces involved, before spending time analyzing individual steps. At the time of this writing, my blog theme dosen't have a table of concents sidebar that follows you as you scroll the page. I apologize for that. If you want to go back and reference previous sections as you read the post, I suggest using multiple browser tabs.
+(TODO: Meshlet image)
 
-I'd also like to take a moment to thank [LVSTRI](https://github.com/LVSTRI) and [jglrxavpok](https://jglrxavpok.github.io) for their experience with virtual geometry, [atlv24](https://github.com/atlv24) for their help in several areas, especially for their work on wgpu/naga for some missing features I needed, other Bevy developers for testing and reviewing my PRs, Unreal Engine (Brian Karis, Rune Stubbe, Graham Wihlidal) for their _excellent_ and highly detailed [SIGGRAPH presentation](https://advances.realtimerendering.com/s2021/Karis_Nanite_SIGGRAPH_Advances_2021_final.pdf), and many more people than I can name who provided advice on the project.
+This post is going to be _very_ long, so I suggest reading over it (and the Nanite slides) a couple of times to get a general overview of the pieces involved, before spending time analyzing individual steps. At the time of this writing, my blog theme dosen't have a table of contents sidebar that follows you as you scroll the page. I apologize for that. If you want to go back and reference previous sections as you read this post, I suggest using multiple browser tabs.
+
+I'd also like to take a moment to thank [LVSTRI](https://github.com/LVSTRI) and [jglrxavpok](https://jglrxavpok.github.io) for their sharing experiences with virtual geometry, [atlv24](https://github.com/atlv24) for their help in several areas, especially for their work adding some missing features I needed to wgpu/naga, other Bevy developers for testing and reviewing my PRs, Unreal Engine (Brian Karis, Rune Stubbe, Graham Wihlidal) for their _excellent_ and highly detailed [SIGGRAPH presentation](https://advances.realtimerendering.com/s2021/Karis_Nanite_SIGGRAPH_Advances_2021_final.pdf), and many more people than I can name who provided advice on the project.
 
 Code for this feature can be found [on the Bevy github](https://github.com/bevyengine/bevy/tree/175e1462289c217ec57a3d3b9894a7c513890fa4/crates/bevy_pbr/src/meshlet).
 
@@ -57,11 +57,11 @@ There's also another issue I've saved for last. Despite all the culling and batc
 
 ## What is Virtual Geometry?
 
-With the introduction of Unreal Engine 5 in 2021 came the introduction of a new technique called [Nanite](https://dev.epicgames.com/documentation/en-us/unreal-engine/nanite-virtualized-geometry-in-unreal-engine). Nanite is a system where you can pre-process your non-deforming opaque meshes, and at runtime be able to very efficiently render them, largely solving the above problems with draw counts, memory limits, high-poly mesh rasterization, and the deficiencies of traditional LODs.
+With the introduction of Unreal Engine 5 in 2021 came the introduction of a new technique called [Nanite](https://dev.epicgames.com/documentation/en-us/unreal-engine/nanite-virtualized-geometry-in-unreal-engine). Nanite is a system where you can preprocess your non-deforming opaque meshes, and at runtime be able to very efficiently render them, largely solving the above problems with draw counts, memory limits, high-poly mesh rasterization, and the deficiencies of traditional LODs.
 
 Nanite works by first splitting your base mesh into a series of meshlets - small, independent clusters of triangles. Nanite then takes those clusters, simplifies them to use less triangles, and then groups the clusters themselves into a set of _new_ clusters. By repeating this process, you get a tree of clusters where the leaves of the tree form the base mesh, and the root of the tree forms a simplified approximation of the base mesh.
 
-Now at runtime, we don't just have to render one level (LOD) of the tree. We can choose specific clusters from different levels of the tree so that if you're close to one part of the mesh, it'll render many high resolution clusters. If you're far from a different part of the mesh, however, then that part will use a couple low resolution clusters that are cheaper to render. Unlike traditional LODs, which are all or nothing, part of the mesh can be low resolution, part of the mesh can be high resolution, and a third part can be somewhere in between, all at the time same time, all on a very granular level.
+Now at runtime, we don't just have to render one level (LOD) of the tree. We can choose specific clusters from different levels of the tree so that if you're close to one part of the mesh, it'll render many high resolution clusters. If you're far from a different part of the mesh, however, then that part will use a couple low resolution clusters that are cheaper to render. Unlike traditional LODs, which are all or nothing, part of the mesh can be low resolution, part of the mesh can be high resolution, and a third part can be somewhere in between - all at the time same time, all on a very granular level.
 
 Additionally, the transitions between LODs can be virtually imperceptible and extremely smooth, without extra rendering work. Traditional LODs typically have to hide transitions with crossfaded opacity between two levels.
 
@@ -75,7 +75,7 @@ I mentioned before that meshes have to be opaque, and can't deform or animate (f
 
 Now that the background is out of the way, lets talk about Bevy. For Bevy 0.14, I've written an initial implementation that largely copies the basic ideas of how Nanite works, without implementing every single optimization and technique. Currently, the feature is called meshlets (likely to change to virtual_geometry or something else in the future). In a minute, I'll get into the actual frame breakdown and code for meshlets, but first lets start with the user-facing API.
 
-Users wanting to use meshlets should compile with the `meshlet` cargo feature at runtime, and `meshlet_processor` cargo feature for pre-processing meshes (again, more on how that works later) into the special meshlet-specific format the meshlet renderer uses.
+Users wanting to use meshlets should compile with the `meshlet` cargo feature at runtime, and `meshlet_processor` cargo feature for preprocessing meshes (again, more on how that works later) into the special meshlet-specific format the meshlet renderer uses.
 
 Enabling the `meshlet` feature unlocks a new module: `bevy::pbr::experimental::meshlet`.
 
@@ -87,7 +87,7 @@ app.add_plugins(MeshletPlugin);
 
 Next, preprocess your `Mesh` into a `MeshletMesh`. Currently, this needs to be done manually via  `MeshletMesh::from_mesh()` (again, you need the `meshlet_processor` feature enabled). This step is _very_ slow, and should be done once ahead of time, and then saved to an asset file. Note that there are limitations on the types of meshes and materials supported, make sure to read the docs.
 
-I'm also in the [middle of working on](https://github.com/bevyengine/bevy/pull/13431) an asset processor system to automatically convert entire glTF scenes, but it's not quite ready yet.
+I'm in the [middle of working on](https://github.com/bevyengine/bevy/pull/13431) an asset processor system to automatically convert entire glTF scenes, but it's not quite ready yet. For now, you'll have to come up with your own asset processing and management system.
 
 Now, spawn your entities. In the same vein as `MeshMaterialBundle`, there's a `MeshletMeshMaterialBundle`, which uses a `MeshletMesh` instead of the typical `Mesh`.
 
@@ -100,7 +100,9 @@ commands.spawn(MaterialMeshletMeshBundle {
 });
 ```
 
-Lastly, a note on materials. Meshlet entities use the same `Material` trait as regular mesh entities. There are 3 new methods that meshlet entities use however: `meshlet_mesh_fragment_shader`, `meshlet_mesh_prepass_fragment_shader`, and `meshlet_mesh_deferred_fragment_shader`. Notice that there is no access to vertex shaders. Meshlet rendering uses a hardcoded vertex shader that cannot be changed.
+Lastly, a note on materials. Meshlet entities use the same `Material` trait as regular mesh entities. There are 3 new methods that meshlet entities use however: `meshlet_mesh_fragment_shader`, `meshlet_mesh_prepass_fragment_shader`, and `meshlet_mesh_deferred_fragment_shader`.
+
+Notice that there is no access to vertex shaders. Meshlet rendering uses a hardcoded vertex shader that cannot be changed.
 
 Fragment shaders for meshlets are mostly the same as fragment shaders for regular mesh entities. The key difference is that instead of this:
 
@@ -129,9 +131,9 @@ We're now going to start the portion of this blog post going into how everything
 
 The first step, before we can render anything, is to convert all meshes to meshlet meshes. I talked about the user-facing API earlier on, but in this section we'll dive into what `MeshletMesh::from_mesh()` is doing under the hood in `from_mesh.rs`.
 
-This section will be a bit dry, lacking commentary on why I did things, in favor of just describing the algorithm itself. The reason is that I don't have many unique insights into the conversion process. The steps taken are pretty much just copied from Nanite. If you're interested in understanding it more, definitely check out the original Nanite presentation.
+This section will be a bit dry, lacking commentary on why I did things, in favor of just describing the algorithm itself. The reason is that I don't have many unique insights into the conversion process. The steps taken are pretty much just copied from Nanite (except Nanite does it better). If you're interested in understanding this section in greater detail, definitely check out the original Nanite presentation.
 
-Feel free to skip ahead to the frame breakdown section.
+Feel free to skip ahead to the frame breakdown section if you are more interested in the runtime portion of the renderer.
 
 The high level steps for converting a mesh are as follows:
 1. Build LOD 0 meshlets
@@ -148,7 +150,7 @@ The high level steps for converting a mesh are as follows:
 
 We're starting with a generic triangle mesh, so the first step is to group its triangles into an initial set of meshlets. No simplification or modification of the mesh is involved - we're simply splitting up the original mesh into a set meshlets that would render exactly the same.
 
-The crate `meshopt-rs` provides Rust bindings to the excellent `meshoptimizer` library, which provides a nice `build_meshlets()` function for us.
+The crate `meshopt-rs` provides Rust bindings to the excellent `meshoptimizer` library, which provides a nice `build_meshlets()` function for us, which I've wrapped into `compute_meshlets()`.
 
 ```rust
 // Split the mesh into an initial list of meshlets (LOD 0)
@@ -162,13 +164,13 @@ We also need some bounding spheres for each meshlet. The culling bounding sphere
 
 The `self_lod` and `parent_lod` bounding spheres need a lot more explanation.
 
-As we simplify each group of meshlets into new meshlets, we will deform the mesh slightly. That deformity adds up over time, eventually giving a very visibly different mesh from the original. However, when viewing the very simplified mesh from far away, due to perspective the difference will be much less noticable. While we would want to view the original (or close to the original) mesh close-up, at longer distances we can get away with rendering a much simpler version of the mesh.
+As we simplify each group of meshlets into new meshlets, we will deform the mesh slightly. That deformity adds up over time, eventually giving a very visibly different mesh from the original. However, when viewing the very simplified mesh from far away, due to perspective the difference will be much less noticable. While we would want to view the original (or close to the original) mesh close-up, at longer distances we can get away with rendering a much simpler version of the mesh without noticeable differences.
 
 So, how to choose the right LOD level, or in our case, the right LOD tree cut? The LOD cut will be based on the simplification error of each meshlet along the cut, with the goal being to select a cut that is impercetibly different from the original mesh at the distance we're viewing the mesh at.
 
-For reasons I'll get into later, we're going to treat the error as a bounding sphere around the meshlet, with the radius being the error. We're also going to want two of these: one for the current meshlet itself, and one for the less-simplified version of the meshlet that we simplified into the current meshlet (the current meshlet's parent in the LOD tree).
+For reasons I'll get into later, we're going to treat the error as a bounding sphere around the meshlet, with the radius being the error. We're also going to want two of these: one for the current meshlet itself, and one for the less-simplified group of meshlets that we simplified into the current meshlet (the current meshlet's parents in the LOD tree).
 
-LOD 0 meshlets, being the original representation of the mesh, have no error (0.0). They also have no parent meshlet, which we will represent with an infinite amount of error (f32::MAX), again for reasons I will get into later.
+LOD 0 meshlets, being the original representation of the mesh, have no error (0.0). They also have no set of parent meshlets, which we will represent with an infinite amount of error (f32::MAX), again for reasons I will get into later.
 
 ```rust
 let mut bounding_spheres = meshlets
@@ -243,7 +245,7 @@ for (meshlet_id1, meshlet_id2) in simplification_queue.tuple_combinations() {
 
 Now that we know which meshlets are connected, the next step is to group them together. We're going to aim for 4 meshlets per group, although there's no way of guaranteeing that.
 
-How should we determinewhich meshlets go in which group?
+How should we determine which meshlets go in which group?
 
 You can view the connected meshlet sets as a graph. Each meshlet is a node, and bidirectional edges connect one meshlet to another in the graph if we determined that they were connected earlier. The weight of each edge is the amount of shared edges between the two meshlet nodes.
 
@@ -361,8 +363,6 @@ The frame can be broken down into the following passes:
 9. Material shading
 
 There's a lot to cover, so I'm going to try and keep it fairly brief in each section. The high level concepts of all of these passes (besides the first pass) are copied from Nanite, so check out their presentation for further details. I'll be trying to focus more on the lower level code and reasons why I implemented things the way that I did. My first attempt at a lot of these passes had bugs, and was way slower. The details and data flow is what takes the concept from a neat tech demo, to an actually usable and scalable renderer.
-
-I'll also be skipping a lot of the CPU-side data management, as it's fairly boring and subject to a future rewrite.
 
 ## Terminology
 
@@ -762,7 +762,22 @@ This pass is identical to the first raster pass, just with the new set of cluste
 
 ## Copy Material Depth
 
-TODO
+For reasons we'll get to in the material shading pass, we need to copy the R16Uint material depth texture we rasterized earlier to an actual Depth16Unorm texture. A simple fullscreen triangle pass with a sample and a divide perform the copy.
+
+I mentioned earlier that ideally we wouldn't write out the material depth during the rasterization pass. It would be better to instead sample the visibility buffer, lookup the material ID from the cluster ID, and then write it out to the depth texture directly. I intend to switch to this method in the near future.
+
+```rust
+#import bevy_core_pipeline::fullscreen_vertex_shader::FullscreenVertexOutput
+
+@group(0) @binding(0) var material_depth: texture_2d<u32>;
+
+/// This pass copies the R16Uint material depth texture to an actual Depth16Unorm depth texture.
+
+@fragment
+fn copy_material_depth(in: FullscreenVertexOutput) -> @builtin(frag_depth) f32 {
+    return f32(textureLoad(material_depth, vec2<i32>(in.position.xy), 0).r) / 65535.0;
+}
+```
 
 ## Downsample Depth (Again)
 
@@ -770,14 +785,96 @@ For next frame's first culling pass, we're going to need the previous frame's de
 
 ## Material Shading
 
-TODO
+At this point we have the visibility buffer texture containing packed cluster and triangle IDs per pixel, and the material depth texture containing the material ID as a floating point depth value.
+
+Now, it's time to apply materials to the frame in a set of "material shading" draws. Note that we're not necessarily rendering the a lit and shaded scene. Bevy's meshlet feature works with all the existing rendering modes (forward, forward + prepass, and deferred). For instance, we could be rendering a GBuffer here, or a normal and motion vector prepass.
+
+### Vertex Shader
+
+For each material, we will perform one draw call of a fullscreen triangle.
+
+```rust
+// 1 fullscreen triangle draw per material
+for (material_id, material_pipeline_id, material_bind_group) in meshlet_view_materials.iter() {
+    if meshlet_gpu_scene.material_present_in_scene(material_id) {
+        if let Some(material_pipeline) = pipeline_cache.get_render_pipeline(*material_pipeline_id) {
+            let x = *material_id * 3;
+            render_pass.set_render_pipeline(material_pipeline);
+            render_pass.set_bind_group(2, material_bind_group, &[]);
+            render_pass.draw(x..(x + 3), 0..1);
+        }
+    }
+}
+```
+
+Note that we're not drawing the typical 0..3 vertices for a fullscreen triangle. Instead, we're drawing 0..3 for the first material, 3..6 for the second material, 6..9 for the third material, etc.
+
+In the vertex shader (which is hardcoded for all materials), we can derive the material_id of the draw from the vertex index, and then use that to set the depth of the triangle.
+
+```rust
+@vertex
+fn vertex(@builtin(vertex_index) vertex_input: u32) -> @builtin(position) vec4<f32> {
+    let vertex_index = vertex_input % 3u;
+    let material_id = vertex_input / 3u;
+
+    let material_depth = f32(material_id) / 65535.0;
+    let uv = vec2<f32>(vec2(vertex_index >> 1u, vertex_index & 1u)) * 2.0;
+
+    return vec4(uv_to_ndc(uv), material_depth, 1.0);
+}
+```
+
+The material's pipeline depth comparison function will be set to equals, so we only shade fragments for which the depth of the triangle is equal to the depth in the depth buffer. The depth buffer used here is the material depth texture we rendered earlier. Thus, each fullscreen triangle draw per material will only shade the fragments for that material. This is fairly inefficent if you have many materials. Each fullscreen triangle will cost a large amount of depth comparisons. In the future I'd like to switch to compute-shader based material shading.
+
+### Fragment Shader
+
+Now that we've determined what fragments to shade, it's time to apply the material's shader code to that fragments. Each fragment can sample the visibility buffer, recovering the cluster ID and triangle ID. Like before, this provides us access to the rest of the instance and mesh data.
+
+The remaining tricky bit is that since we're not actually rendering a mesh in the draw call, and are using a single triangle just to cover some fragments to shade, we don't have automatic interpolation of vertex attributes within a mesh triangle or screen-space derivatives for mipmapped texture sampling.
+
+To compute this data ourselves, each fragment can load all 3 vertices of its mesh triangle, and compute the barycentrics and derivatives manually. Big thanks to The Forge for this code.
+
+In Bevy, all the visibility buffer loading, data loading and unpacking, vertex interpolation calculations, etc is wrapped up in the `resolve_vertex_output()` function for ease of use.
+
+```rust
+/// Load the visibility buffer texture and resolve it into a VertexOutput.
+fn resolve_vertex_output(frag_coord: vec4<f32>) -> VertexOutput {
+    let packed_ids = textureLoad(meshlet_visibility_buffer, vec2<i32>(frag_coord.xy), 0).r;
+    let cluster_id = packed_ids >> 6u;
+    let meshlet_id = meshlet_cluster_meshlet_ids[cluster_id];
+    let meshlet = meshlets[meshlet_id];
+    let triangle_id = extractBits(packed_ids, 0u, 6u);
+
+    // ...
+
+    // https://github.com/ConfettiFX/The-Forge/blob/2d453f376ef278f66f97cbaf36c0d12e4361e275/Examples_3/Visibility_Buffer/src/Shaders/FSL/visibilityBuffer_shade.frag.fsl#L83-L139
+    let partial_derivatives = compute_partial_derivatives(
+        array(clip_position_1, clip_position_2, clip_position_3),
+        frag_coord_ndc,
+        view.viewport.zw,
+    );
+
+    // ...
+
+    let world_position = mat3x4(world_position_1, world_position_2, world_position_3) * partial_derivatives.barycentrics;
+    let uv = mat3x2(vertex_1.uv, vertex_2.uv, vertex_3.uv) * partial_derivatives.barycentrics;
+
+    let ddx_uv = mat3x2(vertex_1.uv, vertex_2.uv, vertex_3.uv) * partial_derivatives.ddx;
+    let ddy_uv = mat3x2(vertex_1.uv, vertex_2.uv, vertex_3.uv) * partial_derivatives.ddy;
+
+    // ...
+}
 
 # Future Work
 
-TODO
-* Conversion improvements (vertex welding, distance heuristic, attribute-aware simplification, performance improvements)
-* Per-instance LOD process / persistent culling to eliminate the brute-force dispatch over every possible cluster, and the fill clusters step
-* Implicit tangents and octahedral-encoded normals
-* Software raster and mesh shaders
-* Compute-based material shading with VRS (link to Nanite's new presentation)
-* Streaming
+And with that we're done with the frame breakdown. I've covered all the major steps and shaders of how virtual geometry will work in Bevy 0.14. I did skip some of the CPU-side data management, but it's fairly boring and subject to a rewrite soon anyways.
+
+However, Bevy 0.14 is just the start. There's tons of improvements I'm hoping to implement in a future version, such as:
+* Major improvements to the rasterization passes via software rasterization, and trying out my multi draw with bins idea for hardware raster
+* Copying Nanite's idea of culling and LOD selection via persistent threads. This should let us eliminate the separate fill_cluster_buffers step, speedup culling, and remove the need for large 3d dispatches over all clusters in the scene
+* Compressing asset vertex data by using screen-derived tangents and octahedral-encoded normals, and possibly position/UV quantization
+* Performance, quality, reliability, and workflow improvements for the mesh to meshlet mesh asset preprocessing
+* Compute-based material shading passes instead of the fullscreen triangle method, and possibly software variable rate shading, inspired by Unreal Engine 5.4's [GPU-driven Nanite materials](https://www.unrealengine.com/en-US/blog/take-a-deep-dive-into-nanite-gpu-driven-materials) and [this set of blog posts](http://filmicworlds.com/blog/visibility-buffer-rendering-with-material-graphs) from John Hable
+* Streaming in and out asset data instead of keeping it entirely in memory
+
+With any luck, and a lot of hard work, I'll be back for another blog post about all these changes in the future. Until then, enjoy Bevy 0.14!
