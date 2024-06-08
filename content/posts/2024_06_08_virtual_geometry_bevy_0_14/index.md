@@ -164,7 +164,7 @@ The `self_lod` and `parent_lod` bounding spheres need a lot more explanation.
 
 As we simplify each group of meshlets into new meshlets, we will deform the mesh slightly. That deformity adds up over time, eventually giving a very visibly different mesh from the original. However, when viewing the very simplified mesh from far away, due to perspective the difference will be much less noticable. While we would want to view the original (or close to the original) mesh close-up, at longer distances we can get away with rendering a much simpler version of the mesh without noticeable differences.
 
-So, how to choose the right LOD level, or in our case, the right LOD tree cut? The LOD cut will be based on the simplification error of each meshlet along the cut, with the goal being to select a cut that is impercetibly different from the original mesh at the distance we're viewing the mesh at.
+So, how to choose the right LOD level, or in our case, the right LOD tree cut? The LOD cut will be based on the simplification error of each meshlet along the cut, with the goal being to select a cut that is imperceptibly different from the original mesh at the distance we're viewing the mesh at.
 
 For reasons I'll get into later, we're going to treat the error as a bounding sphere around the meshlet, with the radius being the error. We're also going to want two of these: one for the current meshlet itself, and one for the less-simplified group of meshlets that we simplified into the current meshlet (the current meshlet's parents in the LOD tree).
 
@@ -193,7 +193,7 @@ let mut bounding_spheres = meshlets
 
 Now that we have our initial set of meshlets, we can start simplifying.
 
-The first step is to find the set of triangle edges that make up each meshlet. This can be done with a simple loop over triangles, building a hashset of edges where each edge is ordered such that the smaller numbered vertex comes before the larger number vertex. This ensures that we don't accidently add both (v1, v2) and (v2, v1), which conceptually are the same edge. Each triangle has 3 vertices and 3 edges.
+The first step is to find the set of triangle edges that make up each meshlet. This can be done with a simple loop over triangles, building a hashset of edges where each edge is ordered such that the smaller numbered vertex comes before the larger number vertex. This ensures that we don't accidentally add both (v1, v2) and (v2, v1), which conceptually are the same edge. Each triangle has 3 vertices and 3 edges.
 
 ```rust
 let mut meshlet_triangle_edges = HashMap::new();
@@ -756,6 +756,7 @@ The second culling pass is where we decide whether to render the rest of the clu
 This culling pass is much the same as the first, with a few key differences:
 * We skip frustum and LOD culling, as we did it the first time
 * We operate only on the clusters that we explicitly marked as second pass candidates during the first culling pass
+  * We're still doing a large 3d dispatch over all clusters in the scene, but we can early-out for the clusters that are not second pass candidates
 * We use the current transforms, instead of last frame's
 * We occlusion cull using the depth pyramid generated from the previous pass
 
