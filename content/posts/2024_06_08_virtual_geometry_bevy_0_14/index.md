@@ -7,17 +7,17 @@ tags = ["bevy", "virtual geometry"]
 +++
 
 # Introduction
-Bevy 0.14 releases soon, and with it, the release of an experimental virtual geometry feature that I've been working on for several months.
+The 0.14 release of the open source [Bevy](https://bevyengine.org) game engine is coming up, and with it, the release of an experimental virtual geometry feature that I've been working on for several months.
 
 In this blog post, I'm going to give a technical deep dive into Bevy's new "meshlet" feature, what improvements it bring, techniques I tried that did or did not work out, and what I'm looking to improve on in the future. There's a lot that I've learned (and a _lot_ of code I've written and rewritten multiple times), and I'd like to share what I learned in the hope that it will help others.
 
 ![Example scene for the meshlet renderer](showcase.png)
 
-This post is going to be _very_ long, so I suggest reading over it (and the Nanite slides) a couple of times to get a general overview of the pieces involved, before spending time analyzing individual steps. At the time of this writing, my blog theme dosen't have a table of contents sidebar that follows you as you scroll the page. I apologize for that. If you want to go back and reference previous sections as you read this post, I suggest using multiple browser tabs.
+This post is going to be _very_ long, so I suggest reading over it (and the Nanite slides) a couple of times to get a general overview of the pieces involved, before spending any time analyzing individual steps. At the time of this writing, my blog theme dosen't have a table of contents sidebar that follows you as you scroll the page. I apologize for that. If you want to go back and reference previous sections as you read this post, I suggest using multiple browser tabs.
 
-I'd also like to take a moment to thank [LVSTRI](https://github.com/LVSTRI) and [jglrxavpok](https://jglrxavpok.github.io) for their sharing experiences with virtual geometry, [atlv24](https://github.com/atlv24) for their help in several areas, especially for their work adding some missing features I needed to wgpu/naga, other Bevy developers for testing and reviewing my PRs, Unreal Engine (Brian Karis, Rune Stubbe, Graham Wihlidal) for their _excellent_ and highly detailed [SIGGRAPH presentation](https://advances.realtimerendering.com/s2021/Karis_Nanite_SIGGRAPH_Advances_2021_final.pdf), and many more people than I can name who provided advice on the project.
+I'd also like to take a moment to thank [LVSTRI](https://github.com/LVSTRI) and [jglrxavpok](https://jglrxavpok.github.io) for sharing their experiences with virtual geometry, [atlv24](https://github.com/atlv24) for their help in several areas, especially for their work adding some missing features I needed to wgpu/naga, other Bevy developers for testing and reviewing my PRs, Unreal Engine (Brian Karis, Rune Stubbe, Graham Wihlidal) for their _excellent_ and highly detailed [SIGGRAPH presentation](https://advances.realtimerendering.com/s2021/Karis_Nanite_SIGGRAPH_Advances_2021_final.pdf), and many more people than I can name who provided advice on this project.
 
-Code for this feature can be found [on the Bevy github](https://github.com/bevyengine/bevy/tree/175e1462289c217ec57a3d3b9894a7c513890fa4/crates/bevy_pbr/src/meshlet).
+Code for this feature can be found [on github](https://github.com/JMS55/bevy/tree/ca2c8e63b9562f88c8cd7e1d88a17a4eea20aaf4/crates/bevy_pbr/src/meshlet).
 
 If you're already familiar with Nanite, feel free to skip the next few sections of background info until you get to the Bevy-specific parts.
 
@@ -59,7 +59,7 @@ There's also another issue I've saved for last. Despite all the culling and batc
 
 With the introduction of Unreal Engine 5 in 2021 came the introduction of a new technique called [Nanite](https://dev.epicgames.com/documentation/en-us/unreal-engine/nanite-virtualized-geometry-in-unreal-engine). Nanite is a system where you can preprocess your non-deforming opaque meshes, and at runtime be able to very efficiently render them, largely solving the above problems with draw counts, memory limits, high-poly mesh rasterization, and the deficiencies of traditional LODs.
 
-Nanite works by first splitting your base mesh into a series of meshlets - small, independent clusters of triangles. Nanite then takes those clusters, simplifies them to use less triangles, and then groups the clusters themselves into a set of _new_ clusters. By repeating this process, you get a tree of clusters where the leaves of the tree form the base mesh, and the root of the tree forms a simplified approximation of the base mesh.
+Nanite works by first splitting your base mesh into a series of meshlets - small, independent clusters of triangles. Nanite then takes those clusters, groups clusters together, and simplifies the groups into a smaller set of _new_ clusters. By repeating this process, you get a tree of clusters where the leaves of the tree form the base mesh, and the root of the tree forms a simplified approximation of the base mesh.
 
 Now at runtime, we don't just have to render one level (LOD) of the tree. We can choose specific clusters from different levels of the tree so that if you're close to one part of the mesh, it'll render many high resolution clusters. If you're far from a different part of the mesh, however, then that part will use a couple low resolution clusters that are cheaper to render. Unlike traditional LODs, which are all or nothing, part of the mesh can be low resolution, part of the mesh can be high resolution, and a third part can be somewhere in between - all at the time same time, all on a very granular level.
 
@@ -136,11 +136,11 @@ Feel free to skip ahead to the frame breakdown section if you are more intereste
 The high level steps for converting a mesh are as follows:
 1. Build LOD 0 meshlets
 2. For each meshlet, find the set of all edges making up the triangles within the meshlet
-3. For each meshlet, find the set of connected meshlets (share an edge)
+3. For each meshlet, find the set of connected meshlets (sharing an edge)
 4. Divide meshlets into groups of roughly 4
 5. For each group of meshlets, build a new list of triangles approximating the original group
 6. For each simplified group, break them apart into new meshlets
-7. Repeat steps 3-7 using the set of new meshlets, unless we ran out of meshlets to simplify
+7. Repeat steps 3-7 using the set of new meshlets, until we run out of meshlets to simplify
 
 ![Nanite LOD build steps](build_steps.png)
 
@@ -148,7 +148,7 @@ The high level steps for converting a mesh are as follows:
 
 We're starting with a generic triangle mesh, so the first step is to group its triangles into an initial set of meshlets. No simplification or modification of the mesh is involved - we're simply splitting up the original mesh into a set meshlets that would render exactly the same.
 
-The crate `meshopt-rs` provides Rust bindings to the excellent `meshoptimizer` library, which provides a nice `build_meshlets()` function for us, which I've wrapped into `compute_meshlets()`.
+The crate `meshopt-rs` provides Rust bindings to the excellent `meshoptimizer` library, which provides a nice `build_meshlets()` function for us that I've wrapped into `compute_meshlets()`.
 
 ```rust
 // Split the mesh into an initial list of meshlets (LOD 0)
@@ -166,7 +166,7 @@ As we simplify each group of meshlets into new meshlets, we will deform the mesh
 
 So, how to choose the right LOD level, or in our case, the right LOD tree cut? The LOD cut will be based on the simplification error of each meshlet along the cut, with the goal being to select a cut that is imperceptibly different from the original mesh at the distance we're viewing the mesh at.
 
-For reasons I'll get into later, we're going to treat the error as a bounding sphere around the meshlet, with the radius being the error. We're also going to want two of these: one for the current meshlet itself, and one for the less-simplified group of meshlets that we simplified into the current meshlet (the current meshlet's parents in the LOD tree).
+For reasons I'll get into later during the runtime section, we're going to treat the error as a bounding sphere around the meshlet, with the radius being the error. We're also going to want two of these: one for the current meshlet itself, and one for the less-simplified group of meshlets that we simplified into the current meshlet (the current meshlet's parents in the LOD tree).
 
 LOD 0 meshlets, being the original representation of the mesh, have no error (0.0). They also have no set of parent meshlets, which we will represent with an infinite amount of error (f32::MAX), again for reasons I will get into later.
 
@@ -255,17 +255,17 @@ The code to format this data for metis is a bit complicated, but in the end we h
 
 Now for an important step, and the most tricky.
 
-We take each group, and merge the triangles of the underlying meshlets together into one large list of triangles, forming a new mesh.
+We take each group, and merge the triangle lists of the underlying meshlets together into one large list of triangles, forming a new mesh.
 
 Now, we can simplify this new mesh into a lower-resolution (faster to render) version. Meshopt again provides a helpful `simplify()` function for us. Finally, less triangles to render!
 
 In addition to the new mesh, we get an "error" value, describing how much the mesh deformed by when simplifying.
 
-The quadratic error metric (QEM) returned from simplifying is a somewhat meaningless value, but we can use `simplify_scale()` to get an object-space value. This value is _still_ fairly meaningless, but we can treat it as the maximum amount of object-space distance a vertex displaced by during simplification.
+The quadratic error metric (QEM) returned from simplifying is a somewhat meaningless value, but we can use `simplify_scale()` to get an object-space value. This value is _still_ fairly meaningless, but we can treat it as the maximum amount of object-space distance a vertex was displaced by during simplification.
 
 The error represents displacement from the meshlets we simplified, but we want the displacement from the original (LOD 0) meshlets. We can add the max error of the meshlets that went into building the current meshlet group (child nodes of the parent node that we're currently building in the LOD tree) to make the error relative to LOD 0.
 
-If this all feels handwavy to you, that's because it is. And this is vertex positions only; we haven't even considered UV error during simplification, or how the mesh's eventual material influences perceptual differences between LOD levels. Perceptual simplification is an unsolved problem in computer graphics, and for now Bevy only uses positions for simplification.
+If this all feels handwavy to you, that's because it is. And this is vertex positions only; we haven't even considered UV error during simplification, or how the mesh's eventual material influences perceptual differences between LOD levels. Perceptual simplification is very much an unsolved problem in computer graphics, and for now Bevy only uses positions for simplification.
 
 You'll have to take my word for it that using the error like this works. You'll see how it gets used to pick the LOD level during runtime in a later section. For now, we'll take the group error and build a bounding sphere out of it, and assign it as the parent LOD bounding sphere for the group's (parent node, higher LOD) underlying meshlets (child nodes, lower LOD).
 
@@ -304,7 +304,7 @@ This is in fact the same process as splitting the original mesh into meshlets.
 
 If everything went optimally, we should have gone from the original 4 meshlets per group, to 2 new meshlets per group with 50% less triangles overall.
 
-For each new meshlet, we'll calculate a bounding sphere for culling, assign the self_lod bounding sphere as that of the group,and the parent_lod bounding sphere again as uninitialized.
+For each new meshlet, we'll calculate a bounding sphere for culling, assign the self_lod bounding sphere as that of the group, and the parent_lod bounding sphere again as uninitialized.
 
 ```rust
 // Build new meshlets using the simplified group
@@ -333,13 +333,13 @@ bounding_spheres.extend(
 );
 ```
 
-We can repeat this whole process several times, ideally getting down to a single meshlet forming the root of the LOD tree. In practice, we can't currently get to that point for most meshes.
+We can repeat this whole process several times, ideally getting down to a single meshlet forming the root of the LOD tree. In practice, my current code can't get to that point for most meshes.
 
 # Frame Breakdown
 
 With the asset processing part out of the way, we can finally move onto the more interesting runtime code section.
 
-The frame capture we'll be looking at is this scene with 3092 Stanford Bunnies. Five of the bunnies are using unique PBR materials, while the rest use the same debug material that visualizes the clusters/triangles of the mesh. Each bunny is made of 144,042 triangles at LOD 0, with 4936 meshlets total in the LOD tree.
+The frame capture we'll be looking at is this scene with 3092 copies of the Stanford Bunny. Five of the bunnies are using unique PBR materials (they're hiding in the top middle), while the rest use the same debug material that visualizes the clusters/triangles of the mesh. Each bunny is made of 144,042 triangles at LOD 0, with 4936 meshlets total in the LOD tree.
 
 GPU timings were measured on a RTX 3080 locked to base clock speeds (so not as fast as you would actually get in practice), rendering at 2240x1260, averaged over 10 frames.
 
@@ -362,22 +362,22 @@ The frame can be broken down into the following passes:
 8. Material shading (timings omitted as this is a poor test for materials)
 9. Build depth pyramid for next frame (0.03ms)
 
-Total time is ~2.78ms +/- 0.33ms.
+Total GPU time is ~2.78ms +/- 0.33ms.
 
-There's a lot to cover, so I'm going to try and keep it fairly brief in each section. The high level concepts of all of these passes (besides the first pass) are copied from Nanite, so check out their presentation for further details. I'll be trying to focus more on the lower level code and reasons why I implemented things the way that I did. My first attempt at a lot of these passes had bugs, and was way slower. The details and data flow is what takes the concept from a neat tech demo, to an actually usable and scalable renderer.
+There's a lot to cover, so I'm going to try and keep it fairly brief in each section. The high level concepts of all of these passes (besides the first pass) are copied from Nanite, so check out their presentation for further details. I'll be trying to focus more on the lower level code and reasons why I implemented things the way I did. My first attempt at a lot of these passes had bugs, and was way slower. The details and data flow is what takes the concept from a neat tech demo, to an actually usable and scalable renderer.
 
 ## Terminology
 
 First, some terminology:
-* `asset buffers` - When a new MeshletMesh asset is loaded, we copy the buffers it's made of into large suballocated buffers. All the vertex data, meshlet data, bounding spheres, etc for multiple MeshletMesh assets are packed together into one large buffer per type.
+* `asset buffers` - When a new MeshletMesh asset is loaded, we copy the buffers it's made of into large suballocated buffers. All the vertex data, meshlet data, bounding spheres, etc for multiple MeshletMesh assets are packed together into one large buffer per data type.
 * `instance` - A single Bevy entity with a MeshletMesh and Material.
 * `instance uniform` - A transform matrix and mesh flags for an instance.
 * `material` - A combination of pipeline and bind group used for shading fragments.
 * `meshlet` - A single meshlet from within a MeshletMesh asset, pointing to data within the asset buffers (more or less).
-* `cluster` - A single render-able piece of an entity. Each cluster is associated with an instance and a meshlet.
+* `cluster` - A single renderable piece of an entity. Each cluster is associated with an instance and a meshlet.
     * All of our shaders will operate on clusters, and _not_ on meshlets. You can think of these like an instance of a meshlet for a specific entity, in the same way you can have an instance of a class in object-oriented programming languages.
     * Up to this point I've been using meshlet and cluster interchangeably. From now on, they have seperate, defined meanings.
-* `view` - A perspective or orthographic camera with an associated depth buffer and optional color output. The main camera is a view, and additional views are dynamically generated for rendering shadowmaps.
+* `view` - A perspective or orthographic camera with an associated depth buffer and optional color output. The main camera is a view, and additional views can be dynamically generated for e.g. rendering shadowmaps.
 * `id` - A u32 index into a buffer.
 
 ## Fill Cluster Buffers
@@ -390,7 +390,7 @@ While the cluster itself is implicit (each thread or workgroup of a shader will 
 
 I.e., we need an array of instance IDs and meshlet IDs such that we can do `let cluster_instance = instances[cluster_instance_ids[cluster_id]]` and `let cluster_meshlet = meshlets[cluster_meshlet_ids[cluster_id]]`.
 
-The naive method would be to simply write out these two buffers from the CPU and transfer them to the GPU. This how things initially worked, and it worked fine for my simple initial test scene with a single bunny, but I very quickly ran into performance problems when trying to scale up to render 3000 bunnies.
+The naive method would be to simply write out these two buffers from the CPU and transfer them to the GPU. This was how I implemented it initially, and it worked fine for my simple initial test scene with a single bunny, but I very quickly ran into performance problems when trying to scale up to rendering 3000 bunnies.
 
 Each ID is a 4-byte u32, and it's two IDs per cluster. That's 8 bytes per cluster.
 
@@ -402,17 +402,17 @@ Ignoring data copying costs and other overhead, and assuming max PCIe bandwidth,
 
 ---
 
-Instead of uploading per-cluster data, we're going to stick to uploading only per-instance data. Specifically, two buffers called `instance_meshlet_counts_prefix_sum` and `instance_meshlet_slice_starts`.
+Instead of uploading per-cluster data, we're going to stick to uploading only per-instance data. Specifically, two buffers called `instance_meshlet_counts_prefix_sum` and `instance_meshlet_slice_starts`. Each buffer will be an array of integers, with an entry per instance.
 
 The former will contain a prefix sum (calculated on the CPU while writing out the buffer) of how many meshlets each instance is made of. The latter will contain the index of where in the meshlet asset buffer each instance's list of meshlets begin.
 
-We're uploading only 8 bytes per _instance_, and not per _cluster_, which is much, much cheaper. Looking back at our scene, we're uploading 3092 * 8 bytes total = ~0.025 MBs total. This is a _huge_ improvement over the ~122.10 MBs from before.
+Now we're uploading only 8 bytes per _instance_, and not per _cluster_, which is much, much cheaper. Looking back at our scene, we're uploading 3092 * 8 bytes total = ~0.025 MBs total. This is a _huge_ improvement over the ~122.10 MBs from before.
 
-Now that the GPU has this data, we can have the GPU write out the `cluster_instance_ids` and `cluster_meshlet_ids` buffers from a compute shader. Max VRAM<->VRAM bandwidth on my RTX 3080 is a whopping 760.3 GB/s; ~47.5x faster than the 16 GB/s of bandwidth we had over PCIe.
+Once the GPU has this data, we can have the GPU write out the `cluster_instance_ids` and `cluster_meshlet_ids` buffers from a compute shader. Max VRAM bandwidth on my RTX 3080 is a whopping 760.3 GB/s; ~47.5x faster than the 16 GB/s of bandwidth we had over PCIe.
 
 Each thread of the compute shader will handle one cluster, and do a binary search over the prefix sum array to find to what instance it belongs to.
 
-Binary search might seem surprising - it's multiple dependent divergent memory accesses within a thread. However, it's very coherent _across_ threads within the subgroup, and scales extremely well (O log n) with the number of instances in the scene. In practice, while it could be improved, the performance of this pass has not been a bottleneck.
+Binary search might seem surprising - it's multiple dependent divergent memory accesses within a thread, and one of the biggest performance metrics for GPU code is cache efficiency. However, it's very coherent _across_ threads within the subgroup, and scales extremely well (O log n) with the number of instances in the scene. In practice, while it could be improved, the performance of this pass has not been a bottleneck.
 
 Now that we know what instance the cluster belongs to, it's trivial to calculate the meshlet index of the cluster within the instance's meshlet mesh asset. Adding that to the instance's meshlet_slice_start using the other buffer we uploaded gives us the global meshlet index within the overall meshlet asset buffer. The thread can then write out the two calculated IDs for the cluster.
 
@@ -465,7 +465,7 @@ Two pass occlusion culling is the method that we're going to use to reduce overd
 
 In the example with the wall with the rocks and trees behind it, we could see that last frame the wall clusters contributed pixels to the final image, but none of the rock or tree clusters did. Therefore in the first pass, we would draw only the wall, and then build a depth pyramid from the resulting depth. In the second pass, we would test the remaining clusters (all the trees and rocks) against the depth pyramid, and see that they would still be occluded by the wall, and therefore we can skip drawing them. If there were some new rocks that came into view as we peeked around the corner, they'd be drawn here. The second pass functions as a cleanup pass, for rendering the objects that we missed in the first pass.
 
-Done correctly, two pass occlusion culling reduces the average amount of clusters we draw in a frame, saving rendering time without any visible artifacts.
+Done correctly, two pass occlusion culling reduces the amount of clusters we draw in an average frame, saving rendering time without any visible artifacts.
 
 ### Initial Cluster Processing
 
@@ -494,11 +494,11 @@ The instance ID can be found via indexing into the per-cluster data buffer that 
 
 ```rust
 // Check for instance culling
-    let instance_id = meshlet_cluster_instance_ids[cluster_id];
-    let bit_offset = instance_id % 32u;
-    let packed_visibility = meshlet_view_instance_visibility[instance_id / 32u];
-    let should_cull_instance = bool(extractBits(packed_visibility, bit_offset, 1u));
-    if should_cull_instance { return; }
+let instance_id = meshlet_cluster_instance_ids[cluster_id];
+let bit_offset = instance_id % 32u;
+let packed_visibility = meshlet_view_instance_visibility[instance_id / 32u];
+let should_cull_instance = bool(extractBits(packed_visibility, bit_offset, 1u));
+if should_cull_instance { return; }
 ```
 
 Assuming the cluster's instance was not culled, we can now start fetching the rest of the cluster's data for culling. The instance ID we found also gives us access to the instance uniform, and we can fetch the meshlet ID the same way we did the instance ID. With these two indices, we can also fetch the culling bounding sphere for the cluster's meshlet, and convert it from local to world-space.
@@ -551,7 +551,7 @@ Knowing if the cluster has imperceptible error is not sufficent by itself. Say y
 
 Given multiple sets of imperceptibly different meshlets, the best set to select is the one made of the fewest triangles (most simplified), which is the highest LOD.
 
-Given that we're processing each cluster in parallel, we can't communicate between them to choose the correct LOD cut. Instead, we can use a neat trick. We can design a procedure where each cluster evaluates some data, and decides independently whether it's at the correct LOD.
+Since we're processing each cluster in parallel, we can't communicate between them to choose the correct LOD cut. Instead, we can use a neat trick. We can design a procedure where each cluster evaluates some data, and decides independently whether it's at the correct LOD, in a way that's consistent across all the clusters.
 
 The Nanite slides go into the theory more, but it boils down to checking if error is imperceptible for the current cluster, _and_ that its _parent's_ error is _not_ imperceptible. I.e. this is the most simple cluster we can choose with imperceptible error, and going up to it's even more simple parent would cause visible error.
 
@@ -582,7 +582,7 @@ Our goal in the first pass is to render only clusters that were visible last fra
 
 Instead of explicitly storing whether a cluster is visible, we're instead going to occlusion cull the clusters against the depth pyramid from the _previous_ frame. We can take the culling bounding sphere of the cluster, project it to view-space using the previous frame's set of transforms, and then project it to a screen-space axis-aligned bounding box (AABB). We can then compare the view-space depth of the bounding sphere's extents with every pixel of the depth buffer that the AABB we calculated covers. If all depth pixels show that there is geometry in front of the bounding sphere, then the mesh was not visible last frame, and therefore should not be rendered in the first occlusion culling pass.
 
-Of course sampling every pixel an AABB covers would be extremely expensive, and cache inefficient. Instead we'll use a depth _pyramid_, which is a mipmapped version of the depth buffer. Each pixel in MIP 1 corresponds to the min of 4 pixels from the MIP 0, each pixel in MIP 2 corresponds to the min of 4 pixels from MIP 1, etc down to a 1x1 layer. Now we only have to sample 4 pixels for each AABB, choosing the mip level that best fits the AABB onto a 2x2 quad. Don't worry about how we generate the depth pyramid, we'll talk about that more later.
+Of course sampling every pixel an AABB covers would be extremely expensive, and cache inefficient. Instead we'll use a depth _pyramid_, which is a mipmapped version of the depth buffer. Each pixel in MIP 1 corresponds to the min of 4 pixels from MIP 0, each pixel in MIP 2 corresponds to the min of 4 pixels from MIP 1, etc down to a 1x1 layer. Now we only have to sample 4 pixels for each AABB, choosing the mip level that best fits the AABB onto a 2x2 quad. Don't worry about how we generate the depth pyramid for now, we'll talk about that more later.
 
 If any of that was confusing, read up on occlusion culling and depth pyramids. The important takeaway is that we're using the previous frame's depth pyramid in the first occlusion culling pass to find which clusters would have been visible last frame.
 
@@ -600,7 +600,7 @@ let depth_pyramid_size_mip_0 = vec2<f32>(textureDimensions(depth_pyramid, 0)) * 
 let width = (aabb.z - aabb.x) * depth_pyramid_size_mip_0.x;
 let height = (aabb.w - aabb.y) * depth_pyramid_size_mip_0.y;
 // Note: I've seen people use floor instead of ceil here, but it seems to result in culling bugs.
-//       The max(0, x) is also important.
+//       The max(0, x) is also important to prevent out of bounds accesses.
 let depth_level = max(0, u32(ceil(log2(max(width, height)))));
 let depth_pyramid_size = vec2<f32>(textureDimensions(depth_pyramid, depth_level));
 let aabb_top_left = vec2<u32>(aabb.xy * depth_pyramid_size);
@@ -628,7 +628,7 @@ if view.clip_from_view[3][3] == 1.0 {
 
 ### Result Writeout
 
-We're finally at the end of the first occlusion culling pass/dispatch. As a reminder, everything from after the fill cluster buffers step until the end of this section is all one shader. I warned you it would be long!
+We're finally at the last step of the first occlusion culling pass/dispatch. As a reminder, everything from after the fill cluster buffers step until the end of this section has all been one shader. I warned you it would be long!
 
 The last step for this pass is to write out the results of what clusters should render. This pass is just a compute shader - it dosen't actually render anything. We're just going to fill out the arguments for a single indirect draw command (more on this in the next pass).
 
@@ -650,7 +650,7 @@ We can do an atomicAdd on the DrawIndirectArgs::vertex_count with the meshlet's 
 1. Adds more vertex invocations to the indirect draw for this cluster's triangles
 2. Reserves space in a large buffer for all of this cluster's triangles to write out a per-triangle number
 
-With the draw_triangle_buffer space reserved, we can then fill it with an encoded integer: 26 bits for the cluster ID, and 6 bits for the triangle ID within the cluster's meshlet. 6 bits gives us 2^6 = 64 possible values, which is perfect as when we were building meshlets during asset preprocessing, we limited each meshlet to max 64 vertices and 64 triangles.
+With the draw_triangle_buffer space reserved, we can then fill it with an encoded u32 integer: 26 bits for the cluster ID, and 6 bits for the triangle ID within the cluster's meshlet. 6 bits gives us 2^6 = 64 possible values, which is perfect as when we were building meshlets during asset preprocessing, we limited each meshlet to max 64 vertices and 64 triangles.
 
 During vertex shading in the next pass, each vertex invocation will be able to use this buffer to know what triangle and cluster it belongs to.
 
@@ -680,7 +680,7 @@ We're going to render to a few different render targets:
 
 The depth buffer is straightforward. The visibility buffer is a R32Uint texture storing the cluster ID + triangle ID packed together in the same way as during the culling pass. Material depth is a R16Uint texture storing the material ID. The visibility buffer and material depth textures will be used in a later pass for shading.
 
-Note that it would be better to skip writing material depth here, and write it out as part of the later copy material depth pass. This pass is going to change in the near future when I add software rasterization however (more on this soon), so for now I've left it as-is.
+Note that it would be better to skip writing material depth here, and write it out as part of the later copy material depth pass. This pass is going to change in the near future when I add software rasterization however (more on this in a second), so for now I've left it as-is.
 
 I won't show the entire shader, but getting the triangle data to render for each vertex is fairly straightforward. The vertex invocation index can be used to index into the draw_triangle_buffer that we wrote out during the culling pass, giving us a packed cluster ID and triangle ID. The vertex invocation index % 3 gives us which vertex within the triangle this is, and then we can lookup the cluster's meshlet and instance data as normal. Vertex data can be obtained by following the tree of indices using the index ID and meshlet info.
 
@@ -729,9 +729,9 @@ Mesh shaders are sadly not supported by wgpu, so that's out. They would be the b
 
 Single draw indexed indirect was what I originally used. It's about 10-20% faster (if I remember correctly, it's been a while) than the non-indexed variant I use now. However, that means we would need to allocate an index buffer for our worst case usage at 12 bytes/triangle. That's extremely expensive for the amount of geoemetry we want to deal with, and you'd quickly run into buffer size limits (~2gb on most platforms). You could dynamically allocate a new buffer size based on amount of rendered triangles after culling with some CPU readback and some heuristics, but that's more complicated and still very memory hungry. Single draw indirect with the 4 bytes/triangle draw_triangle_buffer that I ended up using is still expensive, but good enough to scrape by for now.
 
-Single draw indirect with a buffer of cluster IDs is also an option. Each meshlet has max 64 triangles, so we could spawn cluster_count * 64 * 3 vertex invocations. Vertex invocation index / (64 * 3) would give you an index into the cluster ID buffer, and triangle ID is easy to recover via some simple arithmetic. At 4 bytes/cluster, this option is _much_ cheaper in memory than any of the previous methods. The problem is how to handle excess vertex invocations. Not all meshlets will have a full 64 triangles. It's easy enough to have each vertex invocation check the meshlet's triangle count, and if it's not needed, write out a NaN position, causing the GPU to ignore the triangle. The problem is that this performed very poorly when I tested it. All those dummy NaN triangles took up valuable time that the GPU could be spent processing other triangles. Maybe performance would be better if I were able to get meshlets much closer to the max triangle count, or halving the max triangle count to 32 per meshlet to spawn less dummy triangles, but I ended up not perusing this method.
+Single draw indirect with a buffer of cluster IDs is also an option. Each meshlet has max 64 triangles, so we could spawn cluster_count * 64 * 3 vertex invocations. Vertex invocation index / (64 * 3) would give you an index into the cluster ID buffer, and triangle ID is easy to recover via some simple arithmetic. At 4 bytes/cluster, this option is _much_ cheaper in memory than any of the previous methods. The problem is how to handle excess vertex invocations. Not all meshlets will have a full 64 triangles. It's easy enough to have each vertex invocation check the meshlet's triangle count, and if it's not needed, write out a NaN position, causing the GPU to ignore the triangle. The problem is that this performed very poorly when I tested it. All those dummy NaN triangles took up valuable fixed-function time that the GPU could have spent processing other triangles. Maybe performance would be better if I were able to get meshlets much closer to the max triangle count, or halving the max triangle count to 32 per meshlet to spawn less dummy triangles, but I ended up not pursuing this method.
 
-Multi draw is also an option. We could write out a buffer with 1 DrawIndirectArgs per cluster, giving 16 bytes/cluster. Each sub-draw would contain exactly the right amount of vertex invocations per cluster. Each vertex invocation would be able to recover their cluster ID via the instance_id builtin, as we would set DrawIndirectArgs::first_instance to the cluster ID. On the CPU, this would still be a single draw call. In practice, I found this still performed poorly. While we are no longer bottlenecked by the GPU having to process dummy triangles, now the GPU's command processor has to process all these sub-commands. At 1 sub-command per cluster, that's a _lot_ of commands.
+Multi draw is also an option. We could write out a buffer with 1 DrawIndirectArgs per cluster, giving 16 bytes/cluster. Each sub-draw would contain exactly the right amount of vertex invocations per cluster. Each vertex invocation would be able to recover their cluster ID via the instance_id builtin, as we would set DrawIndirectArgs::first_instance to the cluster ID. On the CPU, this would still be a single draw call. In practice, I found this still performed poorly. While we are no longer bottlenecked by the GPU having to process dummy triangles, now the GPU's command processor has to process all these sub-commands. At 1 sub-command per cluster, that's a _lot_ of commands. Like the fixed 64 vertex invocations per cluster path, we're again bottlenecked on something that isin't actual rasterization work.
 
 An additional idea I thought of while writing this section is to bin each cluster by its meshlet triangle count. All clusters whose meshlets have 10 triangles would go in one bin, 12 triangles in a second bin, 46 triangles in a third bin, etc, for 63 bins total (we would never have a meshlet with 0 triangles). We could then write out a DrawIndirectArgs and list of cluster IDs per bin, and do a single multi_draw_indirect() call on the CPU, similiar to the last section. I haven't tested it out, but this seems like a decent option in theory. I believe Nanite does something similiar in recent versions of Unreal Engine 5 in order to support different types of vertex shaders.
 
@@ -743,9 +743,9 @@ With the first of the two passes of two pass occlusion culling rendered, it's ti
 
 For generating the depth pyramid, I ported the FidelityFX Single Pass Downsampler (SPD) to Bevy. SPD lets us perform the downsampling very efficiently, entirely in a single compute dispatch. You could use multiple raster passes, but that's extremely expensive in both CPU time (command recording and wgpu resource tracking), and GPU time (bandwidth reading/writing between passes, pipeline bubbles as the GPU spins up and down between passes).
 
-For now, we're actually using two compute dispatches, not one. Wgpu lacks support for globallycoherent buffers, so we have to split the dispatch in two to ensure writes made by the first are visible to the second. I also did not implement the subgroup version of SPD, as wgpu lacked support at the time (it has it now, minus quads, which SPD does need). Still very fast despite these small deficiencies.
+For now, we're actually using two compute dispatches, not one. Wgpu lacks support for globallycoherent buffers, so we have to split the dispatch in two to ensure writes made by the first are visible to the second. I also did not implement the subgroup version of SPD, as wgpu lacked support at the time (it has it now, minus quad operations, which SPD does need). Still very fast despite these small deficiencies.
 
-One important note is that we need to ensure that the depth pyramid is conservative. For non-power-of-two depth textures, for instance, we might need special handling of the downsampling. Same for when we sample the depth pyramid during occlusion culling. I haven't done anything special to handle this, but it seems to work well enough. I'm not entirely confident in the edge cases here.
+One important note is that we need to ensure that the depth pyramid is conservative. For non-power-of-two depth textures, for instance, we might need special handling of the downsampling. Same for when we sample the depth pyramid during occlusion culling. I haven't done anything special to handle this, but it seems to work well enough. I'm not entirely confident in the edge cases here though.
 
 ![Depth pyramid](depth_pyramid.png)
 
@@ -757,7 +757,7 @@ This culling pass is much the same as the first, with a few key differences:
 * We skip frustum and LOD culling, as we did it the first time
 * We operate only on the clusters that we explicitly marked as second pass candidates during the first culling pass
   * We're still doing a large 3d dispatch over all clusters in the scene, but we can early-out for the clusters that are not second pass candidates
-* We use the current transforms, instead of last frame's
+* We use the current transforms for occlusion culling, instead of last frame's
 * We occlusion cull using the depth pyramid generated from the previous pass
 
 By doing this, we can skip drawing any clusters that would be occluded by the existing geometry that we rendered in the first pass.
@@ -768,13 +768,13 @@ As a result of this pass, we have another DrawIndirectArgs we can use to draw th
 
 This pass is identical to the first raster pass, just with the new set of clusters from the second culling pass.
 
-Given that the camera and scene is static, there is nothing to render in this pass.
+Given that the camera and scene is static in the example fram that we're looking at, the first pass perefectly calculated occlusion, and there is nothing to actually render in this pass.
 
 ## Copy Material Depth
 
-For reasons we'll get to in the material shading pass, we need to copy the R16Uint material depth texture we rasterized earlier to an actual Depth16Unorm texture. A simple fullscreen triangle pass with a sample and a divide perform the copy.
+For reasons we'll get to in the material shading pass, we need to copy the R16Uint material depth texture we rasterized earlier to an actual Depth16Unorm depth texture. A simple fullscreen triangle pass with a sample and a divide performs the copy.
 
-I mentioned earlier that ideally we wouldn't write out the material depth during the rasterization pass. It would be better to instead sample the visibility buffer, lookup the material ID from the cluster ID, and then write it out to the depth texture directly. I intend to switch to this method in the near future.
+I mentioned earlier that ideally we wouldn't write out the material depth during the rasterization pass. It would be better to instead write it out during this pass, by sampling the visibility buffer, looking up the material ID from the cluster ID, and then writing it out to the depth texture directly. I intend to switch to this method in the near future.
 
 ```rust
 #import bevy_core_pipeline::fullscreen_vertex_shader::FullscreenVertexOutput
@@ -793,7 +793,7 @@ fn copy_material_depth(in: FullscreenVertexOutput) -> @builtin(frag_depth) f32 {
 
 At this point we have the visibility buffer texture containing packed cluster and triangle IDs per pixel, and the material depth texture containing the material ID as a floating point depth value.
 
-Now, it's time to apply materials to the frame in a set of "material shading" draws. Note that we're not necessarily rendering the a lit and shaded scene. Bevy's meshlet feature works with all the existing rendering modes (forward, forward + prepass, and deferred). For instance, we could be rendering a GBuffer here, or a normal and motion vector prepass.
+Now, it's time to apply materials to the frame in a set of "material shading" draws. Note that we're not necessarily rendering a lit and shaded scene. The meshlet feature works with all of Bevy's existing rendering modes (forward, forward + prepass, and deferred). For instance, we could be rendering a GBuffer here, or a normal and motion vector prepass.
 
 ### Vertex Shader
 
@@ -830,11 +830,13 @@ fn vertex(@builtin(vertex_index) vertex_input: u32) -> @builtin(position) vec4<f
 }
 ```
 
-The material's pipeline depth comparison function will be set to equals, so we only shade fragments for which the depth of the triangle is equal to the depth in the depth buffer. The depth buffer used here is the material depth texture we rendered earlier. Thus, each fullscreen triangle draw per material will only shade the fragments for that material. This is fairly inefficent if you have many materials. Each fullscreen triangle will cost a large amount of depth comparisons. In the future I'd like to switch to compute-shader based material shading.
+The material's pipeline depth comparison function will be set to equals, so we only shade fragments for which the depth of the triangle is equal to the depth in the depth buffer. The depth buffer attached here is the material depth texture we rendered earlier. Thus, each fullscreen triangle draw per material will only shade the fragments for that material.
+
+Note that this is pretty inefficent if you have many materials. Each fullscreen triangle will cost an entire screen's worth of depth comparisons. In the future I'd like to switch to compute-shader based material shading.
 
 ### Fragment Shader
 
-Now that we've determined what fragments to shade, it's time to apply the material's shader code to that fragments. Each fragment can sample the visibility buffer, recovering the cluster ID and triangle ID. Like before, this provides us access to the rest of the instance and mesh data.
+Now that we've determined what fragments to shade, it's time to apply the material's shader code to those fragments. Each fragment can sample the visibility buffer, recovering the cluster ID and triangle ID. Like before, this provides us access to the rest of the instance and mesh data.
 
 The remaining tricky bit is that since we're not actually rendering a mesh in the draw call, and are using a single triangle just to cover some fragments to shade, we don't have automatic interpolation of vertex attributes within a mesh triangle or screen-space derivatives for mipmapped texture sampling.
 
@@ -886,6 +888,6 @@ However, Bevy 0.14 is just the start. There's tons of improvements I'm hoping to
 * Compressing asset vertex data by using screen-derived tangents and octahedral-encoded normals, and possibly position/UV quantization
 * Performance, quality, reliability, and workflow improvements for the mesh to meshlet mesh asset preprocessing
 * Compute-based material shading passes instead of the fullscreen triangle method, and possibly software variable rate shading, inspired by Unreal Engine 5.4's [GPU-driven Nanite materials](https://www.unrealengine.com/en-US/blog/take-a-deep-dive-into-nanite-gpu-driven-materials) and [this set of blog posts](http://filmicworlds.com/blog/visibility-buffer-rendering-with-material-graphs) from John Hable
-* Streaming in and out asset data instead of keeping it entirely in memory
+* Streaming in and out asset data from/to disk instead of keeping all of it in memory all the time
 
 With any luck, and a lot of hard work, I'll be back for another blog post about all these changes in the future. Until then, enjoy Bevy 0.14!
