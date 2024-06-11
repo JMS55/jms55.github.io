@@ -768,7 +768,7 @@ As a result of this pass, we have another DrawIndirectArgs we can use to draw th
 
 This pass is identical to the first raster pass, just with the new set of clusters from the second culling pass.
 
-Given that the camera and scene is static in the example fram that we're looking at, the first pass perefectly calculated occlusion, and there is nothing to actually render in this pass.
+Given that the camera and scene is static in the example frame that we're looking at, the first pass perfectly calculated occlusion, and there is nothing to actually render in this pass.
 
 ## Copy Material Depth
 
