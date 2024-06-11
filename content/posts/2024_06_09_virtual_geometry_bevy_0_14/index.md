@@ -9,7 +9,7 @@ tags = ["bevy", "virtual geometry"]
 # Introduction
 The 0.14 release of the open source [Bevy](https://bevyengine.org) game engine is coming up, and with it, the release of an experimental virtual geometry feature that I've been working on for several months.
 
-In this blog post, I'm going to give a technical deep dive into Bevy's new "meshlet" feature, what improvements it bring, techniques I tried that did or did not work out, and what I'm looking to improve on in the future. There's a lot that I've learned (and a _lot_ of code I've written and rewritten multiple times), and I'd like to share what I learned in the hope that it will help others.
+In this blog post, I'm going to give a technical deep dive into Bevy's new "meshlet" feature, what improvements it brings, techniques I tried that did or did not work out, and what I'm looking to improve on in the future. There's a lot that I've learned (and a _lot_ of code I've written and rewritten multiple times), and I'd like to share what I learned in the hope that it will help others.
 
 ![Example scene for the meshlet renderer](showcase.png)
 
