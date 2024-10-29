@@ -10,11 +10,11 @@ tags = ["bevy", "virtual geometry"]
 
 It's been a little over 4 months [since my last post](@/posts/2024_06_09_virtual_geometry_bevy_0_14/index.md) where I talked about the very early prototype of virtual geometry I wrote for Bevy 0.14.
 
-In the time since, I've written 9 PRs that greatly improve virtual geometry. While it's still far from production ready, the version of virtual geometry that will ship in Bevy 0.15 (which is releasing soon) is a very large step in the right direction!
+In the time since, I've written 10 PRs that greatly improve the feature. While it's still not production ready, the version of virtual geometry that will ship in Bevy 0.15 (which is releasing soon) is a very large step in the right direction!
 
 In this blog post I'll be going over the PRs I made in chronological order. At the end, I'll do a performance comparison vs Bevy 0.14, and finally discuss my roadmap for what I'm planning to work on in Bevy 0.16 and beyond.
 
-It's going to be another super long read, so grab some snacks and strap in.
+It's going to be another super long read, so grab some snacks and strap in!
 
 ## Zeux (TODO)
 * https://github.com/bevyengine/bevy/pull/13904
@@ -87,13 +87,15 @@ Total load time from disk to CPU memory for our 5mb MeshletMesh went from 102ms 
 ## Software Rasterization
 PR [#14623](https://github.com/bevyengine/bevy/pull/14623) improves our visbuffer rasterization performance for clusters that appear small on screen (i.e. almost all of them). I rewrote pretty much the entire virtual geometry codebase in this PR, so this is going to be a really long section.
 
-### The Problem
+### Motivation
 
 If you remember the frame breakdown from the last post, visbuffer rasterization took the largest chunk of our frame time. Writing out a buffer of cluster + triangle IDs to render in the culling pass, and then doing a single indirect draw over the total count of triangles does not scale very well.
 
 The buffer used a lot of memory (4 bytes per non-culled triangle). The GPU's primitive assembler can't keep up with the sheer number of triangles as we're not using indexed triangles (to save 8 bytes of memory and time spent on writing out an index buffer), and therefore lack a vertex cache. And finally the GPU's rasterizer just performs poorly with small triangles, and we have a _lot_ of small triangles.
 
 Current GPU rasterizers expect comparatively few triangles that each cover many pixels. They have performance optimizations aimed at that kind of workload like shading 2x2 quads of pixels at a time and tile binning of triangles. Meanwhile, our virtual geometry renderer is aimed at millions of tiny triangles that only cover a pixel each. We need a rasterizer aimed at being efficient over the number of triangles; not the number of covered pixels per triangle.
+
+### The Software Rasterizer
 
 TODO
 
@@ -130,6 +132,9 @@ Reference baz
 
 ## Software Rasterization Bugfixes
 PR [#16049](https://github.com/bevyengine/bevy/pull/16049)
+
+## Normal-aware LOD Selection
+PR [#16111](https://github.com/bevyengine/bevy/pull/16111)
 
 ## Performance of Bevy 0.14 vs 0.15
 
