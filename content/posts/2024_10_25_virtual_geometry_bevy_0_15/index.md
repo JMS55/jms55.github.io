@@ -242,6 +242,10 @@ https://fgiesen.wordpress.com/2013/02/06/the-barycentric-conspirac
 https://www.youtube.com/watch?v=k5wtuKWmV48
 
 
+### Material and Depth Resolve
+
+TODO
+
 ### Retrospect
 
 Software rasterization is a lot of complexity, learning, and work - I spent a lot of time researching how the GPU rasterizer works, rewrote a _lot_ of code, and just writing the software rasterization shader itself and getting it bug-free took a week or two of effort. As you'll see later, I missed a couple of (severe) bugs, which will need correcting.
