@@ -21,7 +21,7 @@ PRs [#13904](https://github.com/bevyengine/bevy/pull/13904), [#13913](https://gi
 
 PR [#14042](https://github.com/bevyengine/bevy/pull/14042), also by Arseny Kapoulkine, fixed a bug with how we calculate the depth pyramid mip level to sample at for occlusion culling.
 
-These were actually shipped in Bevy 0.14, but were opened after I published my last post, hence why I'm covering them now.
+These PRs were actually shipped in Bevy 0.14, but were opened after I published my last post, hence why I'm covering them now.
 
 ## Faster MeshletMesh Loading
 PR [#14193](https://github.com/bevyengine/bevy/pull/14193) improves performance when loading MeshletMesh assets from disk. This also shipped in Bevy 0.14, but was written after my last post.
@@ -92,7 +92,7 @@ PR [#14623](https://github.com/bevyengine/bevy/pull/14623) improves our visbuffe
 
 If you remember the frame breakdown from the last post, visbuffer rasterization took the largest chunk of our frame time. Writing out a buffer of cluster + triangle IDs to render in the culling pass, and then doing a single indirect draw over the total count of triangles does not scale very well.
 
-The buffer used a lot of memory (4 bytes per non-culled triangle). The GPU's primitive assembler can't keep up with the sheer number of triangles as we're not using indexed triangles (to save 8 bytes of memory and time spent on writing out an index buffer), and therefore lack a vertex cache. And finally the GPU's rasterizer just performs poorly with small triangles, and we have a _lot_ of small triangles.
+The buffer used a lot of memory (4 bytes per non-culled triangle). The GPU's primitive assembler can't keep up with the sheer number of vertices we're sending it as we're not using indexed triangles (to save extra memory and time spent writing out an index buffer), and therefore lack a vertex cache. And finally the GPU's rasterizer just performs poorly with small triangles, and we have a _lot_ of small triangles.
 
 Current GPU rasterizers expect comparatively few triangles that each cover many pixels. They have performance optimizations aimed at that kind of workload like shading 2x2 quads of pixels at a time and tile binning of triangles. Meanwhile, our virtual geometry renderer is aimed at millions of tiny triangles that only cover a pixel each. We need a rasterizer aimed at being efficient over the number of triangles; not the number of covered pixels per triangle.
 
@@ -102,7 +102,7 @@ We need a custom rasterizer algorithm, written in a compute shader, that does ev
 
 Before we get to the actual software rasterizer, there's a bunch of prep work we need to do first. Namely, redoing our entire hardware rasterizer setup.
 
-In Bevy 0.14, we were writing out a buffer of triangles from the culling pass, and issuing a single indirect draw to rasterize every triangle in the buffer. We're going to throw this out, and go with a completely new scheme.
+In Bevy 0.14, we were writing out a buffer of triangles from the culling pass, and issuing a single indirect draw to rasterize every triangle in the buffer. We're going to throw all that out, and go with a completely new scheme.
 
 First, we need a buffer for to store a bunch of cluster IDs (the ones we want to rasterize). We'll have users give a fixed size for this buffer on startup, based on the maximum number of clusters they expect to have visible in a frame in any given scene (not the amount pre-culling and LOD selection).
 
@@ -117,7 +117,7 @@ render_device.create_buffer(&BufferDescriptor {
 });
 ```
 
-Next, we'll setup two indirect commands in some buffers. One for hardware raster, one for software raster. For hardware raster, we're going to hardcode the vertex count to 64 (the maximum number of triangles per meshlet) times 3 (3 vertices per triangle) total vertices. We'll also set the initialize count to zero.
+Next, we'll setup two indirect commands in some buffers. One for hardware raster, one for software raster. For hardware raster, we're going to hardcode the vertex count to 64 (the maximum number of triangles per meshlet) times 3 (vertices per triangle) total vertices. We'll also initialize the instance count to zero.
 
 This was a sceme I described in my last post, but purposefully avoided due to the performance lost. However, now that we're adding a software rasterizer, I expect that almost all clusters will be software rasterized. Therefore some performance loss for the hardware raster is acceptable. In return, we'll get to use a nice trick in the next step.
 
@@ -203,7 +203,7 @@ fn fragment(vertex_output: VertexOutput) {
 }
 ```
 
-Special thanks to (@atlv24)[https://github.com/atlv24] for adding 64-bit integers and atomic u64 support in wgpu 22, specifically so that I could use it here.
+Special thanks to [@atlv24](https://github.com/atlv24) for adding 64-bit integers and atomic u64 support in wgpu 22, specifically so that I could use it here.
 
 Note that there's a couple of improvements we could make here still, pending on support in wgpu and naga for some missing features:
 * R64Uint texture atomics would both be faster than using buffers, and a bit more ergonomic to sample from and debug. This is hopefully coming in wgpu 24, again thanks to @atlv24.
@@ -235,16 +235,68 @@ fn remap_dispatch() {
 
 ### The Software Rasterizer
 
-Finally, we can do software rasterization. **TODO**.
+Finally, we can do software rasterization.
 
-https://kristoffer-dyrkorn.github.io/triangle-rasterizer
-https://fgiesen.wordpress.com/2013/02/06/the-barycentric-conspirac
-https://www.youtube.com/watch?v=k5wtuKWmV48
+The basic idea is to have a compute shader workgroup with size equal to the max triangles per meshlet.
 
+Each thread within the workgroup will load 1 vertex of the meshlet, transform it to screen-space, and then write it to workgroup shared memory and issue a barrier.
+
+After the barrier, the workgroup will switch to handling triangles, with one thread per triangle. First each thread will load the 3 indices for its triangle, and then load the 3 vertices from workgroup shared memory based on the indices.
+
+One each thread has the 3 vertices for its triangle, it can compute the position/depth gradients across the triangle, and screen-space bounding box around the triangle.
+
+Each thread can then iterate the bounding box (either iterating each pixel, or iterating scanlines like Nanite does), writing pixels to the visbuffer as it goes.
+
+One notable difference to the Nanite slides is that for the scanline variant, I needed to check if the pixel center was within the triangle after each pixel, which the slides don't do. Not sure if the slides just omitted it for brevity or what, but I got artifacts otherwise.
+
+There's also some slight differences between my shader and the GPU rasterizer; I didn't implement absolutely every detail. Notably I skipped fixed-point math and the top-left rule. I should implement these in the future, but for now I haven't seen any issues skipping them.
 
 ### Material and Depth Resolve
 
-TODO
+In Bevy 0.15, after the visbuffer rasterization, we have two final steps.
+
+The resolve depth pass reads the visbuffer (which contains packed depth), and writes the depth to the actual depth texture of the camera.
+
+```rust
+/// This pass writes out the depth texture.
+@fragment
+fn resolve_depth(in: FullscreenVertexOutput) -> @builtin(frag_depth) f32 {
+    let frag_coord_1d = u32(in.position.y) * view_width + u32(in.position.x);
+    let visibility = meshlet_visibility_buffer[frag_coord_1d];
+#ifdef MESHLET_VISIBILITY_BUFFER_RASTER_PASS_OUTPUT
+    return bitcast<f32>(u32(visibility >> 32u));
+#else
+    return bitcast<f32>(visibility);
+#endif
+}
+```
+
+The resolve material depth pass has the same role in Bevy 0.15 that it did in Bevy 0.14, where it writes the material ID of each pixel to a depth texture, so that we can later abuse depth testing to ensure we shade the correct pixels during each material draw in the material shading pass.
+
+However, you may have noticed that unlike the rasterization pass in Bevy 0.14, the new rasterization passes write only depth and cluster + triangle IDs, and not material IDs. During the rasterization pass, where we want to write only the absolute minimum amount of information per pixel (cluster ID, triangle ID, and depth) that we have to.
+
+Bevause of this, the resolve material depth pass can no longer read the material ID texture and copy it directly to the material depth texture. There's now a new step at the start to first load the material ID based on the visbuffer.
+
+```rust
+/// This pass writes out the material depth texture.
+@fragment
+fn resolve_material_depth(in: FullscreenVertexOutput) -> @builtin(frag_depth) f32 {
+    let frag_coord_1d = u32(in.position.y) * view_width + u32(in.position.x);
+    let visibility = meshlet_visibility_buffer[frag_coord_1d];
+
+    let depth = visibility >> 32u;
+    if depth == 0lu { return 0.0; }
+
+    let cluster_id = u32(visibility) >> 7u;
+    let instance_id = meshlet_cluster_instance_ids[cluster_id];
+    let material_id = meshlet_instance_material_ids[instance_id];
+
+    // Everything above this line is new - the shader used to just load the
+    // material_id from another texture
+
+    return f32(material_id) / 65535.0;
+}
+```
 
 ### Retrospect
 
@@ -256,8 +308,23 @@ My advice to others working on virtual geometry is to skip software raster until
 
 If like me, you don't have mesh shaders, then I would still probably stick with only hardware rasterization until you've exhausted other, more fundamental areas to work on, like culling and DAG building. However, I would learn from my mistakes, and not spend so much time trying to get hardware rasterization to be fast. Just stick to writing out a list of visible cluster IDs in the culling shader and have the vertex shader ignore extra triangles, instead of trying to get clever with writing out a buffer of visible triangles and drawing the minimal number of vertices. You'll eventually add software rasterization, and then the hardware rasterization performance won't be so important.
 
+If you do want to implement a rasterizer in software (for virtual geometry, or otherwise), check out the below resources that were a big help for me in learning rasterization and the related math.
+
+* <https://kristoffer-dyrkorn.github.io/triangle-rasterizer>
+* <https://fgiesen.wordpress.com/2013/02/06/the-barycentric-conspirac>
+* <https://www.youtube.com/watch?v=k5wtuKWmV48>
+
 ## Larger Meshlet Sizes
-PR [#15023](https://github.com/bevyengine/bevy/pull/15023)
+PR [#15023](https://github.com/bevyengine/bevy/pull/15023) has a bunch of small improvements to virtual geometry.
+
+The main change is switching from a maximum 64 vertices and 64 triangles to 255 vertices (`64v:64t`) and 128 triangles per meshlet (`255v:128t`). I found that having an equal `v:t` ratio leads to most meshlets having less than `t` triangles, which we don't want. Having a `2v:t` ratio leads to more fully-filled meshlets, and I went with `255v:128t` (which is nearly the same as Nanite, minus the fact that meshoptimizer only supports meshlets with up to 255 vertices) over `128v:64t` after some performance testing.
+
+Note that this change involved some other work, such as adjusting software and hardware raster to work with more triangles, software rasterization looping if needed to load 2 vertices per thread instead of 1, using another bit per triangle ID when packing cluster + triangle IDs to accomodate triangles up to 127, etc.
+
+The other changes I made were:
+* Setting the target error to f32::MAX when simplifying a mesh (no point in capping it for continuous LOD, gives better simplification results)
+* Adjusting the threshold to allow less-simplified meshes to still count as having been simplified enough (gets us closer to log2(lod_0_meshlet_count) LOD levels)
+* Setting `group_error = max(group_error, all_child_errors)` instead of `group_error += max(all_child_errors)` (not really sure if this is more or less correct)
 
 ## Screenspace-derived Tangents
 PR [#15084](https://github.com/bevyengine/bevy/pull/15084)
@@ -296,7 +363,7 @@ PR [#16111](https://github.com/bevyengine/bevy/pull/16111)
 ## Roadmap
 
 ## Appendix
-Here are some other resources on nanite-style virtual geometry:
+Further resources on Nanite-style virtual geometry:
 
 * <https://advances.realtimerendering.com/s2021/Karis_Nanite_SIGGRAPH_Advances_2021_final.pdf>
 * <https://github.com/jglrxavpok/Carrot>
