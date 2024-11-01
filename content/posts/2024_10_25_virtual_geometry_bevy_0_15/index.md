@@ -243,13 +243,13 @@ Each thread within the workgroup will load 1 vertex of the meshlet, transform it
 
 After the barrier, the workgroup will switch to handling triangles, with one thread per triangle. First each thread will load the 3 indices for its triangle, and then load the 3 vertices from workgroup shared memory based on the indices.
 
-One each thread has the 3 vertices for its triangle, it can compute the position/depth gradients across the triangle, and screen-space bounding box around the triangle.
+Once each thread has the 3 vertices for its triangle, it can compute the position/depth gradients across the triangle, and screen-space bounding box around the triangle.
 
-Each thread can then iterate the bounding box (either iterating each pixel, or iterating scanlines like Nanite does), writing pixels to the visbuffer as it goes.
+Each thread can then iterate the bounding box (either iterating each pixel, or iterating scanlines like Nanite does), writing pixels to the visbuffer as it goes using the same atomicMax() method that we used for hardware rasterization.
 
-One notable difference to the Nanite slides is that for the scanline variant, I needed to check if the pixel center was within the triangle after each pixel, which the slides don't do. Not sure if the slides just omitted it for brevity or what, but I got artifacts otherwise.
+One notable difference to the Nanite slides is that for the scanline variant, I needed to check if the pixel center was within the triangle after each pixel in the scanline, which the slides don't show. Not sure if the slides just omitted it for brevity or what, but I got artifacts if I left the check outss.
 
-There's also some slight differences between my shader and the GPU rasterizer; I didn't implement absolutely every detail. Notably I skipped fixed-point math and the top-left rule. I should implement these in the future, but for now I haven't seen any issues skipping them.
+There's also some slight differences between my shader and the GPU rasterizer - I didn't implement absolutely every detail. Notably I skipped fixed-point math and the top-left rule. I should implement these in the future, but for now I haven't seen any issues from skipping them.
 
 ### Material and Depth Resolve
 
@@ -275,7 +275,7 @@ The resolve material depth pass has the same role in Bevy 0.15 that it did in Be
 
 However, you may have noticed that unlike the rasterization pass in Bevy 0.14, the new rasterization passes write only depth and cluster + triangle IDs, and not material IDs. During the rasterization pass, where we want to write only the absolute minimum amount of information per pixel (cluster ID, triangle ID, and depth) that we have to.
 
-Bevause of this, the resolve material depth pass can no longer read the material ID texture and copy it directly to the material depth texture. There's now a new step at the start to first load the material ID based on the visbuffer.
+Because of this, the resolve material depth pass can no longer read the material ID texture and copy it directly to the material depth texture. There's now a new step at the start to first load the material ID based on the visbuffer.
 
 ```rust
 /// This pass writes out the material depth texture.
