@@ -323,10 +323,34 @@ The other changes I made were:
 * Setting `group_error = max(group_error, all_child_errors)` instead of `group_error += max(all_child_errors)` (not really sure if this is more or less correct)
 
 ## Screenspace-derived Tangents
-PR [#15084](https://github.com/bevyengine/bevy/pull/15084)
+PR [#15084](https://github.com/bevyengine/bevy/pull/15084) calculates tangents at runtime, instead of precomputing them and storing them as part of the MeshletMesh asset.
 
-https://www.jeremyong.com/graphics/2023/12/16/surface-gradient-bump-mapping
-https://jcgt.org/published/0009/03/04
+Virtual geometry isin't just about rasterizing huge amounts of high-poly meshes - asset size is also a _big_ factor. GPUs only have so much memory, disks only have so much space, and transfer speeds from disk to RAM and RAM to VRAM is only so fast (as we discovered in the last post).
+
+Looking at our asset data, right now we're storing 48 bytes per vertex, with a single set of vertices shared across all meshlets in a meshlet mesh.
+
+```rust
+struct MeshletVertex {
+    position: vec3<f32>,
+    normal: vec3<f32>,
+    uv: vec2<f32>,
+    tangent: vec4<f32>,
+}
+```
+
+An easy way to reduce the amount of data per asset is to just remove the explicitly-stored tangents, and instead calculate them at runtime. In the visbuffer resolve shader function, rather then loading 3 vertex tangents and interpolating across the triangle, we can instead calculate the tangent based on UV derivatives across the triangle.
+
+The tangent derivation I used was ["Surface Gradient–Based Bump Mapping Framework"](https://jcgt.org/published/0009/03/04) from Morten S. Mikkelsen (author of the [mikktspace](http://www.metalliandy.com/mikktspace/tangent_space_normal_maps.html) standard). It's a really cool paper that provides a framework for using normal maps for many more use cases than just screen-space based tangents. Definitely give it a further read.
+
+I used the code from this <https://www.jeremyong.com/graphics/2023/12/16/surface-gradient-bump-mapping> blog post, which also does a great job motivating and explaining the paper.
+
+The only issue I ran into is that the tangent.w always came out with the wrong sign compared to the existing mikktspace-tangents I had as a reference. I double checked my math and coordinate space handiness a couple of times, but could never figure out what was wrong. I ended up just inverting the sign after calculating the tangent.
+
+At the cost of a few extra calculations in the material shading pass, and some slight inaccuracies compared to explicit tangents, mostly on curved surfaces, we save 16 bytes per vertex.
+
+TODO: Image comparison
+
+Also of note is that while trying to debug the sign issue, I found that The Forge had published an [updated version](https://github.com/ConfettiFX/The-Forge/blob/9d43e69141a9cd0ce2ce2d2db5122234d3a2d5b5/Common_3/Renderer/VisibilityBuffer2/Shaders/FSL/vb_shading_utilities.h.fsl#L90-L150) of their partial derivatives calculations, fixing a small bug. I updated my WGSL port to match.
 
 ## Vertex Attribute Compression
 PR [#15643](https://github.com/bevyengine/bevy/pull/15643)
