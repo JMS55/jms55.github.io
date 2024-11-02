@@ -263,11 +263,7 @@ The resolve depth pass reads the visbuffer (which contains packed depth), and wr
 fn resolve_depth(in: FullscreenVertexOutput) -> @builtin(frag_depth) f32 {
     let frag_coord_1d = u32(in.position.y) * view_width + u32(in.position.x);
     let visibility = meshlet_visibility_buffer[frag_coord_1d];
-#ifdef MESHLET_VISIBILITY_BUFFER_RASTER_PASS_OUTPUT
     return bitcast<f32>(u32(visibility >> 32u));
-#else
-    return bitcast<f32>(visibility);
-#endif
 }
 ```
 
