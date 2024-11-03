@@ -360,10 +360,45 @@ https://gpuopen.com/download/publications/DGF.pdf
 https://daniilvinn.github.io/2024/05/04/omniforce-vertex-quantization.html
 
 ## Improved LOD Selection Heuristic
-PR [#15846](https://github.com/bevyengine/bevy/pull/15846)
+PR [#15846](https://github.com/bevyengine/bevy/pull/15846) changes how we select the LOD cut.
+
+Previously, I was building a bounding sphere around each group with radius based on the group error, and then projecting that to screen space to get the visible error in pixels.
+
+That method worked, but isin't quite watertight. Where you place the bounding sphere center in the group is kind of arbitrary, right? And how do you ensure that the error rpojection is perfectly monotonic, if you have these random bounding spheres in each group?
+
+Arseny Kapoulkine once again helped me out here. As part of meshoptimizer, they started experimenting with their [nanite.cpp](https://github.com/zeux/meshoptimizer/blob/d93419ced5956307f41333c500c8037c8b861d59/demo/nanite.cpp) demo.
+
+In this PR, I copied his code for the LOD selection. To determine the group bounding sphere, you simply build a new bounding sphere enclosing all of the group's childrens' bounding spheres. The first group you build out of LOD 0 uses the LOD 0 culling bounding spheres around each meshlet. This way, you ensure that both the error is monotonic (using the existing method of taking the max error among the group and group children), _and_ the bounding sphere. Error is no longer stored in the radius of the bounding sphere, and is instead stored as a seperate f16 (lets us pack both group and parent group error into a single u32, and the lost precision is irrelevant). This also gave me the opportunity to clean up the code now that I understand the theory better, and clarify the difference between meshlets and groups better.
+
+For projecting the error at runtime, we now use the below function. I can't claim to understand how it works that well (and it's been a few weeks since I last looked at it), but it does work. The end result is that we get more seamless LOD changes, and our mesh to meshlet mesh converter is more robust (it used to crash on larger meshes, due to a bug with how I calculated group bounding spheres).
+
+```rust
+// https://github.com/zeux/meshoptimizer/blob/1e48e96c7e8059321de492865165e9ef071bffba/demo/nanite.cpp#L115
+fn lod_error_is_imperceptible(lod_sphere: MeshletBoundingSphere, simplification_error: f32, world_from_local: mat4x4<f32>, world_scale: f32) -> bool {
+    let sphere_world_space = (world_from_local * vec4(lod_sphere.center, 1.0)).xyz;
+    let radius_world_space = world_scale * lod_sphere.radius;
+    let error_world_space = world_scale * simplification_error;
+
+    var projected_error = error_world_space;
+    if view.clip_from_view[3][3] != 1.0 {
+        // Perspective
+        let distance_to_closest_point_on_sphere = distance(sphere_world_space, view.world_position) - radius_world_space;
+        let distance_to_closest_point_on_sphere_clamped_to_znear = max(distance_to_closest_point_on_sphere, view.clip_from_view[3][2]);
+        projected_error /= distance_to_closest_point_on_sphere_clamped_to_znear;
+    }
+    projected_error *= view.clip_from_view[1][1] * 0.5;
+    projected_error *= view.viewport.w;
+
+    return projected_error < 1.0;
+}
+```
+
+An interesting side note, finding the minimal bounding sphere around a set of other bounding sphere turns out to be a very difficult problem. Kaspar Fischer's thesis ["The smallest enclosing balls of balls"](http://www.inf.ethz.ch/personal/emo/DoctThesisFiles/fischer05.pdf) covers the math, and it's very complex. I copied Kapoulkine's approximate, much simpler method.
 
 ## Improved Mesh to MeshletMesh Conversion
-PR [#15886](https://github.com/bevyengine/bevy/pull/15886)
+PR [#15886](https://github.com/bevyengine/bevy/pull/15886) brings more improvements to the mesh to meshlet mesh converter.
+
+TODO
 
 ## Improved Fill Cluster Buffers Pass
 PR [#15955](https://github.com/bevyengine/bevy/pull/15955)
