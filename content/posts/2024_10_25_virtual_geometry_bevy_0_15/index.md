@@ -355,6 +355,8 @@ Also of note is that while trying to debug the sign issue, I found that The Forg
 ## Vertex Attribute Compression
 PR [#15643](https://github.com/bevyengine/bevy/pull/15643)
 
+TODO
+
 https://arxiv.org/abs/2404.06359
 https://gpuopen.com/download/publications/DGF.pdf
 https://daniilvinn.github.io/2024/05/04/omniforce-vertex-quantization.html
@@ -398,24 +400,145 @@ An interesting side note, finding the minimal bounding sphere around a set of ot
 ## Improved Mesh to MeshletMesh Conversion
 PR [#15886](https://github.com/bevyengine/bevy/pull/15886) brings more improvements to the mesh to meshlet mesh converter.
 
-TODO
+Following on from the last PR, I again took a bunch of improvements from the meshoptimizer nanite.cpp demo.
 
-## Improved Fill Cluster Buffers Pass
-PR [#15955](https://github.com/bevyengine/bevy/pull/15955)
+* Consider only the vertex position (and ignore things like UV seams) when determining meshlet groups
+* Add back stuck meshlets that either failed to simplify, or failed to group, to the processing queue to try again at a later LOD. Dosen't seem to be much of an improvement though.
+* Provide a seed to METIS to make the meshlet mesh conversion fully deterministic. I didn't realize METIS even had options before now.
+* Target groups of 8 meshlets instead of 4. This helped simplification a lot! Nanite does 8-32, probably based on some kind of heuristic, which is probably worth experimenting with.
+* Manually lock only vertices belonging to meshlet group borders, instead of the full toplogical group border that meshoptimizer's LOCK_BORDER flag does.
 
-Reference baz
+With all of these changes combined, we can finally reliably get down to a single meshlets (or at least 1-3 meshlets for larger meshes) at the highest LOD!
+
+The last item on the list in particular is a _huge_ improvement. Consider this diagram: TODO
+
+## Faster Fill Cluster Buffers Pass
+PR [#15955](https://github.com/bevyengine/bevy/pull/15955) improves the speed of the fill cluster buffers pass.
+
+At this point, I improved rasterization performance, meshlet mesh building, and asset storage and loading. The Bevy 0.15 release was coming up, people were winding down features in favor of testing the release candidates, and I wasn't going to have the time (or, the motivation) to do another huge PR.
+
+While looking at some small things I could improve, I ended up talking with Kirill Bazhenov about how he manages per-instance (entity) GPU data in his [Esoterica](https://www.youtube.com/watch?v=8gwPw1fySMU) renderer.
+
+To recap what we had in Bevy 0.14, we had the problem that uploading 8 bytes (instance ID + meshlet ID) per cluster to the GPU was way too expensive. The solution I came up with was to dispatch a compute shader thread per cluster, have it perform a binary search on an array of per-instance data to find the instance and meshlet it belongs to, and then write out the two IDs. This way, we only had to upload 8 bytes per _instance_ to the GPU, and then the cluster -> instance ID + meshlet ID write-outs could be done entirely on the GPU, where it would be much faster. This was the fill cluster buffers pass.
+
+It's not _super_ fast, but it's also not the bottleneck, and so for a while I was fine leaving it as-is. Kirill, however, showed me a much better way.
+
+Instead of having our compute shader operate on a list of clusters and write out the data per cluster, we can invert it, and have the shader operate on _instances_, and write out all the data for every cluster in the instance. After all, each instance already has the list of meshlets it has, so writing out the cluster (an instance of a meshlet) is easy!
+
+Instead of dispatching one thread per cluster, now we're going to dispatch one workgroup per instance, with each workgroup having 1024 threads (the maximum allowed). Instead of uploading a prefix-sum of meshlet counts per instance, now we're going to upload just a straight count of meshlets per instance (we're still only uploading 8 bytes per instance total).
+
+In the shader, each workgroup can load the 8 bytes of data we uploaded for the instance it's processing.
+
+```rust
+let instance_id = workgroup_id.x;
+let instance_meshlet_count = meshlet_instance_meshlet_counts[instance_id];
+let instance_meshlet_slice_start = meshlet_instance_meshlet_slice_starts[instance_id];
+```
+
+Then, the first thread in each workgroup can reserve space in the output buffers for its instance's clusters via an atomic counter, and broadcast the start index to the rest of the workgroup.
+
+```rust
+var<workgroup> cluster_slice_start_workgroup: u32;
+
+// Reserve cluster slots for the instance and broadcast to the workgroup
+if local_invocation_index == 0u {
+    cluster_slice_start_workgroup = atomicAdd(&meshlet_global_cluster_count, instance_meshlet_count);
+}
+let cluster_slice_start = workgroupUniformLoad(&cluster_slice_start_workgroup);
+```
+
+Finally, we can have the workgroup loop over its instance's clusters, and for each one, write out its instance ID (which we already have, since it's just the workgroup ID) and meshlet ID (the instance's first meshlet ID, plus the loop counter). Each thread will handle 1 cluster, and the workgroup as a whole will loop enough times to write out all of the instance's clusters.
+
+```rust
+// Loop enough times to write out all the meshlets for the instance given that each thread writes 1 meshlet in each iteration
+for (var clusters_written = 0u; clusters_written < instance_meshlet_count; clusters_written += 1024u) {
+    // Calculate meshlet ID within this instance's MeshletMesh to process for this thread
+    let meshlet_id_local = clusters_written + local_invocation_index;
+    if meshlet_id_local >= instance_meshlet_count { return; }
+
+    // Find the overall cluster ID in the global cluster buffer
+    let cluster_id = cluster_slice_start + meshlet_id_local;
+
+    // Find the overall meshlet ID in the global meshlet buffer
+    let meshlet_id = instance_meshlet_slice_start + meshlet_id_local;
+
+    // Write results to buffers
+    meshlet_cluster_instance_ids[cluster_id] = instance_id;
+    meshlet_cluster_meshlet_ids[cluster_id] = meshlet_id;
+}
+```
+
+The shader is now very efficient - the workgroup as a whole, once it reserves space for its clusters, is just repeatedly performing contiguous reads from and writes to global memory.
+
+Overall, in a test scene with 1041 instances of 32217 meshlets per instance, we went from 0.55ms to 0.40, a small 0.15ms savings. NSight now shows that we're at 95% VRAM throughput, and that we're basically entirely bound on global memory operations. The speed of this pass is now basically dependent on our GPU's bandwidth - there's not much I could do better, short of reading and writing less data.
+
+TODO: Talk about cluster limit bugs discovered during this
 
 ## Software Rasterization Bugfixes
-PR [#16049](https://github.com/bevyengine/bevy/pull/16049)
+PR [#16049](https://github.com/bevyengine/bevy/pull/16049) fixes some glitches in the software rasterizer.
+
+While testing out some scenes to prepare for the release, I discovered some previously-missed bugs with software rasterization. When zooming in to the scene, sometimes triangles would randomly glitch and cover the whole screen, leading to massive slowdowns (remember the software rasterizer is meant to operate on small triangles only). Similarly, when zooming out, sometimes there would be single stray pixels rendered that didn't belong. These issues didn't occur with only hardware rasterization enabled.
+
+The stray pixels turned out to be due to two issues. The first bug is in how I calculated the bounding box around each triangle. I wasn't properly accounting for triangles that would be partially on-screen, and partially off-screen. I changed my bounding box calculations to stick to floating point, and clamped negative bounds to 0 to fix. The second bug is that I didn't perform any backface culling in the software rasterizer, and ignoring it does not lead to valid results. If you want a double-sided mesh, then you need to explicitly check for backfacing triangles and invert them. If you want backface culling (I do), then you need to reject the triangle if it's backfacing. Ignoring it turned out to not be an option - skipping it earlier turned out to have bitten me :).
+
+The fullscreen triangles was trickier to figure out, but I ended up narrowing it down to near plane clipping. Rasterization math, specifically the homogenous divide, has a [singularity](https://en.wikipedia.org/wiki/Singularity_(mathematics)) when z = 0. Normally, the way you solve this is by clipping to the near plane, which is a frustum plane positioned slightly in front of z = 0. As long as you provide an appropiate new plane, GPU rasterizers handle this for you automatically. In my software rasterizer, however, I had of course not accounted for this. That meant we were getting Nan/Infinity vertex positions, which led to the garbage triangles we were seeing.
+
+Proper near plane clipping is somewhat complicated (slow), and should not be needed for most clusters. Rather than have our software rasterizer handle near plane clipping, we're instead going to have the culling pass detect which clusters intersect the near plane, and put them in the hardware rasterization queue regardless of size. The fix for this is just two extra lines.
+
+```rust
+// Before
+if cluster_is_small {
+    // Software raster
+} else {
+    // Hardware raster
+}
+
+// After
+let not_intersects_near_plane = dot(view.frustum[4u], culling_bounding_sphere_center) > culling_bounding_sphere_radius;
+if cluster_is_small && not_intersects_near_plane {
+    // Software raster
+ } else {
+    // Hardware raster
+}
+```
+
+With these changes, software raster is now visibly bug-free.
+
+TODO: Show bugged images from PR
 
 ## Normal-aware LOD Selection
-PR [#16111](https://github.com/bevyengine/bevy/pull/16111)
+PR [#16111](https://github.com/bevyengine/bevy/pull/16111) improves how we calculate the LOD cut to account for vertex normals.
+
+One final small PR before Bevy 0.15. Meshoptimizer 0.22 was released, bringing some simplification improvements. Crucially, it greatly improves `meshopt_simplifyWithAttributes()`. I now pass vertex normals into the simplifier, meaning the deformation error the simplifier outputs (which we feed directly into the LOD cut selection shader) accounts for not only position deformation, but also normal deformation.
+
+Without this change, before this PR, visualizing the pixel positions was near-seamless as the LOD cut changed when you zoomed in or out. Pixel normals, however, had visible differences between LOD cuts. After this PR, normals are now near-seamless too.
+
+There's still work to be done in this area - I'm not currently account for UV coordinate deformation, and the weights I chose for position vs normal influence are completely arbitrary. The Nanite presentation talks about this problem a lot - pre-calculating an error amount that perfectly accounts for every aspect of human perception, for meshes with arbitrary materials, is a _really_ hard problem. The best we can do is spend time tweaking heuristics, which I'll leave for a future PR.
 
 ## Performance of Bevy 0.14 vs 0.15
 
-(Compare perf but also memory usage)
+(Compare perf but also memory usage, use tables)
 
 ## Roadmap
+I got a lot done in Bevy 0.15, but there's still a _ton_ left to do for Bevy 0.16 and beyond.
+
+The major, immediate priority (once I'm rested and ready to work on virtual geometry again) will be improving the culling/LOD selection pass. While cluster selection (I should rename the pass to that, that's a good name now that I think of it) is an [embarrassingly parallel](https://en.wikipedia.org/wiki/Embarrassingly_parallel) problem in theory, in practice, having to dispatch a thread per cluster in the scene is an enormous waste of time. There can be million of clusters in the scene, and divergence and register usage on top of the sheer number of threads needed means that this pass is currently the biggest bottleneck.
+
+The fix is (like Nanite does) to traverse a BVH (tree) of clusters, where we only need to process clusters up until they would be the wrong LOD, and then can immediately stop processing their children. Doing tree traversal on a GPU is very tricky, and doing it efficiently depends on [undefined behavior](https://arxiv.org/pdf/2109.06132v1) of GPU schedulers that not all GPUs have.
+
+Once I switch to tree traversal for cluster selection, I think (I'm not fully clear on the details yet) I can also get rid of the need for the fill cluster buffers pass, which would let us reclaim even more performance. Perhaps more crucially, we could do away with the need to allocate buffers to hold instance ID + cluster ID per cluster in the scene, instead letting us store this data per _visible_ (post LOD selection/culling) cluster in the scene. Besides the obvious memory savings, it also saves us from running into the cluster ID limit issue that was limiting our scene size before. We would no longer need a unique ID for each cluster in the scene - just a unique ID for visible clusters only, which is a much smaller amount.
+
+Besides cluster selection improvements, and improving on existing stuff, other big areas I could work on include:
+
+* Streaming of meshlet vertex data (memory savings)
+* Disk-oriented asset compression (disk and load time savings)
+* Rendering clusters for all views at once (performance savings for shadow views)
+* Material shader optimizations (I haven't spent any time at all on this yet)
+* Occlusion culling fixes (I plan to port Hans-Kristian Arntzen's Granite renderer's [HiZ shader](https://github.com/Themaister/Granite/blob/7543863d2a101faf45f897d164b72037ae98ff74/assets/shaders/post/hiz.comp) to WGSL)
+* Tooling to make working with MeshletMeshes easier
+* Testing and improving CPU performance for large amounts of instances
+
+With any luck, in another few months I'll be writing about some of these topics in a post for Bevy 0.16. See you then!
 
 ## Appendix
 Further resources on Nanite-style virtual geometry:
