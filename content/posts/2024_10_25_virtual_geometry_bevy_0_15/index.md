@@ -30,7 +30,7 @@ Previously I was using the `bincode` and `serde` crates to serialize and deseria
 
 Unfortunately, that ease of use came with a good bit of performance overhead. Specifically in the deserializing step, where bytes get turned into the asset type. Deserializing the 5mb Stanford Bunny asset I was using for testing took a depressingly long 77ms on my Ryzen 5 2600 CPU.
 
-Thinking about the code flow more, we _already_ have an asset -> bytes step. After the asset is loaded into CPU memory, we deserialize it _back_ into bytes so that we can upload it to GPU memory. For this, we use the `bytemuck` crate which provides functions for casting slices of data that are `Pod` (plain-old-data, i.e. just numbers, which all of our asset data is) to slices of bytes, without any real overhead.
+Thinking about the code flow more, we _already_ have an asset -> bytes step. After the asset is loaded into CPU memory, we serialize it _back_ into bytes so that we can upload it to GPU memory. For this, we use the `bytemuck` crate which provides functions for casting slices of data that are `Pod` (plain-old-data, i.e. just numbers, which all of our asset data is) to slices of bytes, without any real overhead.
 
 Why not simply use bytemuck to cast our asset data to slices of bytes, and write that? Similarly for reading from disk, we can simply cast the slice of bytes back to our asset type.
 
