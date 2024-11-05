@@ -415,6 +415,8 @@ The last item on the list in particular is a _huge_ improvement. Consider this d
 ## Faster Fill Cluster Buffers Pass
 PR [#15955](https://github.com/bevyengine/bevy/pull/15955) improves the speed of the fill cluster buffers pass.
 
+### Speeding Up
+
 At this point, I improved rasterization performance, meshlet mesh building, and asset storage and loading. The Bevy 0.15 release was coming up, people were winding down features in favor of testing the release candidates, and I wasn't going to have the time (or, the motivation) to do another huge PR.
 
 While looking at some small things I could improve, I ended up talking with Kirill Bazhenov about how he manages per-instance (entity) GPU data in his [Esoterica](https://www.youtube.com/watch?v=8gwPw1fySMU) renderer.
@@ -470,9 +472,32 @@ for (var clusters_written = 0u; clusters_written < instance_meshlet_count; clust
 
 The shader is now very efficient - the workgroup as a whole, once it reserves space for its clusters, is just repeatedly performing contiguous reads from and writes to global memory.
 
-Overall, in a test scene with 1041 instances of 32217 meshlets per instance, we went from 0.55ms to 0.40, a small 0.15ms savings. NSight now shows that we're at 95% VRAM throughput, and that we're basically entirely bound on global memory operations. The speed of this pass is now basically dependent on our GPU's bandwidth - there's not much I could do better, short of reading and writing less data.
+Overall, in a test scene with 1041 instances with 32217 meshlets per instance, we went from 0.55ms to 0.40, a small 0.15ms savings. NSight now shows that we're at 95% VRAM throughput, and that we're basically entirely bound on global memory operations. The speed of this pass is now basically dependent on our GPU's bandwidth - there's not much I could do better, short of reading and writing less data.
 
 TODO: Talk about cluster limit bugs discovered during this
+
+### Hitting a Speed Bump
+
+In the process of testing this PR, I ran into a rather confusing bug. The new fill cluster buffers pass worked on some smaller test scenes, but spawning 1042 instances with 32217 meshlets per instance (cliff mesh) lead to the below glitch. It was really puzzling - only some instances would be affected (concentrated in the same region of space), and the clusters themselves appeared to be glitching and changing each frame.
+
+Debugging was complicated by the fact that the rewritten fill cluster buffers code is no longer deterministic. Clusters get written in different orders depending on how the scheduler schedules workgroups, and the order of the atomic writes. That meant that every time I clicked on a pass in RenderDoc to check it's output, the output would completely change as RenderDoc re-simulated code (RenderDoc does not _actually_ show results from the GPU, it's all simulated on the CPU) up until that point, ending up with a new output order.
+
+Since using a debugger wasn't stable enough to be useful, I tried to think the logic through. My first thought was that my rewritten code was subtly broken, but testing on mainline showed something alarming - the issue persisted. Testing several old PRs showed that it went back for several PRs. It couldn't have been due to any recent code changes.
+
+It took me a week or so of trial and error, and debugging on mainline (which did have a stable output order) but I eventually made the following observations:
+* 1041 cliffs: rendered correctly
+* 1042 cliffs: did _not_ render correctly, with 1 glitched instance
+* 1041 + N cliffs: the last N being spawned glitched out
+* 1042+ instances of a different mesh with much less meshlets than the cliff: _did_ render correctly
+* 1042+ cliffs on the PR before I increased meshlet size to 255v/128t: rendered correctly
+
+The issue turned out to be overflow of cluster ID. The output of the culling pass, and the data we store in the visbuffer is cluster ID + triangle ID packed together in a single u32. After increasing the meshlet size, it was 25 bits for the cluster ID, and 7 bits for the triangle ID (2^7 = 128 triangles).
+
+Doing the math, 1042 instances * 32217 meshlets = 33570114 clusters. 2^25 - 33570114 = -15682. We had overflowed the cluster limit by 15682 clusters. This meant that the cluster IDs we were passing around were garbage values, leading to glitchy rendering on any instances we spawned after the first 1041.
+
+Obviously this is a problem - the whole point of virtual geometry is to make rendering independent of scene complexity, yet now we have a rather low limit of 2^25 clusters in the scene.
+
+The solution is to never store data per cluster in the scene, and only store data per _visible_ cluster in the scene, i.e. clusters post LOD selection and culling. Not necessarily visible on screen, but visible in the sense that we're going to rasterize them. Doing so would require a large amount of architectural changes, however, and is not going to be a simple and easy fix. For now, I've documented the limitation, and merged this PR confident that it's not a regression.
 
 ## Software Rasterization Bugfixes
 PR [#16049](https://github.com/bevyengine/bevy/pull/16049) fixes some glitches in the software rasterizer.
@@ -526,7 +551,7 @@ The major, immediate priority (once I'm rested and ready to work on virtual geom
 
 The fix is (like Nanite does) to traverse a BVH (tree) of clusters, where we only need to process clusters up until they would be the wrong LOD, and then can immediately stop processing their children. Doing tree traversal on a GPU is very tricky, and doing it efficiently depends on [undefined behavior](https://arxiv.org/pdf/2109.06132v1) of GPU schedulers that not all GPUs have.
 
-Once I switch to tree traversal for cluster selection, I think (I'm not fully clear on the details yet) I can also get rid of the need for the fill cluster buffers pass, which would let us reclaim even more performance. Perhaps more crucially, we could do away with the need to allocate buffers to hold instance ID + cluster ID per cluster in the scene, instead letting us store this data per _visible_ (post LOD selection/culling) cluster in the scene. Besides the obvious memory savings, it also saves us from running into the cluster ID limit issue that was limiting our scene size before. We would no longer need a unique ID for each cluster in the scene - just a unique ID for visible clusters only, which is a much smaller amount.
+Once I switch to tree traversal for cluster selection, I think (I'm not fully clear on the details yet) I can also get rid of the need for the fill cluster buffers pass, which would let us reclaim even more performance. More crucially, we could do away with the need to allocate buffers to hold instance ID + cluster ID per cluster in the scene, instead letting us store this data per _visible_ (post LOD selection/culling) cluster in the scene. Besides the obvious memory savings, it also saves us from running into the cluster ID limit issue that was limiting our scene size before. We would no longer need a unique ID for each cluster in the scene - just a unique ID for visible clusters only, post tree traversal, which is a much smaller amount.
 
 Besides cluster selection improvements, and improving on existing stuff, other big areas I could work on include:
 
