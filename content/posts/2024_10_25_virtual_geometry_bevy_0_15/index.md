@@ -344,22 +344,50 @@ The tangent derivation I used was ["Surface Gradient–Based Bump Mapping Framew
 
 I used the code from this <https://www.jeremyong.com/graphics/2023/12/16/surface-gradient-bump-mapping> blog post, which also does a great job motivating and explaining the paper.
 
-The only issue I ran into is that the tangent.w always came out with the wrong sign compared to the existing mikktspace-tangents I had as a reference. I double checked my math and coordinate space handiness a couple of times, but could never figure out what was wrong. I ended up just inverting the sign after calculating the tangent.
+The only issue I ran into is that the tangent.w always came out with the wrong sign compared to the existing mikktspace-tangents I had as a reference. I double checked my math and coordinate space handiness a couple of times, but could never figure out what was wrong. I ended up just inverting the sign after calculating the tangent. If anyone knows what I did wrong, please open an [issue](https://github.com/bevyengine/bevy/issues)!
 
-At the cost of a few extra calculations in the material shading pass, and some slight inaccuracies compared to explicit tangents, mostly on curved surfaces, we save 16 bytes per vertex.
+At the cost of a few extra calculations in the material shading pass, and some slight inaccuracies compared to explicit tangents, mostly on curved surfaces, we save 16 bytes per vertex, both on disk (although LZ4 compression means it might be less in practice), and in memory.
 
 TODO: Image comparison
 
 Also of note is that while trying to debug the sign issue, I found that The Forge had published an [updated version](https://github.com/ConfettiFX/The-Forge/blob/9d43e69141a9cd0ce2ce2d2db5122234d3a2d5b5/Common_3/Renderer/VisibilityBuffer2/Shaders/FSL/vb_shading_utilities.h.fsl#L90-L150) of their partial derivatives calculations, fixing a small bug. I updated my WGSL port to match.
 
-## Vertex Attribute Compression
-PR [#15643](https://github.com/bevyengine/bevy/pull/15643)
+## Compressed Per-Meshlet Vertex Data
+PR [#15643](https://github.com/bevyengine/bevy/pull/15643) stores copies of the overall mesh's vertex attribute data per-meshlet, and then heavily compresses it.
 
-TODO
+### Motivation
 
+The whole idea behind virtual geometry is that you only pay (as much as possible, it's of course not perfect) for the geometry currently needed on screen. Zoomed out? You pay the rasterization cost for only a few triangles at a higher LOD, and not for the entire mesh. Part of the mesh occluded? It gets culled. But continuing on with the theme from the last PR, memory usage is also a big cost. We might be able to render a large scene of high poly meshes with clever usage of LODs and culling, but can we afford to _store_ all that mesh data to begin with in our GPU's measily 8-12gb of VRAM? (not even accounting for space taken up by material textures that will reduce our budget even further).
+
+The way we fix this is with streaming. Rather than keep everything in memory all the time, you have the GPU write requests of what data it needs to a buffer, read that back onto the CPU, and then load the requested data from disk into a fixed-size GPU buffer. If the GPU no longer needs a piece of data, you mark that section of the buffer as free space, and can write new data to it as new requests come in.
+
+Typical implementations stream entire LODs at a time, but our goal is to be much more fine-grained. We want to stream individual meshlets, not prebuilt LODs (in practice, Nanite streams fixed-size pages of meshlet data, and not individual meshlets). This presents a problem with our current implementation: since all meshlets reference the same set of vertex data, we have no simple way of unloading or loading vertex data for a single meshlet. While I'm not going to tackle streaming in Bevy 0.15, in this PR I'll be changing the way we store vertex data to solve this problem and unblock streaming in the future.
+
+Up until now, each MeshletMesh has had one set of vertex data shared between all meshlets within the mesh. Each meshlet has a local index buffer, mapping triangles to meshlet-local vertex IDs, and then a global index buffer mapping meshlet-local vetex IDs to actual vertex data from the mesh. E.g. triangle corner X within a meshlet points to vertex ID Y within a meshlet which points to vertex Z within the mesh.
+
+In order to support streaming, we're going to move to a new scheme. We will store a copy of vertex data for each meshlet, concatenated together into one slice. All the vertex data for meshlet 0 will be stored as one contiguous slice, with all the vertex data for meshlet 1 stored contiguously after it, and all the vertex data for meshlet 2 after _that_, etc.
+
+Each meshlet's local index buffer will point directly into vertices within the meshlet's vertex data slice, stored as an offset relative to the starting index of the meshlet's vertex data slice within the overall buffer. E.g. triangle corner X within a meshlet points to vertex Y within the meshlet directly.
+
+Besides unblocking streaming, this scheme is also much simpler to reason about, uses less dependent memory reads, and works much nicer with our software rasterization pass where each thread in the workgroup is loading the part of the meshlet's vertex data into workgroup shared memory.
+
+That was a lot of background and explanation for what's really a rather simple change, so let me finally get to the main topic of this PR: the problem with duplicating vertex data per meshlet is that we've just increased the size of our MeshletMesh asset by a thousandfold.
+
+The solution is quantization and compression.
+
+### Position Compression
+
+TODO:
+* Motivation
+* Position
+* Normal, UV
+* Meshlet struct definition
+* Runtime decoding
+
+https://advances.realtimerendering.com/s2021/Karis_Nanite_SIGGRAPH_Advances_2021_final.pdf#page=128
 https://arxiv.org/abs/2404.06359
-https://gpuopen.com/download/publications/DGF.pdf
 https://daniilvinn.github.io/2024/05/04/omniforce-vertex-quantization.html
+https://gpuopen.com/download/publications/DGF.pdf (more RT-oriented)
 
 ## Improved LOD Selection Heuristic
 PR [#15846](https://github.com/bevyengine/bevy/pull/15846) changes how we select the LOD cut.
