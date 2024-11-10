@@ -410,17 +410,97 @@ The solution is quantization and compression.
 
 ### Position Compression
 
-TODO:
-* Motivation
-* Position
-* Normal, UV
-* Meshlet struct definition
-* Runtime decoding
+Meshlets compress pretty well. Starting with vertex positions, there's no reason we need to store a full `vec3<f32>` per vertex. Most meshlets tend to enclose a fairly small amount of space. Instead of storing vertex positions as coordinates relative to the mesh center origin, we can instead store them in some coordinate space relative to meshlet bounds.
 
-https://advances.realtimerendering.com/s2021/Karis_Nanite_SIGGRAPH_Advances_2021_final.pdf#page=128
-https://arxiv.org/abs/2404.06359
-https://daniilvinn.github.io/2024/05/04/omniforce-vertex-quantization.html
-https://gpuopen.com/download/publications/DGF.pdf (more RT-oriented)
+For each meshlet, we'll iterate over all of its vertex positions, and calculate the min and max value for each of the X/Y/Z axis. Then, we can remap each position relative to those bounds by doing `p -= min`. The positions initially range from `[min, max]`, and then range from `[0, max - min]` after remapping. We can store the `min` values for each of the X/Y/Z axis (as a full `f32` each) in the meshlet metadata, and in the shader undo the remapping by doing `p += min`.
+
+Our first (albeit small) saving become apparent: at the cost of 12 extra bytes in the meshlet metadata, we save 3 bits per vertex position due to no longer needing a bit for the sign for each of the X/Y/Z values, as `[0, max - min]` is never going to contain any negative numbers. We technically now only need a hypothetical `f31` per axis.
+
+However, there's a another trick we can perform. If take the ceiling of log2 of a range of floating point values `ceil(log2(max - min + 1.0))`, we get the minimum number of bits we need to store any value in that range. Rather than storing meshlet vertex positions as a list of `vec3<f32>`s, we could instead store them as a packed list of bits (a bitstream).
+
+E.g. if we determine that we need 4/7/3 bits for the X/Y/Z ranges of the meshlet, we could store a list of bits where bits 0..4 are for vertex 0 axis X, bits 4..11 are for vertex 0 axis Y, bits 11..14 are for vertex 0 axis Z, bits 14..18 are for vertex 1 axis X, bits 18..25 are for vertex 1 axis Y, etc.
+
+Again we can store the bit size (as a `u8`) for each of the X/Y/Z axis within the meshlet's metadata, at a cost of 3 extra bytes. We'll use this later in our shaders to figure out how many bits to read from the bistream for each of the meshlet's vertices.
+
+Of course, if you try this out, you're probably going to end up with fairly large bit sizes per axis. This is due to all the precision we have in our vertex positions (a full `f32`), which leads to a lot of precision needed in the range, and therefore a large bit size.
+
+The final trick up our sleeves is that we don't actually _need_ all this precision. If we know that our meshlet's vertices range from 10.2041313123 to 84.382543538, do we really need to know that a vertex happens to be stored at _exactly_ 57.594392822? We could pick some arbitrary amount of precision to round each of our vertices to, say four decimal places, resulting in 57.5944. Less precision means a less precise range, which means our bit size will be smaller.
+
+Better yet, lets pick some factor `q = 2^p`, where `p` is some arbitrary `u8` integer. Now, lets snap each vertex to the nearest point on the grid that's a multiple of `1/q`, and then store the vertex as the number of "steps" of size `1/q` that we took from the origin to reach the snapped vertex position (a fixed-point representation). E.g. if we say `p = 4`, then we're quantizing to a grid with a resolution of `1/16`, so `v = 57.594392822` would snap to `v = 57.625` (throwing away some unnecessary precision) and would would store that as `v = round(57.594392822 / (1/16)) = i32(57.594392822 * 16 + 0.5) = 922`. This is once again easily reversible in our shader so long as we have our factor `p`: `922 / 2^4 = 57.625`.
+
+The factor `p` we choose is not particularly important. I set it to 4 by default (with an additional factor to convert from Bevy's meters to the more appropriate-for-this-use-case unit of centimeters), but users can choose a good value themselves if 4 is too high (unnecessary precision = larger bit sizes and therefore larger asset sizes), or too low (visible mesh deformity from snapping the vertices too-coarsely). Nanite has an automatic heuristic that I assume is based on some kind of triangle surface area to mesh size ratio, but also lets users choose `p` manually. The important thing to note is that you should _not_ choose `p` per-meshlet, i.e. `p` should be the same for every meshlet within the mesh. Otherwise, you might end up with cracks between meshlets.
+
+Finally, we can combine all three of these tricks. We can quantize our meshlet's vertices, find the per-axis min/max values and remap to a better range, and then store as a packed bitstream using the minimum number of bits for the range. The final code to compress a meshlet's vertex positions is below.
+
+```rust
+let quantization_factor =
+    (1 << vertex_position_quantization_factor) as f32 * CENTIMETERS_PER_METER;
+
+let mut min_quantized_position_channels = IVec3::MAX;
+let mut max_quantized_position_channels = IVec3::MIN;
+
+// Lossy vertex compression
+let mut quantized_positions = [IVec3::ZERO; 255];
+for (i, vertex_id) in meshlet_vertex_ids.iter().enumerate() {
+    let position = ...;
+
+    // Quantize position to a fixed-point IVec3
+    let quantized_position = (position * quantization_factor + 0.5).as_ivec3();
+    quantized_positions[i] = quantized_position;
+
+    // Compute per X/Y/Z-channel quantized position min/max for this meshlet
+    min_quantized_position_channels = min_quantized_position_channels.min(quantized_position);
+    max_quantized_position_channels = max_quantized_position_channels.max(quantized_position);
+}
+
+// Calculate bits needed to encode each quantized vertex position channel based on the range of each channel
+let range = max_quantized_position_channels - min_quantized_position_channels + 1;
+let bits_per_vertex_position_channel_x = log2(range.x as f32).ceil() as u8;
+let bits_per_vertex_position_channel_y = log2(range.y as f32).ceil() as u8;
+let bits_per_vertex_position_channel_z = log2(range.z as f32).ceil() as u8;
+
+// Lossless encoding of vertex positions in the minimum number of bits per channel
+for quantized_position in quantized_positions.iter().take(meshlet_vertex_ids.len()) {
+    // Remap [range_min, range_max] IVec3 to [0, range_max - range_min] UVec3
+    let position = (quantized_position - min_quantized_position_channels).as_uvec3();
+
+    // Store as a packed bitstream
+    vertex_positions.extend_from_bitslice(
+        &position.x.view_bits::<Lsb0>()[..bits_per_vertex_position_channel_x as usize],
+    );
+    vertex_positions.extend_from_bitslice(
+        &position.y.view_bits::<Lsb0>()[..bits_per_vertex_position_channel_y as usize],
+    );
+    vertex_positions.extend_from_bitslice(
+        &position.z.view_bits::<Lsb0>()[..bits_per_vertex_position_channel_z as usize],
+    );
+}
+```
+
+### Position Decoding
+
+TODO: Meshlet asset, bitstream reader
+
+### Other Attributes
+
+Now that we've done positions, lets talk about how to handle other vertex attributes.
+
+Tangents we already removed in the last PR.
+
+For UVs, I currently store them uncompressed. I could have maybe used half-precision floating point values, but I am wary of artifacts resulting from the reduced precision, so for right now it's a full `vec2<f32>`. This is a big opportunity for future improvement.
+
+Normals are a bit more interesting. They start as `vec3<f32>`. I first perform an octahedral encoding on them, bringing them down to a `vec2<f32>` near-losessly. I then give up some precision to reduce the size even further by using `pack2x16snorm()`, bringing it down to a `vec2<f16>`, or a packed `u32`. These operations are easily reversed in the shader using the built-in `unpack2x16snorm()` function, and then the simple octahedral decode step.
+
+I _did_ try a bitstream encoding similiar to what I did for positions, but couldn't get any smaller sizes than a simple `pack2x16snorm()`. I think with more time and motivation (I was getting burnt out by the end of this), I could have probably figured out a good variable-size octahedral encoding for normals as well. Something else to investigate in the future.
+
+### Results
+
+TODO
+
+* <https://advances.realtimerendering.com/s2021/Karis_Nanite_SIGGRAPH_Advances_2021_final.pdf#page=128>
+* <https://arxiv.org/abs/2404.06359> (also compresses the index buffer, not just vertices)
+* <https://daniilvinn.github.io/2024/05/04/omniforce-vertex-quantization.html>
+* <https://gpuopen.com/download/publications/DGF.pdf> (more focused on raytracing than rasterization)
 
 ## Improved LOD Selection Heuristic
 PR [#15846](https://github.com/bevyengine/bevy/pull/15846) changes how we select the LOD cut.
@@ -539,7 +619,7 @@ Overall, in a test scene with 1041 instances with 32217 meshlets per instance, w
 
 In the process of testing this PR, I ran into a rather confusing bug. The new fill cluster buffers pass worked on some smaller test scenes, but spawning 1042 instances with 32217 meshlets per instance (cliff mesh) lead to the below glitch. It was really puzzling - only some instances would be affected (concentrated in the same region of space), and the clusters themselves appeared to be glitching and changing each frame.
 
-Debugging the issue was complicated by the fact that the rewritten fill cluster buffers code is no longer deterministic. Clusters get written in different orders depending on how the scheduler schedules workgroups, and the order of the atomic writes. That meant that every time I clicked on a pass in RenderDoc to check it's output, the output would completely change as RenderDoc re-simulated code (RenderDoc does not _actually_ show results from the GPU, it's all simulated on the CPU) up until that point, ending up with a new output order.
+Debugging the issue was complicated by the fact that the rewritten fill cluster buffers code is no longer deterministic. Clusters get written in different orders depending on how the scheduler schedules workgroups, and the order of the atomic writes. That meant that every time I clicked on a pass in RenderDoc to check it's output, the output order would completely change as RenderDoc replayed the entire command stream up until that point.
 
 Since using a debugger wasn't stable enough to be useful, I tried to think the logic through. My first thought was that my rewritten code was subtly broken, but testing on mainline showed something alarming - the issue persisted. Testing several old PRs showed that it went back for several PRs. It couldn't have been due to any recent code changes.
 
