@@ -774,7 +774,39 @@ There's still work to be done in this area - I'm not currently account for UV co
 
 ## Results: Bevy 0.14 vs 0.15
 
-(Compare perf but also memory usage, use tables)
+Finally, I'd like to compare Bevy v0.14 to (what will soon release as) v0.15.
+
+The test scene we'll be looking at is 3375 instances of the Stanford bunny mesh arranged in a 15x15x15 cube, running at 1080p on an RTX 3080 locked to base clocks.
+
+![Screenshot v0.14](0.14.png)
+*Test scene in Bevy v0.14.*
+![Screenshot v0.15](0.15.png)
+*Test scene in Bevy v0.15.*
+
+<center>
+
+|          Pass          |    v0.14    |    v0.15    |
+|:----------------------:|:-----------:|:-----------:|
+|  Fill Cluster Buffers  |     0.30    |     0.12    |
+|      Culling First     |     0.99    |     0.19    |
+|  Software Raster First |     N/A     |     0.42    |
+|  Hardware Raster First |     3.44    |    < 0.01   |
+|    Downsample Depth    |     0.03    |     0.03    |
+|     Culling Second     |     0.14    |     0.06    |
+| Software Raster Second |     N/A     |    < 0.01   |
+| Hardware Raster Second |    < 0.01   |    < 0.01   |
+|      Resolve Depth     |     N/A     |     0.04    |
+| Resolve Material Depth |     0.04    |     0.04    |
+|    Downsample Depth    |     0.03    |     0.03    |
+|        **Total**       | **4.97 ms** | **0.93 ms** |
+
+*GPU timings to render the visbuffer (so excluding shading, and any CPU work).*
+
+</center>
+
+TODO: Memory usage, disk size (0.14: 5.04mb, 0.15: 3.61mb), screenshots, meshlets per LOD level, maybe amounts of meshlets per triangle count(?), cliffs performance in v0.15
+
+TODO: Discuss results
 
 ## Roadmap
 I got a lot done in Bevy 0.15, but there's still a _ton_ left to do for Bevy 0.16 and beyond.
