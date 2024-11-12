@@ -785,7 +785,7 @@ The test scene we'll be looking at is 3375 instances of the Stanford bunny mesh 
 ![Screenshot v0.15](0.15.png)
 *Test scene in Bevy v0.15.*
 
-</center>
+---
 
 ### GPU Timings
 
@@ -806,11 +806,9 @@ The test scene we'll be looking at is 3375 instances of the Stanford bunny mesh 
 
 *GPU timings to render the visbuffer (so excluding shading, and any CPU work).*
 
-</center>
+---
 
 ### DAG Layout
-
-<center>
 
 | LOD Level | Meshlets | Meshlets With 64 Triangles (full) |
 |:---------:|:--------:|:---------------------------------:|
@@ -841,11 +839,9 @@ The test scene we'll be looking at is 3375 instances of the Stanford bunny mesh 
 
 *DAG for the meshlet mesh in Bevy v0.15.*
 
-</center>
+---
 
 ### Asset Size
-
-<center>
 
 |  v0.14  |  v0.15  |
 |:-------:|:-------:|
