@@ -822,7 +822,7 @@ The test scene we'll be looking at is 3375 instances of the Stanford bunny mesh 
 
 *DAG for the meshlet mesh in Bevy v0.14.*
 
-| LOD Level | Meshlets | Meshlets wWth 128 Triangles (full) |
+| LOD Level | Meshlets | Meshlets With 128 Triangles (full) |
 |:---------:|:--------:|:----------------------------------:|
 |     0     |   1126   |                1125                |
 |     1     |    608   |                 517                |
