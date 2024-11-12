@@ -8,6 +8,8 @@ tags = ["bevy", "virtual geometry"]
 
 ## Introduction
 
+TODO: Cover image
+
 It's been a little over 4 months [since my last post](@/posts/2024_06_09_virtual_geometry_bevy_0_14/index.md) when I talked about the very early prototype of virtual geometry I wrote for Bevy 0.14.
 
 While it's still not production ready, the version of virtual geometry that will ship in Bevy 0.15 (which is releasing soon) is a very large step in the right direction!
@@ -708,6 +710,8 @@ Overall, in a test scene with 1041 instances with 32217 meshlets per instance, w
 ### Hitting a Speed Bump
 
 In the process of testing this PR, I ran into a rather confusing bug. The new fill cluster buffers pass worked on some smaller test scenes, but spawning 1042 instances with 32217 meshlets per instance (cliff mesh) lead to the below glitch. It was really puzzling - only some instances would be affected (concentrated in the same region of space), and the clusters themselves appeared to be glitching and changing each frame.
+
+TODO: Show bugged images
 
 Debugging the issue was complicated by the fact that the rewritten fill cluster buffers code is no longer deterministic. Clusters get written in different orders depending on how the scheduler schedules workgroups, and the order of the atomic writes. That meant that every time I clicked on a pass in RenderDoc to check it's output, the output order would completely change as RenderDoc replayed the entire command stream up until that point.
 
