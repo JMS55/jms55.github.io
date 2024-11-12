@@ -778,12 +778,16 @@ Finally, I'd like to compare Bevy v0.14 to (what will soon release as) v0.15.
 
 The test scene we'll be looking at is 3375 instances of the Stanford bunny mesh arranged in a 15x15x15 cube, running at 1080p on an RTX 3080 locked to base clocks.
 
+<center>
+
 ![Screenshot v0.14](0.14.png)
 *Test scene in Bevy v0.14.*
 ![Screenshot v0.15](0.15.png)
 *Test scene in Bevy v0.15.*
 
-<center>
+</center>
+
+### GPU Timings
 
 |          Pass          |    v0.14    |    v0.15    |
 |:----------------------:|:-----------:|:-----------:|
@@ -804,9 +808,79 @@ The test scene we'll be looking at is 3375 instances of the Stanford bunny mesh 
 
 </center>
 
-TODO: Memory usage, disk size (0.14: 5.04mb, 0.15: 3.61mb), screenshots, meshlets per LOD level, maybe amounts of meshlets per triangle count(?), cliffs performance in v0.15
+### DAG Layout
+
+<center>
+
+| LOD Level | Meshlets | Meshlets With 64 Triangles (full) |
+|:---------:|:--------:|:---------------------------------:|
+|     0     |   2251   |                2250               |
+|     1     |   1320   |                931                |
+|     2     |    672   |                383                |
+|     3     |    373   |                172                |
+|     4     |    173   |                 47                |
+|     5     |    74    |                 15                |
+|     6     |    19    |                 4                 |
+
+*DAG for the meshlet mesh in Bevy v0.14.*
+
+| LOD Level | Meshlets | Meshlets wWth 128 Triangles (full) |
+|:---------:|:--------:|:----------------------------------:|
+|     0     |   1126   |                1125                |
+|     1     |    608   |                 517                |
+|     2     |    310   |                 251                |
+|     3     |    162   |                 129                |
+|     4     |    80    |                 61                 |
+|     5     |    38    |                 29                 |
+|     6     |    20    |                 15                 |
+|     7     |    10    |                  7                 |
+|     8     |     5    |                  3                 |
+|     9     |     3    |                  2                 |
+|     10    |     2    |                  1                 |
+|     11    |     1    |                  1                 |
+
+*DAG for the meshlet mesh in Bevy v0.15.*
+
+</center>
+
+### Asset Size
+
+<center>
+
+|  v0.14  |  v0.15  |
+|:-------:|:-------:|
+| 5.05 mb | 3.61 mb |
+
+*Disk space used for the meshlet mesh.*
+
+|     Data Type    |        Size (bytes)        |
+|:----------------:|:--------------------------:|
+|    Vertex Data   |           3505296          |
+|    Vertex IDs    |           3651840          |
+|      Indices     |           2738880          |
+|     Meshlets     |     12 * 4882 = 458584     |
+| Bounding Spheres |           234336           |
+|     **Total**    | **10588936 = 10.58894 mb** |
+
+*Memory used for the meshlet mesh in Bevy v0.14.*
+
+|       Data Type       |        Size (bytes)       |
+|:---------------------:|:-------------------------:|
+|    Vertex Positions   |           590132          |
+|     Vertex Normals    |           788476          |
+|       Vertex UVs      |          1576952          |
+|        Indices        |          1374336          |
+|        Meshlets       |     32 * 2365 = 75680     |
+|    Bounding Spheres   |           113520          |
+| Simplification Errors |            9460           |
+|       **Total**       | **4528556 = 4.528556 mb** |
+
+*Memory used for the meshlet mesh in Bevy v0.15.*
+
+</center>
 
 TODO: Discuss results
+TODO: Cliff results and/or real scene results
 
 ## Roadmap
 I got a lot done in Bevy 0.15, but there's still a _ton_ left to do for Bevy 0.16 and beyond.
