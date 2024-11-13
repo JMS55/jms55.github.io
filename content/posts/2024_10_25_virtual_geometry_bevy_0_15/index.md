@@ -8,7 +8,7 @@ tags = ["bevy", "virtual geometry"]
 
 ## Introduction
 
-TODO: Cover image
+![Screenshot of some megascans in Bevy 0.15](cover.png)
 
 It's been a little over 4 months [since my last post](@/posts/2024_06_09_virtual_geometry_bevy_0_14/index.md) when I talked about the very early prototype of virtual geometry I wrote for Bevy 0.14.
 
@@ -381,9 +381,12 @@ fn calculate_world_tangent(
 }
 ```
 
-At the cost of a few extra calculations in the material shading pass, and some slight inaccuracies compared to explicit tangents, mostly on curved surfaces, we save 16 bytes per vertex, both on disk (although LZ4 compression means we might be saving less in practice), and in memory.
+At the cost of a few extra calculations in the material shading pass, and some slight inaccuracies compared to explicit tangents (mostly on curved surfaces), we save 16 bytes per vertex, both on disk (although LZ4 compression means we might be saving less in practice), and in memory.
 
-TODO: Image comparison
+
+| Explicit Tangents (0.14)                                 | Implicit tangents (0.15)                                 |
+| -------------------------------------------------------- | -------------------------------------------------------- |
+| ![Explicit tangents in Bevy 0.14](explicit_tangents.png) | ![Implicit tangents in bevy 0.15](implicit_tangents.png) |
 
 Also of note is that while trying to debug the sign issue, I found that The Forge had published an [updated version](https://github.com/ConfettiFX/The-Forge/blob/9d43e69141a9cd0ce2ce2d2db5122234d3a2d5b5/Common_3/Renderer/VisibilityBuffer2/Shaders/FSL/vb_shading_utilities.h.fsl#L90-L150) of their partial derivatives calculations, fixing a small bug. I updated my WGSL port to match.
 
@@ -427,6 +430,13 @@ Again we can store the bit size (as a `u8`) for each of the X/Y/Z axis within th
 Of course, if you try this out, you're probably going to end up with fairly large bit sizes per axis, and not actually save any space vs using `vec3<f32>`. This is due to the large amount of precision we have in our vertex positions (a full `f32`), which leads to a lot of precision needed in the range, and therefore a large bit size.
 
 The final trick up our sleeves is that we don't actually _need_ all this precision. If we know that our meshlet's vertices range from 10.2041313123 to 84.382543538, do we really need to know that a vertex happens to be stored at _exactly_ 57.594392822? We could pick some arbitrary amount of precision to round each of our vertices to, say four decimal places, resulting in 57.5944. Less precision means a less precise range, which means our bit size will be smaller.
+
+<center>
+
+![Too much quantization](quantize_error.png)
+*Don't quantize too much!*
+
+</center>
 
 Better yet, lets pick some factor `q = 2^p`, where `p` is some arbitrary `u8` integer. Now, lets snap each vertex to the nearest point on the grid that's a multiple of `1/q`, and then store the vertex as the number of "steps" of size `1/q` that we took from the origin to reach the snapped vertex position (a fixed-point representation). E.g. if we say `p = 4`, then we're quantizing to a grid with a resolution of `1/16`, so `v = 57.594392822` would snap to `v = 57.625` (throwing away some unnecessary precision) and we would store that as `v = round(57.594392822 / (1/16)) = i32(57.594392822 * 16 + 0.5) = 922`. This is once again easily reversible in our shader so long as we have our factor `p`: `922 / 2^4 = 57.625`.
 
@@ -711,7 +721,7 @@ Overall, in a test scene with 1041 instances with 32217 meshlets per instance, w
 
 In the process of testing this PR, I ran into a rather confusing bug. The new fill cluster buffers pass worked on some smaller test scenes, but spawning 1042 instances with 32217 meshlets per instance (cliff mesh) lead to the below glitch. It was really puzzling - only some instances would be affected (concentrated in the same region of space), and the clusters themselves appeared to be glitching and changing each frame.
 
-TODO: Show bugged images
+![Glitched mesh](cluster-limit.png)
 
 Debugging the issue was complicated by the fact that the rewritten fill cluster buffers code is no longer deterministic. Clusters get written in different orders depending on how the scheduler schedules workgroups, and the order of the atomic writes. That meant that every time I clicked on a pass in RenderDoc to check it's output, the output order would completely change as RenderDoc replayed the entire command stream up until that point.
 
@@ -738,7 +748,21 @@ PR [#16049](https://github.com/bevyengine/bevy/pull/16049) fixes some glitches i
 
 While testing out some scenes to prepare for the release, I discovered some previously-missed bugs with software rasterization. When zooming in to the scene, sometimes triangles would randomly glitch and cover the whole screen, leading to massive slowdowns (remember the software rasterizer is meant to operate on small triangles only). Similarly, when zooming out, sometimes there would be single stray pixels rendered that didn't belong. These issues didn't occur with only hardware rasterization enabled.
 
+<center>
+
+![Stray pixels glitch](stray_pixels.png)
+*Stray pixels on the tops of the pawns and king.*
+
+</center>
+
 The stray pixels turned out to be due to two issues. The first bug is in how I calculated the bounding box around each triangle. I wasn't properly accounting for triangles that would be partially on-screen, and partially off-screen. I changed my bounding box calculations to stick to floating point, and clamped negative bounds to 0 to fix. The second bug is that I didn't perform any backface culling in the software rasterizer, and ignoring it does not lead to valid results. If you want a double-sided mesh, then you need to explicitly check for backfacing triangles and invert them. If you want backface culling (I do), then you need to reject the triangle if it's backfacing. Ignoring it turned out to not be an option - skipping backface culling earlier turned out to have bitten me :).
+
+<center>
+
+![Fullscreen triangle glitch](fullscreen_triangle.png)
+*The large green and orange triangles aren't supposed to be there.*
+
+</center>
 
 The fullscreen triangles was trickier to figure out, but I ended up narrowing it down to near plane clipping. Rasterization math, specifically the homogenous divide, has a [singularity](https://en.wikipedia.org/wiki/Singularity_(mathematics)) when z = 0. Normally, the way you solve this is by clipping to the near plane, which is a frustum plane positioned slightly in front of z = 0. As long as you provide the plane, GPU rasterizers handle near plane clipping for you automatically. In my software rasterizer, however, I had of course not accounted for near plane clipping. That meant that we were getting Nan/Infinity vertex positions due to the singularity during the homogenous divide, which led to the garbage triangles we were seeing.
 
@@ -762,8 +786,6 @@ if cluster_is_small && not_intersects_near_plane {
 ```
 
 With these changes, software raster is now visibly bug-free.
-
-TODO: Show bugged images from PR
 
 ## Normal-aware LOD Selection
 PR [#16111](https://github.com/bevyengine/bevy/pull/16111) improves how we calculate the LOD cut to account for vertex normals.
@@ -880,7 +902,7 @@ The test scene we'll be looking at is 3375 instances of the Stanford bunny mesh 
 </center>
 
 TODO: Discuss results
-TODO: Cliff results and/or real scene results
+TODO: Cliff results
 
 ## Roadmap
 I got a lot done in Bevy 0.15, but there's still a _ton_ left to do for Bevy 0.16 and beyond.
