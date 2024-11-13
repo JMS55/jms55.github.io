@@ -10,7 +10,7 @@ tags = ["bevy", "virtual geometry"]
 
 ![Screenshot of some megascans in Bevy 0.15](cover.png)
 
-It's been a little over 4 months [since my last post](@/posts/2024_06_09_virtual_geometry_bevy_0_14/index.md) when I talked about the very early prototype of virtual geometry I wrote for Bevy 0.14.
+It's been a little over 5 months [since my last post](@/posts/2024_06_09_virtual_geometry_bevy_0_14/index.md) when I talked about the very early prototype of virtual geometry I wrote for Bevy 0.14.
 
 While it's still not production ready, the version of virtual geometry that will ship in Bevy 0.15 (which is releasing soon) is a very large step in the right direction!
 
