@@ -802,33 +802,37 @@ There's still work to be done in this area - I'm not currently account for UV co
 
 Finally, I'd like to compare Bevy v0.14 to (what will soon release as) v0.15.
 
-The test scene we'll be looking at is 3375 instances of the Stanford bunny mesh arranged in a 15x15x15 cube, running at a resolution of 2240x1260 on an RTX 3080 locked to base clocks.
+The test scene we'll be comparing is 3375 instances of the Stanford bunny mesh arranged in a 15x15x15 cube, running at a resolution of 2240x1260 on an RTX 3080 locked to base clocks.
+
+As an additional test scene, we'll also be looking at 847 instances of the [Huge Icelandic Lava Cliff](https://www.fab.com/listings/e16b2143-5512-4460-bd0c-9270c4c6df51) quixel megascan asset arranged in an 11x11x7 rectangular prism. This asset was too big to process in Bevy v0.14, so for this scene we'll only be looking at data from Bevy v0.15.
 
 <center>
 
-![Screenshot v0.14](0.14.png)
-*Test scene in Bevy v0.14.*
-![Screenshot v0.15](0.15.png)
-*Test scene in Bevy v0.15.*
+![Bunny scene screenshot v0.14](0.14.png)
+*Bunny scene in Bevy v0.14.*
+![Bunny scene screenshot v0.15](0.15.png)
+*Bunny scene in Bevy v0.15.*
+![Cliff scene screenshot v0.15](cliffs.png)
+*Cliff scene in Bevy v0.15.*
 
 ---
 
 ### GPU Timings
 
-|          Pass          |    v0.14    |    v0.15    |
-|:----------------------:|:-----------:|:-----------:|
-|  Fill Cluster Buffers  |     0.30    |     0.12    |
-|      Culling First     |     0.99    |     0.19    |
-|  Software Raster First |     N/A     |     0.42    |
-|  Hardware Raster First |     3.44    |    < 0.01   |
-|    Downsample Depth    |     0.03    |     0.03    |
-|     Culling Second     |     0.14    |     0.06    |
-| Software Raster Second |     N/A     |    < 0.01   |
-| Hardware Raster Second |    < 0.01   |    < 0.01   |
-|      Resolve Depth     |     N/A     |     0.04    |
-| Resolve Material Depth |     0.04    |     0.04    |
-|    Downsample Depth    |     0.03    |     0.03    |
-|        **Total**       | **4.97 ms** | **0.93 ms** |
+|          Pass          | Bunny v0.14 | Bunny v0.15 | Cliff v0.15 |
+|:----------------------:|:-----------:|:-----------:|:-----------:|
+|  Fill Cluster Buffers  |     0.30    |     0.12    |     0.31    |
+|      Culling First     |     0.99    |     0.19    |     1.27    |
+|  Software Raster First |     N/A     |     0.42    |     0.34    |
+|  Hardware Raster First |     3.44    |    < 0.01   |     0.02    |
+|    Downsample Depth    |     0.03    |     0.03    |     0.05    |
+|     Culling Second     |     0.14    |     0.06    |     0.19    |
+| Software Raster Second |     N/A     |    < 0.01   |    < 0.01   |
+| Hardware Raster Second |    < 0.01   |    < 0.01   |    < 0.01   |
+|      Resolve Depth     |     N/A     |     0.04    |     0.05    |
+| Resolve Material Depth |     0.04    |     0.04    |     0.04    |
+|    Downsample Depth    |     0.03    |     0.03    |     0.05    |
+|        **Total**       | **4.97 ms** | **0.93 ms** | **2.32 ms** |
 
 *GPU timings to render the visbuffer (so excluding shading, and any CPU work).*
 
@@ -846,7 +850,7 @@ The test scene we'll be looking at is 3375 instances of the Stanford bunny mesh 
 |     5     |    74    |                 15                |
 |     6     |    19    |                 4                 |
 
-*DAG for the meshlet mesh in Bevy v0.14.*
+*DAG for the bunny meshlet mesh in Bevy v0.14.*
 
 | LOD Level | Meshlets | Meshlets With 128 Triangles (full) |
 |:---------:|:--------:|:----------------------------------:|
@@ -863,17 +867,37 @@ The test scene we'll be looking at is 3375 instances of the Stanford bunny mesh 
 |     10    |     2    |                  1                 |
 |     11    |     1    |                  1                 |
 
-*DAG for the meshlet mesh in Bevy v0.15.*
+*DAG for the bunny meshlet mesh in Bevy v0.15.*
+
+| LOD Level | Meshlets | Meshlets With 128 Triangles (full) |
+|:---------:|:--------:|:----------------------------------:|
+|     0     |   15616  |                15615               |
+|     1     |   7944   |                7610                |
+|     2     |   4306   |                3535                |
+|     3     |   2200   |                1728                |
+|     4     |   1109   |                 844                |
+|     5     |    552   |                 425                |
+|     6     |    282   |                 214                |
+|     7     |    139   |                 105                |
+|     8     |    69    |                 51                 |
+|     9     |    35    |                 26                 |
+|     10    |    18    |                 13                 |
+|     11    |     9    |                  6                 |
+|     12    |     5    |                  3                 |
+|     13    |     2    |                  1                 |
+|     14    |     2    |                  1                 |
+
+*DAG for the cliff meshlet mesh in Bevy v0.15.*
 
 ---
 
 ### Asset Size
 
-|  v0.14  |  v0.15  |
-|:-------:|:-------:|
-| 5.05 mb | 3.61 mb |
+| Bunny v0.14 | Bunny v0.15 | Cliff v0.15 |
+|:-----------:|:-----------:|:-----------:|
+|   5.05 mb   |   3.61 mb   |   49.83 mb  |
 
-*Disk space used for the meshlet mesh.*
+*Disk space used for each meshlet mesh.*
 
 |     Data Type    |        Size (bytes)        |
 |:----------------:|:--------------------------:|
@@ -884,7 +908,7 @@ The test scene we'll be looking at is 3375 instances of the Stanford bunny mesh 
 | Bounding Spheres |           234336           |
 |     **Total**    | **10588936 = 10.58894 mb** |
 
-*Memory used for the meshlet mesh in Bevy v0.14.*
+*Memory used for the bunny meshlet mesh in Bevy v0.14.*
 
 |       Data Type       |        Size (bytes)       |
 |:---------------------:|:-------------------------:|
@@ -897,12 +921,24 @@ The test scene we'll be looking at is 3375 instances of the Stanford bunny mesh 
 | Simplification Errors |            9460           |
 |       **Total**       | **4528556 = 4.528556 mb** |
 
-*Memory used for the meshlet mesh in Bevy v0.15.*
+*Memory used for the bunny meshlet mesh in Bevy v0.15.*
+
+|       Data Type       |         Size (bytes)        |
+|:---------------------:|:---------------------------:|
+|    Vertex Positions   |           8537220           |
+|     Vertex Normals    |           10851996          |
+|       Vertex UVs      |           21703992          |
+|        Indices        |           19245696          |
+|        Meshlets       |     32 * 32288 = 1033216    |
+|    Bounding Spheres   |           1549824           |
+| Simplification Errors |            129152           |
+|       **Total**       | **63051096 = 63.051096 mb** |
+
+*Memory used for the cliff meshlet mesh in Bevy v0.15.*
 
 </center>
 
 TODO: Discuss results
-TODO: Cliff results
 
 ## Roadmap
 I got a lot done in Bevy 0.15, but there's still a _ton_ left to do for Bevy 0.16 and beyond.
