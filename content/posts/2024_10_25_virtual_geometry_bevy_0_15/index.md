@@ -802,7 +802,7 @@ There's still work to be done in this area - I'm not currently account for UV co
 
 Finally, I'd like to compare Bevy v0.14 to (what will soon release as) v0.15.
 
-The test scene we'll be looking at is 3375 instances of the Stanford bunny mesh arranged in a 15x15x15 cube, running at 1080p on an RTX 3080 locked to base clocks.
+The test scene we'll be looking at is 3375 instances of the Stanford bunny mesh arranged in a 15x15x15 cube, running at a resolution of 2240x1260 on an RTX 3080 locked to base clocks.
 
 <center>
 
