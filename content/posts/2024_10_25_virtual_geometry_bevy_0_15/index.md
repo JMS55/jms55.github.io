@@ -434,7 +434,7 @@ The final trick up our sleeves is that we don't actually _need_ all this precisi
 <center>
 
 ![Too much quantization](quantize_error.png)
-*Don't quantize too much!*
+*Don't quantize too much, or you'll get bugs!*
 
 </center>
 
