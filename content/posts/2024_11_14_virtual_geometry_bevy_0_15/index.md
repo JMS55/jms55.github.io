@@ -603,7 +603,7 @@ I _did_ try a bitstream encoding similiar to what I did for positions, but could
 
 After all this, how much memory savings did we get?
 
-Disk space is practically unchanged (maybe 2% smaller at best), but memory savings on a test mesh went from `110 mb` before this PR (without duplicating the vertex data per-meshlet at all), to `64 mb` after this PR (copying and compressing vertex data per-meshlet). This is a huge savings (`42%` smaller), with room for future improvements! I'll definitely be coming back to this at some point in the future.
+Disk space is practically unchanged (maybe 2% smaller at best), but memory savings on a test mesh went from `110 MB` before this PR (without duplicating the vertex data per-meshlet at all), to `64 MB` after this PR (copying and compressing vertex data per-meshlet). This is a huge savings (`42%` smaller), with room for future improvements! I'll definitely be coming back to this at some point in the future.
 
 Additional references:
 * <https://advances.realtimerendering.com/s2021/Karis_Nanite_SIGGRAPH_Advances_2021_final.pdf#page=128>
@@ -902,7 +902,7 @@ As an additional test scene, we'll also be looking at 847 instances of the [Huge
 
 | Bunny v0.14 | Bunny v0.15 | Cliff v0.15 |
 |:-----------:|:-----------:|:-----------:|
-|   5.05 mb   |   3.61 mb   |   49.83 mb  |
+|   5.05 MB   |   3.61 MB   |   49.83 MB  |
 
 *Disk space used for each meshlet mesh.*
 
@@ -913,7 +913,7 @@ As an additional test scene, we'll also be looking at 847 instances of the [Huge
 |      Indices     |           2738880          |
 |     Meshlets     |      16 * 4882 = 78112     |
 | Bounding Spheres |           234336           |
-|     **Total**    | **10208464 = 10.20846 mb** |
+|     **Total**    | **10208464 = 10.20846 MB** |
 
 *Memory used for the bunny meshlet mesh in Bevy v0.14.*
 
@@ -926,7 +926,7 @@ As an additional test scene, we'll also be looking at 847 instances of the [Huge
 |        Meshlets       |     32 * 2365 = 75680     |
 |    Bounding Spheres   |           113520          |
 | Simplification Errors |            9460           |
-|       **Total**       | **4528556 = 4.528556 mb** |
+|       **Total**       | **4528556 = 4.528556 MB** |
 
 *Memory used for the bunny meshlet mesh in Bevy v0.15.*
 
@@ -939,7 +939,7 @@ As an additional test scene, we'll also be looking at 847 instances of the [Huge
 |        Meshlets       |     32 * 32288 = 1033216    |
 |    Bounding Spheres   |           1549824           |
 | Simplification Errors |            129152           |
-|       **Total**       | **63051096 = 63.051096 mb** |
+|       **Total**       | **63051096 = 63.051096 MB** |
 
 *Memory used for the cliff meshlet mesh in Bevy v0.15.*
 
@@ -955,7 +955,7 @@ Comparing meshlet fill rate (percentage of meshlets with the maximum number of t
 
 However, looking at further LOD levels, Bevy 0.14 performs very badly, going down to an abysmal 20% fill rate at the lowest. Bevy 0.15 is a lot better, with the worst fill rate being 76%, and the variance being a lot lower. It's still not perfect - a lot of the time we still have to deal with stuck triangles that never get simplified when processing complex meshes - but it's good progress!
 
-Memory and disk size are also much lower in Bevy 0.15 than Bevy 0.14, although a lot of this (but not all) comes down to the ~half as many overall meshlets in the DAG, meaning that there's less data to store in the first place. Still, adding up the vertex info for Bevy 0.14 (vertex data + vertex IDs = `7.16 mb`) and for Bevy 0.15 (vertex positions + normals + UVs = `2.956 mb`) shows a clear reduction in memory usage for the same amount of triangles in the original mesh.
+Memory and disk size are also much lower in Bevy 0.15 than Bevy 0.14, although a lot of this (but not all) comes down to the ~half as many overall meshlets in the DAG, meaning that there's less data to store in the first place. Still, adding up the vertex info for Bevy 0.14 (vertex data + vertex IDs = `7.16 MB`) and for Bevy 0.15 (vertex positions + normals + UVs = `2.956 MB`) shows a clear reduction in memory usage for the same amount of triangles in the original mesh.
 
 ### Discussion - Performance
 
