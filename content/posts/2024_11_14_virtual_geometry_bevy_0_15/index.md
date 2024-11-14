@@ -803,7 +803,7 @@ I now use this function to pass vertex normals into the simplifier, meaning that
 
 Without this change, before this PR, visualizing the pixel positions was near-seamless as the LOD cut changed when you zoomed in or out. Pixel normals, however, had visible differences between LOD cuts. After this PR, normals are now near-seamless too.
 
-There's still work to be done in this area - I'm not currently account for UV coordinate deformation, and the weights I chose for position vs normal influence are completely arbitrary. The Nanite presentation talks about this problem a lot - pre-calculating an error amount that perfectly accounts for every aspect of human perception, for meshes with arbitrary materials, is a _really_ hard problem. The best we can do is spend time tweaking heuristics, which I'll leave for a future PR.
+There's still work to be done in this area - I'm not currently accounting for UV coordinate deformation, and the weights I chose for position vs normal influence are completely arbitrary. The Nanite presentation talks about this problem a lot - pre-calculating an error amount that perfectly accounts for every aspect of human perception, for meshes with arbitrary materials, is a _really_ hard problem. The best we can do is spend time tweaking heuristics, which I'll leave for a future PR.
 
 ## Results: Bevy 0.14 vs 0.15
 
