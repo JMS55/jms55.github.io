@@ -653,7 +653,7 @@ Following on from the last PR, I again took a bunch of improvements from the mes
 
 With all of these changes combined, we can finally reliably get down to a single meshlet (or at least 1-3 meshlets for larger meshes) at the highest LOD!
 
-The last item on the list in particular is a _huge_ improvement. Consider this scenario: TODO
+The last item on the list in particular is a _huge_ improvement. With meshoptimizer's `LOCK_BORDER` flag, the entire edge of the mesh will be locked. That means that at the most simplified LOD level, the entire border of the original mesh will be preserved. You will pretty much never be able to reduce down to 1 meshlet with this constraint. Using manual vertex locks to only lock vertices belonging to shared edges between meshlets (regardless of whether or not they're on the original mesh border) fixes this issue.
 
 ## Faster Fill Cluster Buffers Pass
 PR [#15955](https://github.com/bevyengine/bevy/pull/15955) improves the speed of the fill cluster buffers pass.
@@ -904,9 +904,9 @@ As an additional test scene, we'll also be looking at 847 instances of the [Huge
 |    Vertex Data   |           3505296          |
 |    Vertex IDs    |           3651840          |
 |      Indices     |           2738880          |
-|     Meshlets     |     12 * 4882 = 458584     |
+|     Meshlets     |      16 * 4882 = 78112     |
 | Bounding Spheres |           234336           |
-|     **Total**    | **10588936 = 10.58894 mb** |
+|     **Total**    | **10208464 = 10.20846 mb** |
 
 *Memory used for the bunny meshlet mesh in Bevy v0.14.*
 
@@ -938,7 +938,31 @@ As an additional test scene, we'll also be looking at 847 instances of the [Huge
 
 </center>
 
-TODO: Discuss results
+### Discussion - Asset
+
+First, lets compare the DAG layout between the Stanford bunny in Bevy 0.14 and 0.15. In Bevy 0.14, with 64 triangles max per meshlet, we start with 2250 meshlets at LOD 0. In Bevy 0.15, with 128 triangles max per meshlet, we have exactly half as many at 1125.
+
+In Bevy 0.14, the DAG has 7 levels, ending with 19 meshlets. In Bevy 0.15, the DAG has 12 levels, ending at a single meshlet! For an ideal DAG, we want half as many meshlets at each LOD level, resulting in half as many triangles at each level. That means that with 1125 meshlets at LOD level 0, we want `ceil(log2(1125)) = 11` additional levels, for 12 total. In Bevy 0.15, we have 12! Meanwhile in Bevy 0.14, we also want 12 levels, but fall short at only 7 levels. We clearly improved the DAG structure compared to the previous version.
+
+Comparing meshlet fill rate (percentage of meshlets with the maximum number of triangles), both versions have an almost 100% fill rate at LOD 0 (the mesh is probably not a perfect multiple of the max triangle count). Meshoptimizer does a great job of equally partitioning triangles for the initial mesh.
+
+However, looking at further LOD levels, Bevy 0.14 performs very badly, going down to an abysmal 20% fill rate at the lowest. Bevy 0.15 is a lot better, with the worst fill rate being 76%, and the variance being a lot lower. It's still not perfect - a lot of the time we still have to deal with stuck triangles that never get simplified when processing complex meshes - but it's good progress!
+
+Memory and disk size are also much lower in Bevy 0.15 than Bevy 0.14, although a lot of this (but not all) comes down to the ~half as many overall meshlets in the DAG, meaning that there's less data to store in the first place. Still, adding up the vertex info for Bevy 0.14 (vertex data + vertex IDs = `7.16 mb`) and for Bevy 0.15 (vertex positions + normals + UVs = `2.956 mb`) shows a clear reduction in memory usage for the same amount of triangles in the original mesh.
+
+### Discussion - Performance
+
+Of course, asset size dosen't matter if performance is worse. After all, we could skip the additional LOD levels entirely, and save on the cost of storing them, but with much worse runtime performance.
+
+The good news is that comparing the bunny scene in Bevy 0.14 to Bevy 0.15, rendering got almost 5x faster!
+
+Rasterization is the big immediate win. We were spending 3.44 ms on it in Bevy 0.14, and only 0.42 ms on it in Bevy 0.15! Some of this comes down to software raster being faster than our non-mesh shader hardware raster, but a lot of it comes down to our improved DAG creation and LOD selection code. DAG building is really, really important - a huge chunk of your runtime performance comes down to building a good DAG, before you even start rendering!
+
+Culling (which is also LOD selection) got a little bit faster as well, going from 0.99 ms to 0.19 ms in the first pass, and 0.14 to 0.06 ms in the second pass. The culling pass no longer has to write out a list of triangles for visible clusters - now it's just writing a single cluster ID for each visible cluster, which is much faster. The other big win is that with ~half as many meshlets to process, we have to do only half the work, as evidenced by the second pass performing a little over twice as well (the second pass here is basically just measuring overhead from spawning threads per cluster, since it's doing a single read + early-out for every single cluster as occlusion culling is near-perfect in  static scene like this).
+
+Looking at the cliff scene with a much larger amount of meshlets and triangles, concentrated into much fewer instances, we can see some interesting results. Rasterization is actually _faster_ in this scene than the bunny scene by 0.08 ms, but the first culling pass takes a whopping 1.27 ms, up from only 0.19 ms. Ouch. We ideally want similiar timings no matter the type of scene, so that artists don't have to care about things like number of triangles per mesh, but we're not quite there yet. Culling is the clear bottleneck.
+
+Finally, fill cluster buffers got a little bit faster as well, going down from 0.30 ms to 0.12 ms, with a good chunk of the performance again coming from having half as many total clusters in the scene.
 
 ## Roadmap
 I got a lot done in Bevy 0.15, but there's still a _ton_ left to do for Bevy 0.16 and beyond.
