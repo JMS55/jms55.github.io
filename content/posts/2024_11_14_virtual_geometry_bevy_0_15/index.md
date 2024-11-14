@@ -19,7 +19,7 @@ It's been a little over 5 months [since my last post](@/posts/2024_06_09_virtual
 
 While it's still not production ready, the improved version of virtual geometry that will ship in Bevy 0.15 (which is releasing soon) is a very large step in the right direction!
 
-In this blog post I'll be going over all the virtual geoemetry PRs merged since my last post, in chronological order. At the end, I'll do a performance comparison of Bevy 0.15 vs 0.14, and finally discuss my roadmap for what I'm planning to work on in Bevy 0.16 and beyond.
+In this blog post I'll be going over all the virtual geometry PRs merged since my last post, in chronological order. At the end, I'll do a performance comparison of Bevy 0.15 vs 0.14, and finally discuss my roadmap for what I'm planning to work on in Bevy 0.16 and beyond.
 
 Like last time, a lot of the larger architectural changes are copied from Nanite based on the SIGGRAPH presentation, which you should watch if you want to learn more.
 
