@@ -9,12 +9,17 @@ tags = ["bevy", "virtual geometry"]
 ## Introduction
 
 ![Screenshot of some megascans in Bevy 0.15](cover.png)
+<center>
 
-It's been a little over 5 months [since my last post](@/posts/2024_06_09_virtual_geometry_bevy_0_14/index.md) when I talked about the very early prototype of virtual geometry I wrote for Bevy 0.14.
+*Original scene by [Griffin](https://discord.com/channels/691052431525675048/1302853333387575340/1302853473997422623). Slightly broken due to lack of double-sided material support*
 
-While it's still not production ready, the version of virtual geometry that will ship in Bevy 0.15 (which is releasing soon) is a very large step in the right direction!
+</center>
 
-In this blog post I'll be going over all the PRs merged since my last post, in chronological order. At the end, I'll do a performance comparison of Bevy 0.15 vs 0.14, and finally discuss my roadmap for what I'm planning to work on in Bevy 0.16 and beyond.
+It's been a little over 5 months [since my last post](@/posts/2024_06_09_virtual_geometry_bevy_0_14/index.md) where I talked about the very early prototype of virtual geometry I wrote for Bevy 0.14.
+
+While it's still not production ready, the improved version of virtual geometry that will ship in Bevy 0.15 (which is releasing soon) is a very large step in the right direction!
+
+In this blog post I'll be going over all the virtual geoemetry PRs merged since my last post, in chronological order. At the end, I'll do a performance comparison of Bevy 0.15 vs 0.14, and finally discuss my roadmap for what I'm planning to work on in Bevy 0.16 and beyond.
 
 Like last time, a lot of the larger architectural changes are copied from Nanite based on the SIGGRAPH presentation, which you should watch if you want to learn more.
 
@@ -23,7 +28,7 @@ It's going to be another super long read, so grab some snacks and strap in!
 ## Arseny Kapoulkine's Contributions
 PRs [#13904](https://github.com/bevyengine/bevy/pull/13904), [#13913](https://github.com/bevyengine/bevy/pull/13913), and [#14038](https://github.com/bevyengine/bevy/pull/14038) improve the performance of the Mesh to MeshletMesh converter, and makes it more deterministic. These were written by Arseny Kapoulkine (author of meshoptimizer, the library I use for mesh simplification and meshlet building). Thanks for the contributions!
 
-PR [#14042](https://github.com/bevyengine/bevy/pull/14042), also by Arseny Kapoulkine, fixed a bug with how we calculate the depth pyramid mip level to sample at for occlusion culling.
+PR [#14042](https://github.com/bevyengine/bevy/pull/14042), also by Kapoulkine, fixed a bug with how we calculate the depth pyramid mip level to sample at for occlusion culling.
 
 These PRs were actually shipped in Bevy 0.14, but were opened after I published my last post, hence why I'm covering them now.
 
@@ -194,7 +199,7 @@ fn vertex(@builtin(instance_index) instance_index: u32, @builtin(vertex_index) v
 }
 ```
 
-In the fragment shader, instead of writing to a bound render target, we're now going to do an atomicMax() on a storage buffer to store the rasterized visbuffer result. The reason is that we'll need to do the same for the software rasterization pass (because compute shaders don't have access to render targets), so to keep things simple and reuse the same bind group and underlying texture state between the rasterization passes, we're going to stick to using the atomicMax() trick for the hardware rasterization pass as well. The Nanite slides describe this in more detail if you want to learn more.
+In the fragment shader, instead of writing to a bound render target, we're now going to do an `atomicMax()` on a storage buffer to store the rasterized visbuffer result. The reason is that we'll need to do the same for the software rasterization pass (because compute shaders don't have access to render targets), so to keep things simple and reuse the same bind group and underlying texture state between the rasterization passes, we're going to stick to using the atomicMax trick for the hardware rasterization pass as well. The Nanite slides describe this in more detail if you want to learn more.
 
 ```rust
 @fragment
@@ -310,9 +315,9 @@ If like me, you don't have mesh shaders, then I would still probably stick with 
 
 If you do want to implement a rasterizer in software (for virtual geometry, or otherwise), check out the below resources that were a big help for me in learning rasterization and the related math.
 
-* <https://kristoffer-dyrkorn.github.io/triangle-rasterizer>
-* <https://fgiesen.wordpress.com/2013/02/06/the-barycentric-conspirac>
-* <https://www.youtube.com/watch?v=k5wtuKWmV48>
+* [A fast and precise triangle rasterizer, by Kristoffer Dyrkorn](https://kristoffer-dyrkorn.github.io/triangle-rasterizer)
+* [The barycentric conspiracy, by Fabian Giesen](https://fgiesen.wordpress.com/2013/02/06/the-barycentric-conspirac)
+* [Triangle Rasterization, by pikuma](https://www.youtube.com/watch?v=k5wtuKWmV48)
 
 ## Larger Meshlet Sizes
 PR [#15023](https://github.com/bevyengine/bevy/pull/15023) has a bunch of small improvements to virtual geometry.
@@ -329,7 +334,7 @@ The other changes I made were:
 ## Screenspace-derived Tangents
 PR [#15084](https://github.com/bevyengine/bevy/pull/15084) calculates tangents at runtime, instead of precomputing them and storing them as part of the MeshletMesh asset.
 
-Virtual geometry isin't just about rasterizing huge amounts of high-poly meshes - asset size is also a _big_ factor. GPUs only have so much memory, disks only have so much space, and transfer speeds from disk to RAM and RAM to VRAM is only so fast (as we discovered in the last post).
+Virtual geometry isn't just about rasterizing huge amounts of high-poly meshes - asset size is also a _big_ factor. GPUs only have so much memory, disks only have so much space, and transfer speeds from disk to RAM and RAM to VRAM are only so fast (as we discovered in the last post).
 
 Looking at our asset data, right now we're storing 48 bytes per vertex, with a single set of vertices shared across all meshlets in a meshlet mesh.
 
@@ -346,9 +351,9 @@ An easy way to reduce the amount of data per asset is to just remove the explici
 
 The tangent derivation I used was ["Surface Gradient–Based Bump Mapping Framework"](https://jcgt.org/published/0009/03/04) from Morten S. Mikkelsen (author of the [mikktspace](http://www.metalliandy.com/mikktspace/tangent_space_normal_maps.html) standard). It's a really cool paper that provides a framework for using normal maps in many more scenarios than just screen-space based tangents. Definitely give it a further read.
 
-I used the code from this <https://www.jeremyong.com/graphics/2023/12/16/surface-gradient-bump-mapping> blog post, which also does a great job motivating and explaining the paper.
+I used the code from this [blog post](https://www.jeremyong.com/graphics/2023/12/16/surface-gradient-bump-mapping) by Jeremy Ong, which also does a great job motivating and explaining the paper.
 
-The only issue I ran into is that the tangent.w always came out with the wrong sign compared to the existing mikktspace-tangents I had as a reference. I double checked my math and coordinate space handiness a couple of times, but could never figure out what was wrong. I ended up just inverting the sign after calculating the tangent. If anyone knows what I did wrong, please open an [issue](https://github.com/bevyengine/bevy/issues)!
+The only issue I ran into is that the `tangent.w` always came out with the wrong sign compared to the existing mikktspace-tangents I had as a reference. I double checked my math and coordinate space handiness a couple of times, but could never figure out what was wrong. I ended up just inverting the sign after calculating the tangent. If anyone knows what I did wrong, please open an [issue](https://github.com/bevyengine/bevy/issues)!
 
 ```rust
 // https://www.jeremyong.com/graphics/2023/12/16/surface-gradient-bump-mapping/#surface-gradient-from-a-tangent-space-normal-vector-without-an-explicit-tangent-basis
@@ -383,6 +388,8 @@ fn calculate_world_tangent(
 
 At the cost of a few extra calculations in the material shading pass, and some slight inaccuracies compared to explicit tangents (mostly on curved surfaces), we save 16 bytes per vertex, both on disk (although LZ4 compression means we might be saving less in practice), and in memory.
 
+16 bytes might not sound like a lot, but our high-poly meshes have a _lot_ of vertices, so the savings are significant, especially in combination with the next PR.
+
 
 | Explicit Tangents (0.14)                                 | Implicit tangents (0.15)                                 |
 | -------------------------------------------------------- | -------------------------------------------------------- |
@@ -399,7 +406,7 @@ The whole idea behind virtual geometry is that you only pay (as much as possible
 
 The way we fix this is with streaming. Rather than keep everything in memory all the time, you have the GPU write requests of what data it needs to a buffer, read that back onto the CPU, and then load the requested data from disk into a fixed-size GPU buffer. If the GPU no longer needs a piece of data, you mark that section of the buffer as free space, and can write new data to it as new requests come in.
 
-Typical implementations stream entire LODs at a time, but our goal is to be much more fine-grained. We want to stream individual meshlets, not prebuilt LODs (in practice, Nanite streams fixed-size pages of meshlet data, and not individual meshlets). This presents a problem with our current implementation: since all meshlets reference the same set of vertex data, we have no simple way of unloading or loading vertex data for a single meshlet. While I'm not going to tackle streaming in Bevy 0.15, in this PR I'll be changing the way we store vertex data to solve this problem and unblock streaming in the future.
+Typical implementations of mesh streaming stream discrete LOD levels, but our goal is to be much more fine-grained. Keeping with the theme of only paying for the cluster data you need actually need to render the current frame, we want to stream individual meshlets, not whole LOD levels (in practice, Nanite streams fixed-size pages of meshlet data, and not individual meshlets). This presents a problem with our current implementation: since all meshlets reference the same set of vertex data, we have no simple way of unloading or loading vertex data for a single meshlet. While I'm not going to tackle streaming in Bevy 0.15, in this PR I'll be changing the way we store vertex data to solve this problem and unblock streaming in the future.
 
 Up until now, each MeshletMesh has had one set of vertex data shared between all meshlets within the mesh. Each meshlet has a local index buffer, mapping triangles to meshlet-local vertex IDs, and then a global index buffer mapping meshlet-local vetex IDs to actual vertex data from the mesh. E.g. triangle corner X within a meshlet points to vertex ID Y within a meshlet which points to vertex Z within the mesh.
 
@@ -421,13 +428,13 @@ For each meshlet, we'll iterate over all of its vertex positions, and calculate 
 
 Our first (albeit small) saving become apparent: at the cost of 12 extra bytes in the meshlet metadata, we save 3 bits per vertex position due to no longer needing a bit for the sign for each of the X/Y/Z values, as `[0, max - min]` is never going to contain any negative numbers. We technically now only need a hypothetical `f31` per axis.
 
-However, there's a another trick we can perform. If take the ceiling of the log2 of a range of floating point values `ceil(log2(max - min + 1))`, we get the minimum number of bits we need to store any value in that range. Rather than storing meshlet vertex positions as a list of `vec3<f32>`s, we could instead store them as a packed list of bits (a bitstream).
+However, there's a another trick we can perform. If we take the ceiling of the log2 of a range of floating point values `ceil(log2(max - min + 1))`, we get the minimum number of bits we need to store any value in that range. Rather than storing meshlet vertex positions as a list of `vec3<f32>`s, we could instead store them as a packed list of bits (a bitstream).
 
 E.g. if we determine that we need 4/7/3 bits for the X/Y/Z ranges of the meshlet, we could store a list of bits where bits 0..4 are for vertex 0 axis X, bits 4..11 are for vertex 0 axis Y, bits 11..14 are for vertex 0 axis Z, bits 14..18 are for vertex 1 axis X, bits 18..25 are for vertex 1 axis Y, etc.
 
 Again we can store the bit size (as a `u8`) for each of the X/Y/Z axis within the meshlet's metadata, at a cost of 3 extra bytes. We'll use this later in our shaders to figure out how many bits to read from the bistream for each of the meshlet's vertices.
 
-Of course, if you try this out, you're probably going to end up with fairly large bit sizes per axis, and not actually save any space vs using `vec3<f32>`. This is due to the large amount of precision we have in our vertex positions (a full `f32`), which leads to a lot of precision needed in the range, and therefore a large bit size.
+In practice, if you try this out as-is, you're probably going to end up with fairly large bit sizes per axis, and not actually save any space vs using `vec3<f32>`. This is due to the large amount of precision we have in our vertex positions (a full `f32`), which leads to a lot of precision needed in the range, and therefore a large bit size.
 
 The final trick up our sleeves is that we don't actually _need_ all this precision. If we know that our meshlet's vertices range from 10.2041313123 to 84.382543538, do we really need to know that a vertex happens to be stored at _exactly_ 57.594392822? We could pick some arbitrary amount of precision to round each of our vertices to, say four decimal places, resulting in 57.5944. Less precision means a less precise range, which means our bit size will be smaller.
 
@@ -521,7 +528,7 @@ pub struct Meshlet {
     pub vertex_count: u8,
     /// The amount of triangles in this meshlet.
     pub triangle_count: u8,
-    /// Unused.
+    /// Unused (needed to satisfy alignment rules).
     pub padding: u16,
     /// Number of bits used to to store the X channel of vertex positions within this meshlet.
     pub bits_per_vertex_position_channel_x: u8,
@@ -596,7 +603,7 @@ I _did_ try a bitstream encoding similiar to what I did for positions, but could
 
 After all this, how much memory savings did we get?
 
-Disk space is practically unchanged (maybe 2% smaller at best), but memory savings on a test mesh went from `109.972084mb` before this PR (without duplicating the vertex data per-meshlet at all), to `63.614636mb` after this PR (copying and compressing vertex data per-meshlet). Huge savings, with room for future improvements! I'll definitely be coming back to this at some point in the future.
+Disk space is practically unchanged (maybe 2% smaller at best), but memory savings on a test mesh went from `110 mb` before this PR (without duplicating the vertex data per-meshlet at all), to `64 mb` after this PR (copying and compressing vertex data per-meshlet). This is a huge savings (`42%` smaller), with room for future improvements! I'll definitely be coming back to this at some point in the future.
 
 Additional references:
 * <https://advances.realtimerendering.com/s2021/Karis_Nanite_SIGGRAPH_Advances_2021_final.pdf#page=128>
@@ -609,7 +616,7 @@ PR [#15846](https://github.com/bevyengine/bevy/pull/15846) changes how we select
 
 Previously, I was building a bounding sphere around each group with radius based on the group error, and then projecting that to screen space to get the visible error in pixels.
 
-That method worked, but isin't entirely watertight. Where you place the bounding sphere center in the group is kind of arbitrary, right? And how do you ensure that the error projection is perfectly monotonic, if you have these random bounding spheres in each group?
+That method worked, but isn't entirely watertight. Where you place the bounding sphere center in the group is kind of arbitrary, right? And how do you ensure that the error projection is perfectly monotonic, if you have these random bounding spheres in each group?
 
 Arseny Kapoulkine once again helped me out here. As part of meshoptimizer, they started experimenting with their [nanite.cpp](https://github.com/zeux/meshoptimizer/blob/d93419ced5956307f41333c500c8037c8b861d59/demo/nanite.cpp) demo. In this PR, I copied his code for LOD cut selection.
 
@@ -638,7 +645,7 @@ fn lod_error_is_imperceptible(lod_sphere: MeshletBoundingSphere, simplification_
 }
 ```
 
-An interesting side note, finding the minimal bounding sphere around a set of other bounding sphere turns out to be a very difficult problem. Kaspar Fischer's thesis ["The smallest enclosing balls of balls"](http://www.inf.ethz.ch/personal/emo/DoctThesisFiles/fischer05.pdf) covers the math, and it's very complex. I copied Kapoulkine's approximate, much simpler method.
+An interesting side note, finding the minimal bounding sphere around a set of other bounding sphere turns out to be a very difficult problem. Kaspar Fischer's thesis ["The smallest enclosing balls of balls"](https://citeseerx.ist.psu.edu/document?repid=rep1&type=pdf&doi=f7688a9174e880437e2f467add73905245f4c88c) covers the math, and it's very complex. I copied Kapoulkine's approximate, much simpler method.
 
 ## Improved Mesh to MeshletMesh Conversion
 PR [#15886](https://github.com/bevyengine/bevy/pull/15886) brings more improvements to the mesh to meshlet mesh converter.
@@ -717,11 +724,11 @@ The shader is now very efficient - the workgroup as a whole, once it reserves sp
 
 Overall, in a test scene with 1041 instances with 32217 meshlets per instance, we went from 0.55ms to 0.40ms, a small 0.15ms savings. NSight now shows that we're at 95% VRAM throughput, and that we're bound by global memory operations. The speed of this pass is now basically dependent on our GPU's bandwidth - there's not much I could do better, short of reading and writing less data entirely.
 
-### Hitting a Speed Bump
+### Hitting a Bump
 
 In the process of testing this PR, I ran into a rather confusing bug. The new fill cluster buffers pass worked on some smaller test scenes, but spawning 1042 instances with 32217 meshlets per instance (cliff mesh) lead to the below glitch. It was really puzzling - only some instances would be affected (concentrated in the same region of space), and the clusters themselves appeared to be glitching and changing each frame.
 
-![Glitched mesh](cluster-limit.png)
+![Glitched mesh](cluster_limit.png)
 
 Debugging the issue was complicated by the fact that the rewritten fill cluster buffers code is no longer deterministic. Clusters get written in different orders depending on how the scheduler schedules workgroups, and the order of the atomic writes. That meant that every time I clicked on a pass in RenderDoc to check it's output, the output order would completely change as RenderDoc replayed the entire command stream up until that point.
 
@@ -952,13 +959,15 @@ Memory and disk size are also much lower in Bevy 0.15 than Bevy 0.14, although a
 
 ### Discussion - Performance
 
-Of course, asset size dosen't matter if performance is worse. After all, we could skip the additional LOD levels entirely, and save on the cost of storing them, but with much worse runtime performance.
+Of course, asset size dosen't matter if performance is worse. After all, we could skip the additional LOD levels entirely to save on the cost of storing them, but we would get much worse runtime performance.
 
 The good news is that comparing the bunny scene in Bevy 0.14 to Bevy 0.15, rendering got almost 5x faster!
 
-Rasterization is the big immediate win. We were spending 3.44 ms on it in Bevy 0.14, and only 0.42 ms on it in Bevy 0.15! Some of this comes down to software raster being faster than our non-mesh shader hardware raster, but a lot of it comes down to our improved DAG creation and LOD selection code. DAG building is really, really important - a huge chunk of your runtime performance comes down to building a good DAG, before you even start rendering!
+Rasterization is the big immediate win. We were spending 3.44 ms on it in Bevy 0.14, and now only 0.42 ms on it in Bevy 0.15! Some of this comes down to software raster being faster than our non-mesh shader hardware raster, but a lot of it comes down to our improved DAG creation and LOD selection code. DAG building is really, really important - a huge chunk of your runtime performance comes down to building a good DAG, before you even start rendering!
 
-Culling (which is also LOD selection) got a little bit faster as well, going from 0.99 ms to 0.19 ms in the first pass, and 0.14 to 0.06 ms in the second pass. The culling pass no longer has to write out a list of triangles for visible clusters - now it's just writing a single cluster ID for each visible cluster, which is much faster. The other big win is that with ~half as many meshlets to process, we have to do only half the work, as evidenced by the second pass performing a little over twice as well (the second pass here is basically just measuring overhead from spawning threads per cluster, since it's doing a single read + early-out for every single cluster as occlusion culling is near-perfect in  static scene like this).
+Culling (which is also LOD selection) got a little bit faster as well, going from 0.99 ms to 0.19 ms in the first pass, and 0.14 to 0.06 ms in the second pass. The culling pass no longer has to write out a list of triangles for visible clusters - now it's just writing a single cluster ID for each visible cluster, which is much faster.
+
+The other big win for culling is that with ~half as many meshlets to process, we only have to do half the work, as evidenced by the second pass performing a little over twice as well (the second pass here is basically just measuring overhead from spawning threads per cluster, since it's doing a single read + early-out for every single cluster as occlusion culling is near-perfect in  static scene like this).
 
 Looking at the cliff scene with a much larger amount of meshlets and triangles, concentrated into much fewer instances, we can see some interesting results. Rasterization is actually _faster_ in this scene than the bunny scene by 0.08 ms, but the first culling pass takes a whopping 1.27 ms, up from only 0.19 ms. Ouch. We ideally want similiar timings no matter the type of scene, so that artists don't have to care about things like number of triangles per mesh, but we're not quite there yet. Culling is the clear bottleneck.
 
@@ -969,9 +978,9 @@ I got a lot done in Bevy 0.15, but there's still a _ton_ left to do for Bevy 0.1
 
 The major, immediate priority (once I'm rested and ready to work on virtual geometry again) will be improving the culling/LOD selection pass. While cluster selection (I should rename the pass to that, that's a good name now that I think of it) is an [embarrassingly parallel](https://en.wikipedia.org/wiki/Embarrassingly_parallel) problem in theory, in practice, having to dispatch a thread per cluster in the scene is an enormous waste of time. There can be million of clusters in the scene, and divergence and register usage on top of the sheer number of threads needed means that this pass is currently the biggest bottleneck.
 
-The fix is to (like Nanite does) traverse a BVH (tree) of clusters, where we only need to process clusters up until they would be the wrong LOD, and then can immediately stop processing their children. Doing tree traversal on a GPU is very tricky, and doing it maximally efficient depends on [undefined behavior](https://arxiv.org/pdf/2109.06132v1) of GPU schedulers that not all GPUs have.
+The fix is to (like Nanite does) traverse a BVH (tree) of clusters, where we only need to process clusters up until they would be the wrong LOD, and then can immediately stop processing their children. Doing tree traversal on a GPU is very tricky, and doing it maximally efficient depends on [undefined behavior](https://arxiv.org/pdf/2109.06132v1) of GPU schedulers that not all GPUs have, so I expect to spend a lot of time tweaking this once I get something working.
 
-Once I switch to tree traversal for cluster selection, I think (I'm not fully clear on the details yet) I can also get rid of the need for the fill cluster buffers pass entirely, which would let us reclaim even more performance. More crucially, we could do away with the need to allocate buffers to hold instance ID + cluster ID per cluster in the scene, instead letting us store this data per _visible_ (post LOD selection/culling) cluster in the scene. Besides the obvious memory savings, it also saves us from running into the cluster ID limit issue that was limiting our scene size before. We would no longer need a unique ID for each cluster in the scene - just a unique ID for visible clusters only, post tree traversal, which is a much smaller amount.
+The second major priority is getting rid of the need for the fill cluster buffers pass entirely. Besides letting us reclaim some more performance, the big win is that we could do away with the need to allocate buffers to hold instance ID + cluster ID per cluster in the scene, instead letting us store this data per _visible_ (post LOD selection/culling) cluster in the scene. Besides the obvious memory savings, it also saves us from running into the cluster ID limit issue that was limiting our scene size before. We would no longer need a unique ID for each cluster in the scene - just a unique ID for visible clusters only, post culling and LOD selection, which is a much smaller amount.
 
 Besides cluster selection improvements, and improving on existing stuff, other big areas I could work on include:
 
