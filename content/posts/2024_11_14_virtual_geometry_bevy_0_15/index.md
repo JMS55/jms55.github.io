@@ -11,7 +11,7 @@ tags = ["bevy", "virtual geometry"]
 ![Screenshot of some megascans in Bevy 0.15](cover.png)
 <center>
 
-*Original scene by [Griffin](https://discord.com/channels/691052431525675048/1302853333387575340/1302853473997422623). Slightly broken due to lack of double-sided material support*
+*Original scene by [Griffin](https://discord.com/channels/691052431525675048/1302853333387575340/1302853473997422623). Slightly broken due to lack of double-sided material support.*
 
 </center>
 
