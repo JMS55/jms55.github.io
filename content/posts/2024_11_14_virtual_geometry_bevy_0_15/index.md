@@ -1,6 +1,6 @@
 +++
 title = "Virtual Geometry in Bevy 0.15"
-date = "2024-10-25"
+date = "2024-11-14"
 
 [taxonomies]
 tags = ["bevy", "virtual geometry"]
