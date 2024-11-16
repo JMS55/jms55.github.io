@@ -33,7 +33,7 @@ PR [#14042](https://github.com/bevyengine/bevy/pull/14042), also by Kapoulkine, 
 These PRs were actually shipped in Bevy 0.14, but were opened after I published my last post, hence why I'm covering them now.
 
 ## Faster MeshletMesh Loading
-PR [#14193](https://github.com/bevyengine/bevy/pull/14193) improves performance when loading MeshletMesh assets from disk. This also shipped in Bevy 0.14, but was written after my last post.
+PR [#14193](https://github.com/bevyengine/bevy/pull/14193) improves performance when loading MeshletMesh assets from disk.
 
 Previously I was using the `bincode` and `serde` crates to serialize and deserialize MeshletMeshes. All I had to do was slap `#[derive(Serialize, Deserialize)]` on the type, and then I could use `bincode::serialize_into()` to turn my asset into a slice of bytes for writing to disk, and `bincode::deserialize_from()` in order to turn a slice of bytes loaded from disk back into my asset type. Easy.
 
