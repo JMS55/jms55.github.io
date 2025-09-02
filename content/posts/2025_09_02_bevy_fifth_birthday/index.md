@@ -40,7 +40,7 @@ Now that I'm taking a break from virtual geometry, and due to the introduction o
 
 ![Solari demo scene](solari.png)
 
-Along with Solari, DLSS integration is another abandoned project that I've revived thanks to work done in wgpu to enable interopt with underlying graphics APIs like Vulkan. Bevy 0.17 will be shipping support for DLSS (and DLSS-RR), alongside it's existing anti-aliasing options in MSAA, FXAA, SMAA, and TAA. NVIDIA users now have a great option for anti-aliasing, and much cheaper rendering via upscaling.
+Like with Solari, DLSS integration is another abandoned project that I've revived thanks to work done in wgpu to enable interopt with underlying graphics APIs like Vulkan. Bevy 0.17 will be shipping support for DLSS (and DLSS-RR), alongside it's existing anti-aliasing options in MSAA, FXAA, SMAA, and TAA. NVIDIA users now have a great option for anti-aliasing, and much cheaper rendering via upscaling.
 
 I also wanted to add FSR4 support, but sadly FSR4 was released as a DirectX-only SDK, without any Vulkan support. This would have meant redoing a lot of work, and wasn't going to be done in time for Bevy 0.17 (and I don't own an RX 9070 XT). Still, eventually we could add support for FSR and XeSS (and potentially MetalFX), now that the infrastructure for temporal upscaling is in place.
 
@@ -84,7 +84,7 @@ As we start to run out of major rendering features, putting my energy towards wr
 
 So instead of writing my plans for next year, let's talk about what I think Bevy is missing (besides docs). I don't necessarily plan or not plan on working on any of this myself, but here are the things that I feel make it hard to say "Just use Bevy, duh!"
 
-**UI** continues to be a weak point. While `bevy_ui` is a great foundation for rendering UI (in large part to @ickshonpe's and the taffy team's heoric efforts), no third-party crate (including my own bevy_dioxus) has proven out a good high-level API for declaring and updating UI trees. BSN is coming soon, but it only solves the declarative part of UI, and not the reactivity part. Until we resolve this, it's hard to reccomend Bevy for UI-heavy games and apps, and more importantly, we can't build the-
+**UI** continues to be a weak point. While `bevy_ui` is a great foundation for rendering UI (in large part to @ickshonpe's and the taffy team's heroic efforts), no third-party crate (including my own bevy_dioxus) has proven out a good high-level API for declaring and updating UI trees. BSN is coming soon, but it only solves the declarative part of UI, and not the reactivity part. Until we resolve this, it's hard to reccomend Bevy for UI-heavy games and apps, and more importantly, we can't build the-
 
 **Editor** absence continues to be a big, big hole for Bevy. Not just in terms of being production ready, but I think the first release with an official editor is going to get an exponential influx of new users and eventually new contributors. Working on the Solari demo scene has made me feel the lack of an editor badly. It was quite frustrating trying to get the materials correct for everything without an editor. I _did_ work on a [prototype](https://github.com/bevyengine/bevy_editor_prototypes/pull/167) scene tree + inspector using a third-party BSN crate, but it was exceedingly difficult to write and understand, and I gave up on it. I'm really excited to come back to working on the editor once reactive UI lands.
 
