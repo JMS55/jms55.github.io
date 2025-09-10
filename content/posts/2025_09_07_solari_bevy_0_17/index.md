@@ -14,11 +14,13 @@ Lighting is hard. Anyone who's tried to make a 3D scene look good knows the frus
 
 Over the past few years, real-time raytracing has gone from a research curiosity to a shipping feature in major game engines, promising to solve many of these problems by simulating how light actually behaves. With the release of v0.17, [Bevy](https://bevy.org) now joins that club with experimental support for hardware raytracing!
 
-TODO: Video
+<video style="max-width: 100%; padding: var(--gap);" controls>
+  <source src="solari_recording.mp4" type="video/mp4">
+</video>
 
 Back in early 2023, I [started](@/posts/2023_09_12_bevy_third_birthday/index.md#bevy-solari) an ambitious project called Bevy Solari to integrate hardware raytracing into Bevy's rendering pipeline. I was experimenting with [Lumen-style](https://youtu.be/2GYXuM10riw) screen space probes for global illumination, later extending it to use [radiance cascades](https://radiance-cascades.com).
 
-These techniques, while theoretically sound, proved challenging in practice. Screen space probes were tricky to get good quality out of (reusing and reprojecting the same probe across multiple pixels is hard!), and radiance cascades brought its own set of artifacts and performance costs.
+These techniques, while theoretically sound, proved challenging to use in practice. Screen space probes were tricky to get good quality out of (reusing and reprojecting the same probe across multiple pixels is hard!), and radiance cascades brought its own set of artifacts and performance costs.
 
 On top of the algorithmic challenges, the ecosystem simply wasn't ready. wgpu's raytracing support existed only as a work-in-progress PR that never got merged upstream. Maintaining a fork of wgpu (and by extension, Bevy) was time-consuming and unsustainable. After months of dealing with these challenges, I shelved the project.
 
