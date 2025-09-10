@@ -12,7 +12,9 @@ tags = ["bevy", "raytracing"]
 
 Lighting is hard. Anyone who's tried to make a 3D scene look good knows the frustration of placing light probes, tweaking shadow cascades, and trying to figure out why their materials don't look quite right.
 
-Over the past few years, real-time raytracing has gone from a research curiosity to a shipping feature in major game engines, promising to solve many of these problems by simulating how light actually behaves. With the release of v0.17, [Bevy](https://bevy.org) now joins that club with experimental support for hardware raytracing!
+Over the past few years, real-time raytracing has gone from a research curiosity to a shipping feature in major game engines, promising to solve many of these problems by simulating how light actually behaves.
+
+With the release of v0.17, [Bevy](https://bevy.org) now joins that club with experimental support for hardware raytracing!
 
 <video style="max-width: 100%; margin: var(--gap) var(--gap) 0 var(--gap); border-radius: 6px;" controls>
   <source src="solari_recording.mp4" type="video/mp4">
