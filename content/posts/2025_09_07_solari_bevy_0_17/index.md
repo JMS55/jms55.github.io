@@ -14,7 +14,7 @@ Lighting is hard. Anyone who's tried to make a 3D scene look good knows the frus
 
 Over the past few years, real-time raytracing has gone from a research curiosity to a shipping feature in major game engines, promising to solve many of these problems by simulating how light actually behaves. With the release of v0.17, [Bevy](https://bevy.org) now joins that club with experimental support for hardware raytracing!
 
-<video style="max-width: 100%; padding: var(--gap) var(--gap) 0 var(--gap);" controls>
+<video style="max-width: 100%; margin: var(--gap) var(--gap) 0 var(--gap); border-radius: 6px;" controls>
   <source src="solari_recording.mp4" type="video/mp4">
 </video>
 <center>
@@ -89,23 +89,72 @@ These combined techniques keep draw call overhead and per-pixel overdraw fairly 
 
 ### Light Tile Presampling
 
-Before we can start calculating direct light, we need
+TODO: Image of light tile buffers
 
+The next step in Solari is generating some presampled light buffers, following section 5 of [Rearchitecting Spatiotemporal Resampling for Production](https://cwyman.org/papers/hpg21_rearchitectingReSTIR.pdf).
 
+#### Light Sampling APIs
 
+Before I can explain this step, we first need to talk about Solari's shader API for working with light sources.
 
+Bevy stores lights as a big list of objects on the GPU. When calculating lighting between a point and a light source, Bevy works with specific light _samples_, which uniquely identify a specific subset of the light object:
 
-### Direct Lighting
+```rust
+struct LightSample {
+    light_id: u16,
+    triangle_id: u16, // 0 for directional lights
+    seed: u32,
+}
+```
 
-> https://intro-to-restir.cwyman.org
+The light ID and triangle IDs are self-explanatory. The seed is used to initialize a random number generator (RNG). For directional lights, the RNG is used to choose a direction within a cone. For emissive meshes, the RNG is used to choose a specific point on the mesh.
 
-After the G-buffer pass, Solari replaces Bevy's traditional shadow mapping and light accumulation with a ReSTIR-based direct lighting system. ReSTIR (Reservoir-based Spatiotemporal Importance Resampling) is a technique that allows efficient sampling of large numbers of lights by reusing samples across pixels and frames. The implementation follows the light-tile presampling approach from [Chris Wyman's HPG 2021 paper](https://cwyman.org/papers/hpg21_rearchitectingReSTIR.pdf), which provides a solid foundation for handling large numbers of lights efficiently.
+A `LightSample` can be resolved, giving some info on its properties:
 
-#### Light Tile Presampling[#](#light-tile-presampling)
+```rust
+struct ResolvedLightSample {
+    world_position: vec4<f32>, // w component is is 0.0 for directional lights, and 1.0 for emissive meshes
+    world_normal: vec3<f32>,
+    emitted_radiance: vec3<f32>,
+    inverse_pdf: f32,
+}
+```
 
-The first step is a prepass that does light-tile presampling. The system picks random lights from the scene and random samples on each light (for emissive objects), packing this information as a `vec2<u32>` "light sample". The resolved light sample data gets stored in a compact format:
+And finally a `ResolvedLightSample` can be used to calculate the received radiance at a point from the light sample, also known as the unshadowed light contribution:
 
-```wgsl
+```rust
+struct LightContribution {
+    received_radiance: vec3<f32>,
+    inverse_pdf: f32,
+    wi: vec3<f32>,
+}
+
+fn calculate_resolved_light_contribution(resolved_light_sample: ResolvedLightSample, ray_origin: vec3<f32>, origin_world_normal: vec3<f32>) -> LightContribution {
+    let ray = resolved_light_sample.world_position.xyz - (resolved_light_sample.world_position.w * ray_origin);
+    let light_distance = length(ray);
+    let wi = ray / light_distance;
+
+    let cos_theta_origin = saturate(dot(wi, origin_world_normal));
+    let cos_theta_light = saturate(dot(-wi, resolved_light_sample.world_normal));
+    let light_distance_squared = light_distance * light_distance;
+
+    let received_radiance = resolved_light_sample.emitted_radiance * cos_theta_origin * (cos_theta_light / light_distance_squared);
+
+    return LightContribution(received_radiance, resolved_light_sample.inverse_pdf, wi);
+}
+```
+
+Notably, only first and second steps (generating a `LightSample`, resolving it into a `ResolvedLightSample`) involve branching based on the type of light (directional or emissive). Calculating the light contribution involves no branching.
+
+#### Presampling Lights
+
+Later steps in the rendering process are going to want to calculate `LightContributions`, e.g. in the ReSTIR DI shader. One thing we could do is perform the whole light sampling process all in one shader. Indeed, for my first ReSTIR DI prototype, that's what I did - but performance was terrible.
+
+By generating the light sample, resolving it, and then calculating its contribution all in the same shader, we're introducing a lot of divergent branches and incoherent memory accesses. If there's one thing GPUs hate, it's divergence. GPUs perform better when all threads in a group are executing the same branch and don't need masking, and when the threads are all accessing similar memory locations that are likely in a nearby cache.
+
+Instead, we can seperate out the steps. Generating a bunch of random light samples and resolving them can be performed ahead of time, by a seperate shader. We can then pack the resolved samples and store them in a buffer.
+
+```rust
 fn pack_resolved_light_sample(sample: ResolvedLightSample) -> ResolvedLightSamplePacked {
     return ResolvedLightSamplePacked(
         sample.world_position.x,
@@ -116,7 +165,39 @@ fn pack_resolved_light_sample(sample: ResolvedLightSample) -> ResolvedLightSampl
         sample.inverse_pdf * select(1.0, -1.0, sample.world_position.w == 0.0),
     );
 }
+
+fn unpack_resolved_light_sample(packed: ResolvedLightSamplePacked, exposure: f32) -> ResolvedLightSample {
+    return ResolvedLightSample(
+        vec4(packed.world_position_x, packed.world_position_y, packed.world_position_z, select(1.0, 0.0, packed.inverse_pdf < 0.0)),
+        octahedral_decode(unpack2x16unorm(packed.world_normal)),
+        rgb9e5_to_vec3_(packed.radiance) / exposure,
+        abs(packed.inverse_pdf),
+    );
+}
 ```
+
+We call these presampled sets of lights "light tiles". We generate 128 tiles, each with 1024 samples (`ResolvedLightSamplePacked`). Later rendering steps that want to sample the scene's light sources can then pick a random tile, and then random samples within the tile, in a much more coherent fashion.
+
+### World Cache
+
+TODO
+
+### ReSTIR DI
+
+TODO
+
+### ReSTIR GI
+
+TODO
+
+### DLSS Ray Reconstruction
+
+TODO
+
+
+
+
+
 
 #### Two-Pass Resampling[#](#two-pass-resampling)
 
