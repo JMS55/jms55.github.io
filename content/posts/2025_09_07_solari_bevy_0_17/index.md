@@ -14,11 +14,16 @@ Lighting is hard. Anyone who's tried to make a 3D scene look good knows the frus
 
 Over the past few years, real-time raytracing has gone from a research curiosity to a shipping feature in major game engines, promising to solve many of these problems by simulating how light actually behaves. With the release of v0.17, [Bevy](https://bevy.org) now joins that club with experimental support for hardware raytracing!
 
-<video style="max-width: 100%; padding: var(--gap);" controls>
+<video style="max-width: 100%; padding: var(--gap) var(--gap) 0 var(--gap);" controls>
   <source src="solari_recording.mp4" type="video/mp4">
 </video>
+<center>
 
-Back in early 2023, I [started](@/posts/2023_09_12_bevy_third_birthday/index.md#bevy-solari) an ambitious project called Bevy Solari to integrate hardware raytracing into Bevy's rendering pipeline. I was experimenting with [Lumen-style](https://youtu.be/2GYXuM10riw) screen space probes for global illumination, later extending it to use [radiance cascades](https://radiance-cascades.com).
+*[PICA PICA scene by SEED](https://github.com/SEED-EA/pica-pica-assets)*
+
+</center>
+
+Back in early 2023, I [started](@/posts/2023_09_12_bevy_third_birthday/index.md#bevy-solari) an ambitious project called Solari to integrate hardware raytracing into Bevy's rendering pipeline. I was experimenting with [Lumen-style](https://youtu.be/2GYXuM10riw) screen space probes for global illumination, later extending it to use [radiance cascades](https://radiance-cascades.com).
 
 These techniques, while theoretically sound, proved challenging to use in practice. Screen space probes were tricky to get good quality out of (reusing and reprojecting the same probe across multiple pixels is hard!), and radiance cascades brought its own set of artifacts and performance costs.
 
@@ -48,13 +53,22 @@ And honestly? It's just cool, and something I personally love working on :)
 
 ## Frame Breakdown
 
-TODO
+In its initial release, Solari supports raytraced diffuse direct (DI) and indirect lighting (GI). Light can come from either emissive triangle meshes, or analytic directional lights.
+
+Direct lighting is handled via ReSTIR DI, while indirect lighting is handled by a combination of ReSTIR GI, and a world-space irradiance cache. Denoising is handled by DLSS Ray Reconstruction.
+
+As opposed to coarse screen-space probes, per-pixel ReSTIR brings much better detail, along with being _considerably_ easier to get started with. I had my first prototype working in a weekend.
+
+While I won't be covering ReSTIR from first principles, [A Gentle Introduction to ReSTIR:
+Path Reuse in Real-time](https://intro-to-restir.cwyman.org) and [A gentler introduction to ReSTIR](https://interplayoflight.wordpress.com/2023/12/17/a-gentler-introduction-to-restir) are both really great resources. If you haven't played with ReSTIR before, I suggest giving them a skim before continuing with this post. Or continue anyways, and just admire the pretty pixels!
+
+Let's get started.
 
 ### GBuffer Raster
 
 TODO: Images
 
-The first step of Solari is the most boring: rasterize a standard G-buffer.
+The first step of Solari is also the most boring: rasterize a standard G-buffer.
 
 The G-buffer pass remains completely unchanged from standard Bevy (it's the same plugin). This might seem like a missed opportunity - after all, I could have used raytracing for primary visibility instead of rasterization - but there's an important reason I kept rasterization here.
 
@@ -73,11 +87,13 @@ The G-buffer rendering itself uses with `multi_draw_indirect` to draw several me
 
 These combined techniques keep draw call overhead and per-pixel overdraw fairly low, even for complex scenes.
 
+### Light Tile Presampling
 
-TODO: Below
-For acceleration structure building, nothing fancy is happening yet - just a full TLAS build before rendering the G-buffer. wgpu doesn't support asynchronous compute yet, so there's no opportunity to overlap TLAS construction with other work.
+Before we can start calculating direct light, we need
 
-The raytracing scene setup deserves its own discussion, which I'll cover in a dedicated section later.
+
+
+
 
 ### Direct Lighting
 
