@@ -25,7 +25,7 @@ With the release of v0.17, [Bevy](https://bevy.org) now joins the club with expe
 
 </center>
 
-Back in early 2023, I [started](https://github.com/bevyengine/bevy/pull/10000) an ambitious project called Solari to integrate hardware raytracing into Bevy's rendering pipeline. I was experimenting with [Lumen-style](https://youtu.be/2GYXuM10riw) screen space probes for global illumination, later extending it to use [radiance cascades](https://radiance-cascades.com).
+Back in early 2023, I [started](https://github.com/bevyengine/bevy/pull/10000) an ambitious project called Solari to integrate hardware raytracing into Bevy's rendering pipeline. I was experimenting with [Lumen](https://youtu.be/2GYXuM10riw)-style screen space probes for global illumination, and later extended it to use [radiance cascades](https://radiance-cascades.com).
 
 These techniques, while theoretically sound, proved challenging to use in practice. Screen space probes were tricky to get good quality out of (reusing and reprojecting the same probe across multiple pixels is hard!), and radiance cascades brought its own set of artifacts and performance costs.
 
@@ -41,11 +41,11 @@ Before we start, I think it's fair to ask why an "indie" game engine needs high-
 
 Back when I was a teenager experimenting with small 3D games in Godot, I had a really hard time figuring out why my lighting looked so bad. Metallic objects didn't look reflective, scenes felt flat, and everything just looked wrong compared to the games I was playing.
 
-I didn't understand that I was missing indirect light, proper reflections, and accurate shadows - and I had no idea I was supposed to bake lighting (which wouldn't have worked for my dynamic game anyway).
+I didn't understand that I was missing indirect light, proper reflections, and accurate shadows - I had no idea I was supposed to bake lighting (which wouldn't have worked for my dynamic game anyway).
 
 This is the core problem that raytracing solves for indie developers. Even if most players won't have hardware capable of running ray-traced effects, having a reference implementation of what lighting is *supposed* to look like is incredibly valuable.
 
-With fully dynamic global illumination, reflections, shadows, and direct lighting, developers can see how their scenes should be lit. Then they can work backwards to replicate those results with baked lighting, screen-space techniques, or other cheaper approximations.
+With fully dynamic global illumination, reflections, shadows, and direct lighting, developers can see how their scenes should be lit. Then they can work backwards to replicate those results with baked lighting, screen-space techniques, and other cheaper approximations.
 
 Without that reference, it's really hard to know what you're missing or how to improve your lighting setup. Raytracing provides the ground truth that other techniques are trying to approximate.
 
@@ -62,9 +62,9 @@ Direct lighting is handled via ReSTIR DI, while indirect lighting is handled by 
 As opposed to coarse screen-space probes, per-pixel ReSTIR brings much better detail, along with being _considerably_ easier to get started with. I had my first prototype working in a weekend.
 
 While I won't be covering ReSTIR from first principles, [A Gentle Introduction to ReSTIR:
-Path Reuse in Real-time](https://intro-to-restir.cwyman.org) and [A gentler introduction to ReSTIR](https://interplayoflight.wordpress.com/2023/12/17/a-gentler-introduction-to-restir) are both really great resources. If you haven't played with ReSTIR before, I suggest giving them a skim before continuing with this post. Or continue anyways, and just admire the pretty pixels!
+Path Reuse in Real-time](https://intro-to-restir.cwyman.org) and [A gentler introduction to ReSTIR](https://interplayoflight.wordpress.com/2023/12/17/a-gentler-introduction-to-restir) are both really great resources. If you haven't played with ReSTIR before, I suggest giving them a skim before continuing with this post. Or continue anyways, and just admire the pretty pixels.
 
-Let's get started.
+Onto the frame breakdown!
 
 ### GBuffer Raster
 
@@ -94,6 +94,10 @@ These combined techniques keep draw call overhead and per-pixel overdraw fairly 
 TODO: Image of light tile buffers
 
 The next step in Solari is generating some presampled light buffers, following section 5 of [Rearchitecting Spatiotemporal Resampling for Production](https://cwyman.org/papers/hpg21_rearchitectingReSTIR.pdf).
+
+This presampling step greatly speeds up later passes that want to sample the scene's light sources, namely ReSTIR DI.
+
+Feel free to skip this section for now, and come back to it after reading the ReSTIR DI section.
 
 #### Light Sampling APIs
 
@@ -150,7 +154,7 @@ Notably, only the first and second steps (generating a `LightSample`, resolving 
 
 #### Presampling Lights
 
-Later steps in the rendering process are going to want to calculate `LightContributions`, e.g. in the ReSTIR DI shader. One thing we could do is perform the whole light sampling process all in one shader. Indeed, for my first ReSTIR DI prototype, that's what I did - but performance was terrible.
+Later steps in the rendering process are going to want to calculate `LightContributions`, e.g. in the ReSTIR DI shader. One thing we could do is perform the whole light sampling process (generate -> resolve  -> calculate contribution) all in one shader. Indeed, for my first ReSTIR DI prototype, that's what I did - but performance was terrible.
 
 By generating the light sample, resolving it, and then calculating its contribution all in the same shader, we're introducing a lot of divergent branches and incoherent memory accesses. If there's one thing GPUs hate, it's divergence. GPUs perform better when all threads in a group are executing the same branch and don't need masking, and when the threads are all accessing similar memory locations that are likely in a nearby cache.
 
@@ -178,11 +182,29 @@ fn unpack_resolved_light_sample(packed: ResolvedLightSamplePacked, exposure: f32
 }
 ```
 
-We call these presampled sets of lights "light tiles". We generate 128 tiles, each with 1024 samples (`ResolvedLightSamplePacked`). Later rendering steps that want to sample the scene's light sources can then pick a random tile, and then random samples within the tile, in a much more coherent fashion.
+We call these presampled sets of lights "light tiles". Following the paper, we generate 128 tiles, each with 1024 samples (`ResolvedLightSamplePacked`).
+
+Later rendering steps that want to sample the scene's light sources can pick a random tile, and then random samples within the tile, and and use `calculate_resolved_light_contribution()` to calculate lighting without divergence.
 
 ### World Cache
 
-TODO
+TODO: Image of the world cache
+
+Whereas light tiles accelerate sampling direct lighting, the world cache accelerates sampling _indirect_ lighting for ReSTIR GI.
+
+Feel free to skip this section for now, and come back to it after reading the ReSTIR GI section.
+
+#### Cache Querying
+
+#### Cache Decay
+
+#### Cache Compact
+
+#### Cache Update - Direct
+
+#### Cache Update - Indirect
+
+#### Cache Blend
 
 ### ReSTIR DI
 
@@ -196,23 +218,4 @@ TODO
 
 TODO
 
-
-
-
-
-
-#### Two-Pass Resampling[#](#two-pass-resampling)
-
-The actual ReSTIR process happens in two passes:
-
-**First pass**: 32-sample RIS (Resampled Importance Sampling) using the presampled light blocks, followed by temporal resampling. I ended up using constant MIS weights for the temporal resampling since I didn't see much difference with the balance heuristic in practice.
-
-**Second pass**: 1-sample spatial resampling in a 30-pixel radius. This is crucial for spreading good samples across the image. Without this spatial pass, you get really ugly artifacts under motion due to temporal reuse, and the overall quality suffers because there's no way to distribute good samples effectively.
-
-#### Current Light Support[#](#current-light-support)
-
-Right now the system handles directional lights and emissive meshes, but doesn't support point/spot lights or IBL yet. This is enough to demonstrate the core benefits of the approach, though there's obviously room for expansion.
-
-#### Performance and Quality[#](#performance-and-quality)
-
-Compared to traditional rasterized lighting, Solari can handle way more lights performance-wise, with nice effects like soft shadows and - most importantly - proper emissive area lights. That said, the quality is still a work in progress. There are lots of good ideas we can borrow from Unreal's Megalights system to improve things further.
+## Results and Limitations
