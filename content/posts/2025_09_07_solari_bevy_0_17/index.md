@@ -252,7 +252,7 @@ Whereas light tiles accelerate sampling direct lighting, the world cache acceler
 
 > Feel free to skip this section for now, and come back to it after reading the ReSTIR GI section.
 
-The world cache voxelizes the world, storing accumulated irradiance in each voxel. When sampling indirect lighting in ReSTIR GI, rather than having to trace additional rays towards light sources, we can simply lookup the irradiance at a given voxel.
+The world cache voxelizes the world, storing accumulated irradiance (light hitting the surface) in each voxel. When sampling indirect lighting in ReSTIR GI, rather than having to trace additional rays towards light sources to estimate the irradiance, we can simply lookup the irradiance at the given voxel.
 
 The world cache both amortizes the cost of the GI pass, and reduces variance, especially for newly-disoccluded pixels for which ReSTIR GI has no temporal history.
 
