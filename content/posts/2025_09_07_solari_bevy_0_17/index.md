@@ -119,6 +119,23 @@ struct LightSample {
     triangle_id: u16, // Unused for directional lights
     seed: u32,
 }
+
+fn generate_random_light_sample(rng: ptr<function, u32>) -> LightSample {
+    let light_count = arrayLength(&light_sources);
+    let light_id = rand_range_u(light_count, rng);
+
+    let light_source = light_sources[light_id];
+
+    var triangle_id = 0u;
+    if light_source.kind != LIGHT_SOURCE_KIND_DIRECTIONAL {
+        let triangle_count = light_source.kind >> 1u;
+        triangle_id = rand_range_u(triangle_count, rng);
+    }
+
+    let seed = rand_u(rng);
+
+    return LightSample(light_id, triangle_id, seed);
+}
 ```
 
 The light ID points to the overall light source object in the big list of lights.
@@ -133,6 +150,35 @@ struct ResolvedLightSample {
     world_normal: vec3<f32>,
     emitted_radiance: vec3<f32>,
     inverse_pdf: f32,
+}
+
+fn resolve_light_sample(light_sample: LightSample, light_source: LightSource) -> ResolvedLightSample {
+    if light_source.kind == LIGHT_SOURCE_KIND_DIRECTIONAL {
+        let directional_light = directional_lights[light_source.id];
+
+        let direction_to_light = ...;
+
+        return ResolvedLightSample(
+            vec4(direction_to_light, 0.0),
+            -direction_to_light,
+            directional_light.luminance,
+            directional_light.inverse_pdf,
+        );
+    } else {
+        let triangle_count = light_source.kind >> 1u;
+        let triangle_id = light_sample.light_id & 0xFFFFu;
+        let barycentrics = triangle_barycentrics(light_sample.seed);
+
+        // Interpolates and transforms vertex positions, UVs, etc, and samples material textures
+        let triangle_data = resolve_triangle_data_full(light_source.id, triangle_id, barycentrics);
+
+        return ResolvedLightSample(
+            vec4(triangle_data.world_position, 1.0),
+            triangle_data.world_normal,
+            triangle_data.material.emissive.rgb,
+            f32(triangle_count) * triangle_data.triangle_area,
+        );
+    }
 }
 ```
 
