@@ -14,7 +14,7 @@ Lighting is hard. Anyone who's tried to make a 3D scene look good knows the frus
 
 Over the past few years, real-time raytracing has gone from a research curiosity to a shipping feature in major game engines, promising to solve many of these problems by simulating how light actually behaves.
 
-With the release of v0.17, [Bevy](https://bevy.org) now joins that club with experimental support for hardware raytracing!
+With the release of v0.17, [Bevy](https://bevy.org) now joins the club with experimental support for hardware raytracing!
 
 <video style="max-width: 100%; margin: var(--gap) var(--gap) 0 var(--gap); border-radius: 6px;" controls>
   <source src="solari_recording.mp4" type="video/mp4">
@@ -25,13 +25,13 @@ With the release of v0.17, [Bevy](https://bevy.org) now joins that club with exp
 
 </center>
 
-Back in early 2023, I [started](@/posts/2023_09_12_bevy_third_birthday/index.md#bevy-solari) an ambitious project called Solari to integrate hardware raytracing into Bevy's rendering pipeline. I was experimenting with [Lumen-style](https://youtu.be/2GYXuM10riw) screen space probes for global illumination, later extending it to use [radiance cascades](https://radiance-cascades.com).
+Back in early 2023, I [started](https://github.com/bevyengine/bevy/pull/10000) an ambitious project called Solari to integrate hardware raytracing into Bevy's rendering pipeline. I was experimenting with [Lumen-style](https://youtu.be/2GYXuM10riw) screen space probes for global illumination, later extending it to use [radiance cascades](https://radiance-cascades.com).
 
 These techniques, while theoretically sound, proved challenging to use in practice. Screen space probes were tricky to get good quality out of (reusing and reprojecting the same probe across multiple pixels is hard!), and radiance cascades brought its own set of artifacts and performance costs.
 
 On top of the algorithmic challenges, the ecosystem simply wasn't ready. wgpu's raytracing support existed only as a work-in-progress PR that never got merged upstream. Maintaining a fork of wgpu (and by extension, Bevy) was time-consuming and unsustainable. After months of dealing with these challenges, I shelved the project.
 
-In the 2 years since, I've learned a bunch more, raytracing has been upstreamed into wgpu, and raytracing algorithms have gotten much more developed. I've restarted the project with some new algorithms (ReSTIR, DLSS-RR), and soon it will be released as an official Bevy plugin!
+In the 2 years since, I've learned a bunch more, raytracing has been upstreamed into wgpu, and raytracing algorithms have gotten much more developed. I've restarted the project with a new approach (ReSTIR, DLSS-RR), and soon it will be released as an official Bevy plugin!
 
 In this post, I'll be doing a frame breakdown of how Solari works in Bevy 0.17, why I made certain choices, some of the challenges I faced, and some of the issues I've yet to solved.
 
@@ -85,7 +85,7 @@ Bevy's G-buffer uses quite a bit of packing. The main attachment is a `Rgba32Uin
 
 There's also a second `Rg16Float` attachment for motion vectors, and of course the depth attachment.
 
-The G-buffer rendering itself uses with `multi_draw_indirect` to draw several meshes at once, using sub-allocated buffers. Culling is done on the GPU using [two-pass occlusion culling](@/posts/2024_06_09_virtual_geometry_bevy_0_14/index.md#culling-first-pass) against a hierarchal depth buffer. Textures are handled bindlessly, and we try to minimize overall pipeline permutations.
+The G-buffer rendering itself uses `multi_draw_indirect` to draw several meshes at once, using [sub-allocated](https://crates.io/crates/offset-allocator) buffers. Culling is done on the GPU using [two-pass occlusion culling](@/posts/2024_06_09_virtual_geometry_bevy_0_14/index.md#culling-first-pass) against a hierarchal depth buffer. Textures are handled bindlessly, and we try to minimize overall pipeline permutations.
 
 These combined techniques keep draw call overhead and per-pixel overdraw fairly low, even for complex scenes.
 
@@ -104,7 +104,7 @@ Bevy stores lights as a big list of objects on the GPU. When calculating lightin
 ```rust
 struct LightSample {
     light_id: u16,
-    triangle_id: u16, // 0 for directional lights
+    triangle_id: u16, // Unused for directional lights
     seed: u32,
 }
 ```
@@ -115,7 +115,7 @@ A `LightSample` can be resolved, giving some info on its properties:
 
 ```rust
 struct ResolvedLightSample {
-    world_position: vec4<f32>, // w component is is 0.0 for directional lights, and 1.0 for emissive meshes
+    world_position: vec4<f32>, // w component is 0.0 for directional lights, and 1.0 for emissive meshes
     world_normal: vec3<f32>,
     emitted_radiance: vec3<f32>,
     inverse_pdf: f32,
@@ -146,7 +146,7 @@ fn calculate_resolved_light_contribution(resolved_light_sample: ResolvedLightSam
 }
 ```
 
-Notably, only first and second steps (generating a `LightSample`, resolving it into a `ResolvedLightSample`) involve branching based on the type of light (directional or emissive). Calculating the light contribution involves no branching.
+Notably, only the first and second steps (generating a `LightSample`, resolving it into a `ResolvedLightSample`) involve branching based on the type of light (directional or emissive). Calculating the light contribution involves no branching.
 
 #### Presampling Lights
 
