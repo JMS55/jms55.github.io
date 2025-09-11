@@ -238,7 +238,9 @@ fn unpack_resolved_light_sample(packed: ResolvedLightSamplePacked, exposure: f32
 }
 ```
 
-We call these presampled sets of lights "light tiles". Following the paper, we generate 128 tiles, each with 1024 samples (`ResolvedLightSamplePacked`).
+We call these presampled sets of lights "light tiles". Following the paper, we generate a fixed 128 tiles (these are not screen-space tiles), each with 1024 samples (`ResolvedLightSamplePacked`).
+
+Samples are generated completely randomly, without any info about the scene - there is no spatial heuristic or any way of identifying "good" samples.
 
 Later rendering steps that want to sample the scene's light sources can pick a random tile, and then random samples within the tile, and use `calculate_resolved_light_contribution()` to calculate lighting with low divergence.
 
