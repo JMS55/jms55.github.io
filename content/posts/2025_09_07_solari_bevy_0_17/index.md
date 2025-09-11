@@ -103,13 +103,15 @@ The next step in Solari is generating some presampled light buffers, following s
 
 This presampling step greatly speeds up later passes that want to sample the scene's light sources, namely ReSTIR DI.
 
-Feel free to skip this section for now, and come back to it after reading the ReSTIR DI section.
+> Feel free to skip this section for now, and come back to it after reading the ReSTIR DI section.
 
 #### Light Sampling APIs
 
 Before I can explain this step, we first need to talk about Solari's shader API for working with light sources.
 
-Bevy stores lights as a big list of objects on the GPU. When calculating lighting between a point and a light source, Bevy works with specific light _samples_, which uniquely identify a specific subset of the light object:
+Bevy stores lights as a big list of objects on the GPU. All emissive meshes and directional lights get collected by the CPU and put in this list.
+
+When calculating lighting from a light source, Bevy works with specific light _samples_ - not the whole light at once. A `LightSample` uniquely identifies a specific subset of the light source, e.g. a specific point on an emissive mesh.
 
 ```rust
 struct LightSample {
@@ -119,7 +121,9 @@ struct LightSample {
 }
 ```
 
-The light ID and triangle IDs are self-explanatory. The seed is used to initialize a random number generator (RNG). For directional lights, the RNG is used to choose a direction within a cone. For emissive meshes, the RNG is used to choose a specific point on the mesh.
+The light ID points to the overall light source object in the big list of lights.
+
+The seed is used to initialize a random number generator (RNG). For directional lights, the RNG is used to choose a direction within a cone. For emissive meshes, the RNG is used to choose a specific point on the triangle identified by the triangle ID.
 
 A `LightSample` can be resolved, giving some info on its properties:
 
@@ -198,9 +202,44 @@ TODO: Image of the world cache
 
 Whereas light tiles accelerate sampling direct lighting, the world cache accelerates sampling _indirect_ lighting for ReSTIR GI.
 
-Feel free to skip this section for now, and come back to it after reading the ReSTIR GI section.
+> Feel free to skip this section for now, and come back to it after reading the ReSTIR GI section.
+
+The world cache voxelizes the world, storing accumulated irradiance in each voxel. When sampling indirect lighting in ReSTIR GI, rather than having to trace additional rays towards light sources, we can simply lookup the irradiance at a given voxel.
+
+The world cache both amortizes the cost of the GI pass, and reduces variance, especially for newly-disoccluded pixels for which ReSTIR GI has no temporal history.
 
 #### Cache Querying
+The cache uses spatial hashing (TODO: link) to ... (TODO: Talk about benefits of spatial cache)
+
+```rust
+fn query_world_cache(world_position: vec3<f32>, world_normal: vec3<f32>, view_position: vec3<f32>) -> vec3<f32> {
+    let cell_size = get_cell_size(world_position, view_position);
+    let world_position_quantized = bitcast<vec3<u32>>(quantize_position(world_position, cell_size));
+    let world_normal_quantized = bitcast<vec3<u32>>(quantize_normal(world_normal));
+    var key = compute_key(world_position_quantized, world_normal_quantized);
+    let checksum = compute_checksum(world_position_quantized, world_normal_quantized);
+
+    for (var i = 0u; i < WORLD_CACHE_MAX_SEARCH_STEPS; i++) {
+        let existing_checksum = atomicCompareExchangeWeak(&world_cache_checksums[key], WORLD_CACHE_EMPTY_CELL, checksum).old_value;
+        if existing_checksum == checksum {
+            // Cache entry already exists - get radiance and reset cell lifetime
+            atomicStore(&world_cache_life[key], WORLD_CACHE_CELL_LIFETIME);
+            return world_cache_radiance[key].rgb;
+        } else if existing_checksum == WORLD_CACHE_EMPTY_CELL {
+            // Cell is empty - reset cell lifetime so that it starts getting updated next frame
+            atomicStore(&world_cache_life[key], WORLD_CACHE_CELL_LIFETIME);
+            world_cache_geometry_data[key].world_position = world_position;
+            world_cache_geometry_data[key].world_normal = world_normal;
+            return vec3(0.0);
+        } else {
+            // Collision - jump to another entry
+            key = wrap_key(pcg_hash(key));
+        }
+    }
+
+    return vec3(0.0);
+}
+```
 
 #### Cache Decay
 
@@ -224,4 +263,11 @@ TODO
 
 TODO
 
-## Results and Limitations
+## Results and Future Work
+
+## Reference List
+* https://blog.traverseresearch.nl/dynamic-diffuse-global-illumination-b56dc0525a0a
+* https://intro-to-restir.cwyman.org
+* https://interplayoflight.wordpress.com/2023/12/17/a-gentler-introduction-to-restir/
+* https://cwyman.org/papers/hpg21_rearchitectingReSTIR.pdf
+* https://github.com/EmbarkStudios/kajiya/blob/main/docs/gi-overview.md
