@@ -72,9 +72,13 @@ TODO: Images
 
 The first step of Solari is also the most boring: rasterize a standard G-buffer.
 
+#### Why Raster?
+
 The G-buffer pass remains completely unchanged from standard Bevy (it's the same plugin). This might seem like a missed opportunity - after all, I could have used raytracing for primary visibility instead of rasterization - but there's an important reason I kept rasterization here.
 
-By using raster for primary visibility, I maintain the option for people to use low-resolution proxy meshes in the raytracing scene, while still getting high quality meshes and textures in the primary view. The raster meshes can be full resolution with all their geometric detail, while the raytracing acceleration structure contains simplified versions that are cheaper to trace against. This hybrid approach gives the best of both worlds: detailed primary surfaces, with efficient secondary rays.
+By using raster for primary visibility, I maintain the option for people to use low-resolution proxy meshes in the raytracing scene, while still getting high quality meshes and textures in the primary view. The raster meshes can be full resolution with all their geometric detail, while the raytracing acceleration structure contains simplified versions that are cheaper to trace against.
+
+#### Attachments
 
 Bevy's G-buffer uses quite a bit of packing. The main attachment is a `Rgba32Uint` texture with each channel storing multiple values:
 
@@ -84,6 +88,8 @@ Bevy's G-buffer uses quite a bit of packing. The main attachment is a `Rgba32Uin
 - **Fourth channel**: World-space normal encoded into 24 bits via [octahedral encoding](https://www.jcgt.org/published/0003/02/01), plus 8 bits of flags meant for Bevy's default deferred shading (unused by Solari)
 
 There's also a second `Rg16Float` attachment for motion vectors, and of course the depth attachment.
+
+#### Drawing
 
 The G-buffer rendering itself uses `multi_draw_indirect` to draw several meshes at once, using [sub-allocated](https://crates.io/crates/offset-allocator) buffers. Culling is done on the GPU using [two-pass occlusion culling](@/posts/2024_06_09_virtual_geometry_bevy_0_14/index.md#culling-first-pass) against a hierarchal depth buffer. Textures are handled bindlessly, and we try to minimize overall pipeline permutations.
 
