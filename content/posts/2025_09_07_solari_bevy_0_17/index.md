@@ -6,8 +6,6 @@ date = "2025-09-06"
 tags = ["bevy", "raytracing"]
 +++
 
-# Hardware Raytracing in Bevy 0.17 (Solari)
-
 ## Introduction
 
 Lighting is hard. Anyone who's tried to make a 3D scene look good knows the frustration of placing light probes, tweaking shadow cascades, and trying to figure out why their materials don't look quite right.
@@ -70,17 +68,17 @@ Onto the frame breakdown!
 
 TODO: Images
 
-The first step of Solari is also the most boring: rasterize a standard G-buffer.
+The first step of Solari is also the most boring: rasterize a standard GBuffer.
 
 #### Why Raster?
 
-The G-buffer pass remains completely unchanged from standard Bevy (it's the same plugin). This might seem like a missed opportunity - after all, I could have used raytracing for primary visibility instead of rasterization - but there's an important reason I kept rasterization here.
+The GBuffer pass remains completely unchanged from standard Bevy (it's the same plugin). This might seem like a missed opportunity - after all, I could have used raytracing for primary visibility instead of rasterization - but there's an important reason I kept rasterization here.
 
 By using raster for primary visibility, I maintain the option for people to use low-resolution proxy meshes in the raytracing scene, while still getting high quality meshes and textures in the primary view. The raster meshes can be full resolution with all their geometric detail, while the raytracing acceleration structure contains simplified versions that are cheaper to trace against.
 
 #### Attachments
 
-Bevy's G-buffer uses quite a bit of packing. The main attachment is a `Rgba32Uint` texture with each channel storing multiple values:
+Bevy's GBuffer uses quite a bit of packing. The main attachment is a `Rgba32Uint` texture with each channel storing multiple values:
 
 - **First channel**: sRGB base color and perceptual roughness packed as 4x8unorm
 - **Second channel**: Emissive color stored as Rgb9e5
@@ -91,19 +89,136 @@ There's also a second `Rg16Float` attachment for motion vectors, and of course t
 
 #### Drawing
 
-The G-buffer rendering itself uses `multi_draw_indirect` to draw several meshes at once, using [sub-allocated](https://crates.io/crates/offset-allocator) buffers. Culling is done on the GPU using [two-pass occlusion culling](@/posts/2024_06_09_virtual_geometry_bevy_0_14/index.md#culling-first-pass) against a hierarchal depth buffer. Textures are handled bindlessly, and we try to minimize overall pipeline permutations.
+The GBuffer rendering itself uses `multi_draw_indirect` to draw several meshes at once, using [sub-allocated](https://crates.io/crates/offset-allocator) buffers. Culling is done on the GPU using [two-pass occlusion culling](@/posts/2024_06_09_virtual_geometry_bevy_0_14/index.md#culling-first-pass) against a hierarchal depth buffer. Textures are handled bindlessly, and we try to minimize overall pipeline permutations.
 
 These combined techniques keep draw call overhead and per-pixel overdraw fairly low, even for complex scenes.
+
+### ReSTIR DI
+
+TODO: Screenshots of 1 random sample, initial sampling, and temporal + spatial reuse
+
+For direct lighting, Solari uses a pretty standard ReSTIR DI setup.
+
+Reservoirs store the light sample, confidence weight, and unbiased contribution weight.
+
+```rust
+struct Reservoir {
+    sample: LightSample,
+    confidence_weight: f32,
+    unbiased_contribution_weight: f32,
+}
+```
+
+Direct lighting is handled in two compute dispatches. The first pass does initial and temporal resampling. The second pass does spatial resampling.
+
+Initial sampling uses 32 samples from a light tile (more on this later), and chooses the brighest one via resampling importance sampling (RIS), using constant MIS weights. After choosing the best sample, we trace a ray to test visibility, setting the unbiased contribution weight to 0 in the case of occlusion.
+
+> All raytracing in Solari is handled via inline ray queries. Wgpu does not yet support raytracing pipelines, so I haven't gotten a chance to see if they would be faster.
+
+A temporal reservoir is then obtained via motion vectors and last frame's pixel data. We validate the reprojection using the `pixel_dissimilar` heuristic. We also need to check that the temporal light sample still exists in the current frame (i.e. the light has not been despawned).
+
+You could trace an additional ray here to validate visibility, but it's cheaper to just assume that the temporal light sample is still visible from the current pixel this frame. Doing this saves one raytrace, at the cost of shadows for moving objects being delayed by 1 frame, and some slighty darker shadows. Overall the artifacts are not very noticable, so it's well worth reusing visibility for the temporal reservoir.
+
+The initial and temporal reservoir are then merged together using constant MIS weights. I tried using the balance heuristic, but didn't notice much difference for DI, and constant MIS weights are cheaper.
+
+```rust
+// Reject if tangent plane difference difference more than 0.3% or angle between normals more than 25 degrees
+fn pixel_dissimilar(depth: f32, world_position: vec3<f32>, other_world_position: vec3<f32>, normal: vec3<f32>, other_normal: vec3<f32>) -> bool {
+    // https://developer.download.nvidia.com/video/gputechconf/gtc/2020/presentations/s22699-fast-denoising-with-self-stabilizing-recurrent-blurs.pdf#page=45
+    let tangent_plane_distance = abs(dot(normal, other_world_position - world_position));
+    let view_z = -depth_ndc_to_view_z(depth);
+
+    return tangent_plane_distance / view_z > 0.003 || dot(normal, other_normal) < 0.906;
+}
+```
+
+The second pass handles spatial resampling. We choose one random pixel within a 30 pixel-radius disk, and borrow its reservoir. We use the same `pixel_dissimilar` heuristic as the temporal pass to validate the spatial reservoir. We must additionally trace a ray to test visibility, as the reservoir comes from a neighboring pixel, and we cannot assume that the same light sample will be visible for both the neighbor and current pixel.
+
+Unlike other ReSTIR implementations, we only ever use 1 spatial sample. Using more than 1 sample does not tend to improve quality, and increases performance costs. We cannot, however, skip spatial resampling entirely. Having a source of new samples from other pixels is crucial to prevent artifacts from temporal resampling.
+
+The reservoir produced by the first pass and the spatial reservoir are combined with the same routine that we used for merging initial and temporal reservoirs.
+
+Once the final reservoir is produced, we can use it to shade the pixel, producing the final direct lighting.
+
+(TODO: Screenshot of artifacts)
+
+Overall the DI pass uses two raytraces per pixel (1 initial, 1 spatial).
+
+### ReSTIR GI
+
+For indirect lighting, Solari uses ReSTIR GI with a very similiar setup to the previous ReSTIR DI.
+
+Reservoirs store the cached radiance emitted by the sample point, sample point geometry info, confidence weight, and unbiased contribution weight.
+
+```rust
+struct Reservoir {
+    radiance: vec3<f32>,
+    sample_point_world_position: vec3<f32>,
+    sample_point_world_normal: vec3<f32>,
+    confidence_weight: f32,
+    unbiased_contribution_weight: f32,
+}
+```
+
+There are again two compute dispatches, with the first pass doing initial and temporal resampling, and the second pass doing spatial resampling.
+
+GI samples are much more expensive to generate than DI samples, so for initial sampling, we only generate 1 sample. We trace a ray along a random direction chosen from a uniform hemisphere distribution. At the hit point, we need to obtain an estimate of the incoming irradiance (which becomes the outgoing radiance towards the current pixel). To obtain irradiance, we query the world cache at the hit point (more on this later).
+
+```rust
+fn generate_initial_reservoir(world_position: vec3<f32>, world_normal: vec3<f32>, rng: ptr<function, u32>) -> Reservoir {
+    var reservoir = empty_reservoir();
+
+    let ray_direction = sample_uniform_hemisphere(world_normal, rng);
+    let ray_hit = trace_ray(world_position, ray_direction, RAY_T_MIN, RAY_T_MAX, RAY_FLAG_NONE);
+
+    if ray_hit.kind == RAY_QUERY_INTERSECTION_NONE {
+        return reservoir;
+    }
+
+    let sample_point = resolve_ray_hit_full(ray_hit);
+
+    // 1-bounce paths are handled by ReSTIR DI
+    if all(sample_point.material.emissive != vec3(0.0)) {
+        return reservoir;
+    }
+
+    reservoir.unbiased_contribution_weight = uniform_hemisphere_inverse_pdf();
+    reservoir.sample_point_world_position = sample_point.world_position;
+    reservoir.sample_point_world_normal = sample_point.world_normal;
+    reservoir.confidence_weight = 1.0;
+
+    reservoir.radiance = query_world_cache(sample_point.world_position, sample_point.geometric_world_normal, view.world_position);
+
+    let sample_point_diffuse_brdf = sample_point.material.base_color / PI;
+    reservoir.radiance *= sample_point_diffuse_brdf;
+
+    return reservoir;
+}
+```
+
+Temporal reservoir selection for GI is a little different from DI. Instead of reprojecting based only on motion vectors, we instead jitter the reprojected location using [permutation sampling](TODO). This essentially adds a small spatial component to the temporal resampling, which helps break up temporal correlations. Without permutation sampling, the denoiser (DLSS-RR) would have artifacts.
+
+Spatial reservoir selection for GI is identical to DI.
+
+Reservoir merging for GI uses the balance heuristic for MIS weights, and includes the BRDF contribution, as I found that unlike DI, these make a significant quality difference. The balance heuristic is not much more expensive here, as we are only ever merging two reservoirs at a time.
+
+Additionally, since both temporal and spatial resampling use neighboring pixels, we need to add a jacobian determinant to the MIS weights to account for the change in sampling domain. The jacobian proved to be one of the hardest parts of ReSTIR GI. While it makes the GI more correct, it also adds a lot of noise in corners. Worse, the jacobian tends to "explode" into super high numbers that result in overflow to `inf`, which then spreads over the entire screen due to resampling and denoising.
+
+The best solution I have found to reduce artifacts from the jacobian is to reject neighbor samples when the jacobian is greater than 2 (i.e., a neighboring sample reused at the current pixel would have more than 2x the contribution it originally did). While this somewhat works, there are still issues with stability. If I leave Solari running for a couple of minutes in the same spot, it will eventually  lead to overflow. I haven't yet figured out how to prevent this.
+
+Once the final reservoir is produced, we can use it to shade the pixel, producing the final indirect lighting. Since we're using DLSS-RR for denoising, we can simply add the GI on top of the existing framebuffer. There's no need to write to a separate buffer for a separate denoising process.
+
+Overall the GI pass uses two raytraces per pixel (1 initial, 1 spatial), same as DI.
 
 ### Light Tile Presampling
 
 TODO: Image of light tile buffers
 
-The next step in Solari is generating some presampled light buffers, following section 5 of [Rearchitecting Spatiotemporal Resampling for Production](https://cwyman.org/papers/hpg21_rearchitectingReSTIR.pdf).
+Now that we've discussed the per-pixel DI and GI code, it's time to discuss how we accelerate the initial sampling steps.
 
-This presampling step greatly speeds up later passes that want to sample the scene's light sources, namely ReSTIR DI.
+In this pass, we will generate some light tile buffers, following section 5 of [Rearchitecting Spatiotemporal Resampling for Production](https://cwyman.org/papers/hpg21_rearchitectingReSTIR.pdf).
 
-> Feel free to skip this section for now, and come back to it after reading the ReSTIR DI section.
+This presampling step greatly speeds up passes that want to sample the scene's light sources, namely ReSTIR DI.
 
 #### Light Sampling APIs
 
@@ -251,8 +366,6 @@ Later rendering steps that want to sample the scene's light sources can pick a r
 TODO: Image of the world cache
 
 Whereas light tiles reshapes light sampling to accelerate direct lighting, the world cache accelerates sampling _indirect_ lighting for ReSTIR GI.
-
-> Feel free to skip this section for now, and come back to it after reading the ReSTIR GI section.
 
 The world cache voxelizes the world, storing accumulated irradiance (light hitting the surface) in each voxel. When sampling indirect lighting in ReSTIR GI, rather than having to trace additional rays towards light sources to estimate the irradiance, we can simply lookup the irradiance at the given voxel.
 
@@ -441,130 +554,13 @@ fn blend_new_samples(@builtin(global_invocation_id) active_cell_id: vec3<u32>) {
 }
 ```
 
-### ReSTIR DI
-
-TODO: Screenshots of 1 random sample, initial sampling, and temporal + spatial reuse
-
-For direct lighting, Solari uses a pretty standard ReSTIR DI setup.
-
-Reservoirs store the light sample, confidence weight, and unbiased contribution weight.
-
-```rust
-struct Reservoir {
-    sample: LightSample,
-    confidence_weight: f32,
-    unbiased_contribution_weight: f32,
-}
-```
-
-Direct lighting is handled in two compute dispatches. The first pass does initial and temporal resampling. The second pass does spatial resampling.
-
-Initial sampling uses 32 samples from light tiles (more on this later), and chooses the brighest one via resampling importance sampling (RIS), using constant MIS weights. After choosing the best sample, we trace a ray to test visibility, setting the unbiased contribution weight to 0 in the case of occlusion.
-
-A temporal reservoir is then obtained via motion vectors and last frame's pixel data. We validate the reprojection using the `pixel_dissimilar` heuristic. We also need to check that the temporal light sample still exists in the current frame (i.e. the light has not been despawned).
-
-You could trace an additional ray here to validate visibility, but it's cheaper to just assume that the temporal light sample is still visible from the current pixel this frame. Doing this saves one raytrace, at the cost of shadows for moving objects being delayed by 1 frame, and some slighty darker shadows. Overall the artifacts are not very noticable, so it's well worth reusing visibility for the temporal reservoir.
-
-The initial and temporal reservoir are then merged together using constant MIS weights. I tried using the balance heuristic, but didn't notice much difference for DI, and constant MIS weights are cheaper.
-
-```rust
-// Reject if tangent plane difference difference more than 0.3% or angle between normals more than 25 degrees
-fn pixel_dissimilar(depth: f32, world_position: vec3<f32>, other_world_position: vec3<f32>, normal: vec3<f32>, other_normal: vec3<f32>) -> bool {
-    // https://developer.download.nvidia.com/video/gputechconf/gtc/2020/presentations/s22699-fast-denoising-with-self-stabilizing-recurrent-blurs.pdf#page=45
-    let tangent_plane_distance = abs(dot(normal, other_world_position - world_position));
-    let view_z = -depth_ndc_to_view_z(depth);
-
-    return tangent_plane_distance / view_z > 0.003 || dot(normal, other_normal) < 0.906;
-}
-```
-
-The second pass handles spatial resampling. We choose one random pixel within a 30 pixel-radius disk, and borrow its reservoir. We use the same `pixel_dissimilar` heuristic as the temporal pass to validate the spatial reservoir. We must additionally trace a ray to test visibility, as the reservoir comes from a neighboring pixel, and we cannot assume that the same light sample will be visible for both the neighbor and current pixel.
-
-The reservoir produced by the first pass and the spatial reservoir are combined with the same routine that we used for merging initial and temporal reservoirs.
-
-Once the final reservoir is produced, we can use it to shade the pixel, producing the final direct lighting.
-
-Unlike other ReSTIR implementations, we only ever use 1 spatial sample. Using more than 1 sample does not tend to improve quality, and increases performance costs. We cannot, however, skip spatial resampling entirely. Having a source of new samples from other pixels is crucial to prevent artifacts from temporal resampling.
-
-(TODO: Screenshot of artifacts)
-
-Overall the DI pass uses two raytraces per pixel (1 initial, 1 spatial).
-
-All raytracing in Solari is handled via inline ray queries. Wgpu does not yet support raytracing pipelines, so I haven't gotten a chance to see if they would be faster.
-
-### ReSTIR GI
-
-For indirect lighting, Solari uses ReSTIR GI with a very similiar setup to the previous ReSTIR DI passes.
-
-Reservoirs store the cached radiance emitted by the sample point, sample point geometry info, confidence weight, and unbiased contribution weight.
-
-```rust
-struct Reservoir {
-    radiance: vec3<f32>,
-    sample_point_world_position: vec3<f32>,
-    sample_point_world_normal: vec3<f32>,
-    confidence_weight: f32,
-    unbiased_contribution_weight: f32,
-}
-```
-
-There are again two compute dispatches, with the first pass doing initial and temporal resampling, and the second pass doing spatial resampling.
-
-GI samples are much more expensive to generate than DI samples, so for initial sampling, we only generate 1 sample. We trace a ray along a random direction chosen from a uniform hemisphere distribution. At the hit point, we need to obtain an estimate of the incoming irradiance (which becomes the outgoing radiance towards the current pixel). To obtain irradiance, we query the world cache at the hit point (more on this later).
-
-```rust
-fn generate_initial_reservoir(world_position: vec3<f32>, world_normal: vec3<f32>, rng: ptr<function, u32>) -> Reservoir {
-    var reservoir = empty_reservoir();
-
-    let ray_direction = sample_uniform_hemisphere(world_normal, rng);
-    let ray_hit = trace_ray(world_position, ray_direction, RAY_T_MIN, RAY_T_MAX, RAY_FLAG_NONE);
-
-    if ray_hit.kind == RAY_QUERY_INTERSECTION_NONE {
-        return reservoir;
-    }
-
-    let sample_point = resolve_ray_hit_full(ray_hit);
-
-    // 1-bounce paths are handled by ReSTIR DI
-    if all(sample_point.material.emissive != vec3(0.0)) {
-        return reservoir;
-    }
-
-    reservoir.unbiased_contribution_weight = uniform_hemisphere_inverse_pdf();
-    reservoir.sample_point_world_position = sample_point.world_position;
-    reservoir.sample_point_world_normal = sample_point.world_normal;
-    reservoir.confidence_weight = 1.0;
-
-    reservoir.radiance = query_world_cache(sample_point.world_position, sample_point.geometric_world_normal, view.world_position);
-
-    let sample_point_diffuse_brdf = sample_point.material.base_color / PI;
-    reservoir.radiance *= sample_point_diffuse_brdf;
-
-    return reservoir;
-}
-```
-
-Temporal reservoir selection for GI is a little different from DI. Instead of reprojecting based only on motion vectors, we instead jitter the reprojected location using [permutation sampling](TODO). This essentially adds a small spatial component to the temporal resampling, which helps break up temporal correlations. Without permutation sampling, the denoiser (DLSS-RR) would have artifacts.
-
-Spatial reservoir selection for GI is identical to DI.
-
-Reservoir merging for GI uses the balance heuristic for MIS weights, and includes the BRDF contribution, as I found that unlike DI, these make a significant quality difference. The balance heuristic is not much more expensive here, as we are only ever merging two reservoirs at a time.
-
-Additionally, since both temporal and spatial resampling use neighboring pixels, we need to add a jacobian determinant to the MIS weights to account for the change in sampling domain. The jacobian proved to be one of the hardest parts of ReSTIR GI. While it makes the GI more correct, it also adds a lot of noise in corners. Worse, the jacobian tends to "explode" into super high numbers that result in overflow to `inf`, which then spreads over the entire screen due to resampling and denoising.
-
-The best solution I have found to reduce artifacts from the jacobian is to reject neighbor samples when the jacobian is greater than 2 (i.e., a neighboring sample reused at the current pixel would have more than 2x the contribution it originally did). While this somewhat works, there are still issues with stability. If I leave Solari running for a couple of minutes in the same spot, it will eventually  lead to overflow. I haven't yet figured out how to prevent this.
-
-Once the final reservoir is produced, we can use it to shade the pixel, producing the final indirect lighting. Since we're using DLSS-RR for denoising, we can simply add the GI on top of the existing framebuffer. There's no need to write to a separate buffer for a separate denoising process.
-
-Overall the GI pass uses two raytraces per pixel (1 initial, 1 spatial), same as DI, for a total of 4 rays per pixel.
-
 ### DLSS Ray Reconstruction
 
 Once we have our noisy estimate of the scene, we run it through DLSS-RR to upscale, antialias, and denoise it.
 
-While ideally we would be able to configure DLSS-RR to read directly from our G-buffer, we unfortunately need a small pass to copy from the G-buffer to some standalone textures that DLSS-RR will take as inputs to help guide the denoising pass.
+While ideally we would be able to configure DLSS-RR to read directly from our GBuffer, we unfortunately need a small pass to copy from the GBuffer to some standalone textures that DLSS-RR will take as inputs to help guide the denoising pass.
 
-DLSS-RR is called via the [dlss_wgpu](https://crates.io/crates/dlss_wgpu) wrapper I wrote, which is integrated into bevy_anti_alias.
+DLSS-RR is called via the [dlss_wgpu](https://crates.io/crates/dlss_wgpu) wrapper I wrote, which is integrated into bevy_anti_alias as a Bevy plugin. The dlss_wgpu crate is standalone, and can also be used in non-Bevy projects that are using wgpu.
 
 ## Results
 
