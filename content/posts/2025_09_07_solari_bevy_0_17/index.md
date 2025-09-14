@@ -564,6 +564,17 @@ DLSS-RR is called via the [dlss_wgpu](https://crates.io/crates/dlss_wgpu) wrappe
 
 ## Results
 
+RTX 3080, 1600x900 upscaled to 3200x1800 at DLSS-RR Performance
+
+Timings:
+* 0.028 ms - presample light tiles
+* 0.135 ms - world cache
+* 1.110 ms - DI
+* 0.591 ms - GI
+* 0.038 ms - dlss resolve inputs
+* 5.710 ms - DLSS RR
+* 7.612 ms - total
+
 ## Future Work
 
 While Solari currently requires a NVIDIA GPU, the DLSS-RR integration is a separate plugin from Solari. Users can optionally choose to bring their own denoiser. In the future, when they release, I'm hoping to add support for [AMD's FSR Ray Regeneration](https://web.archive.org/web/20250822144949/https://www.amd.com/en/products/graphics/technologies/fidelityfx/super-resolution.html#upcoming), whatever XeSS extension [Intel](TODO) eventually releases, and potentially even [Apple's MTL4FXTemporalDenoisedScaler](https://developer.apple.com/documentation/metalfx/mtl4fxtemporaldenoisedscaler). Writing a denoiser from scratch is a lot of work, but it would also be nice to add [ReBLUR](https://developer.download.nvidia.com/video/gputechconf/gtc/2020/presentations/s22699-fast-denoising-with-self-stabilizing-recurrent-blurs.pdf) as a fallback for users of other GPUs.
