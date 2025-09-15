@@ -15,7 +15,7 @@ Over the past few years, real-time raytracing has gone from a research curiosity
 With the release of v0.17, [Bevy](https://bevy.org) now joins the club with experimental support for hardware raytracing!
 
 <video style="max-width: 100%; margin: var(--gap) var(--gap) 0 var(--gap); border-radius: 6px;" controls>
-  <source src="solari_recording.mp4" type="video/mp4">
+  <source src="2025-09-07-solari-bevy-0-17/solari_recording.mp4" type="video/mp4">
 </video>
 <center>
 
@@ -55,7 +55,7 @@ And honestly? It's just cool, and something I love working on :)
 
 In its initial release, Solari supports raytraced diffuse direct (DI) and indirect lighting (GI). Light can come from either emissive triangle meshes, or analytic [directional lights](https://docs.rs/bevy/0.16.1/bevy/pbr/struct.DirectionalLight.html).
 
-Direct lighting is handled via ReSTIR DI, while indirect lighting is handled by a combination of ReSTIR GI, and a world-space irradiance cache. Denoising is handled by DLSS Ray Reconstruction.
+Direct lighting is handled via ReSTIR DI, while indirect lighting is handled by a combination of ReSTIR GI and a world-space irradiance cache. Denoising is handled by DLSS Ray Reconstruction.
 
 As opposed to coarse screen-space probes, per-pixel ReSTIR brings much better detail, along with being _considerably_ easier to get started with. I had my first prototype working in a weekend.
 
@@ -251,9 +251,9 @@ Reservoir merging for GI uses the balance heuristic for MIS weights, and include
 
 #### GI Jacobian
 
-Additionally, since both temporal and spatial resampling use neighboring pixels, we need to add a jacobian determinant to the MIS weights to account for the change in sampling domain. The jacobian proved to be one of the hardest parts of ReSTIR GI. While it makes the GI more correct, it also adds a lot of noise in corners. Worse, the jacobian tends to "explode" into super high numbers that result in overflow to `inf`, which then spreads over the entire screen due to resampling and denoising.
+Additionally, since both temporal and spatial resampling use neighboring pixels, we need to add a Jacobian determinant to the MIS weights to account for the change in sampling domain. The Jacobian proved to be one of the hardest parts of ReSTIR GI. While it makes the GI more correct, it also adds a lot of noise in corners. Worse, the Jacobian tends to "explode" into super high numbers that result in overflow to `inf`, which then spreads over the entire screen due to resampling and denoising.
 
-The best solution I have found to reduce artifacts from the jacobian is to reject neighbor samples when the jacobian is greater than 2 (i.e., a neighboring sample reused at the current pixel would have more than 2x the contribution it originally did). While this somewhat works, there are still issues with stability. If I leave Solari running for a couple of minutes in the same spot, it will eventually  lead to overflow. I haven't yet figured out how to prevent this.
+The best solution I have found to reduce artifacts from the Jacobian is to reject neighbor samples when the Jacobian is greater than 2 (i.e., a neighboring sample reused at the current pixel would have more than 2x the contribution it originally did). While this somewhat works, there are still issues with stability. If I leave Solari running for a couple of minutes in the same spot, it will eventually  lead to overflow. I haven't yet figured out how to prevent this.
 
 #### GI Shading
 
