@@ -53,7 +53,7 @@ And honestly? It's just cool, and something I love working on :)
 
 ## Frame Breakdown
 
-In its initial release, Solari supports raytraced diffuse direct (DI) and indirect lighting (GI). Light can come from either emissive triangle meshes, or analytic [directional lights](https://docs.rs/bevy/0.16.1/bevy/pbr/struct.DirectionalLight.html).
+In its initial release, Solari supports raytraced diffuse direct (DI) and indirect lighting (GI). Light can come from either emissive triangle meshes, or analytic [directional lights](https://docs.rs/bevy/0.16.1/bevy/pbr/struct.DirectionalLight.html). Everything is fully dynamic in realtime, with no baking required.
 
 Direct lighting is handled via ReSTIR DI, while indirect lighting is handled by a combination of ReSTIR GI and a world-space irradiance cache. Denoising is handled by DLSS Ray Reconstruction.
 
@@ -651,20 +651,28 @@ DLSS-RR is called via the [dlss_wgpu](https://crates.io/crates/dlss_wgpu) wrappe
 
 </center>
 
-## Results
+## Performance
 
-(TODO)
+Timings for the above scene were taken on an RTX 3080, rendered at 1600x900, and upscaled to 3200x1800 using DLSS-RR performance mode.
 
-RTX 3080, 1600x900 upscaled to 3200x1800 at DLSS-RR Performance
+<center>
 
-Timings:
-* 0.028 ms - presample light tiles
-* 0.135 ms - world cache
-* 1.110 ms - DI
-* 0.591 ms - GI
-* 0.038 ms - dlss resolve inputs
-* 5.710 ms - DLSS RR
-* 7.612 ms - total
+|          Pass         | Duration (ms) |     Dependent On     |
+|:---------------------:|:-------------:|:--------------------:|
+| Presample Light Tiles |     0.028     |      Fixed cost      |
+|      World Cache      |     0.135     | World size, somewhat |
+|       ReSTIR DI       |     1.110     |      Pixel count     |
+|       ReSTIR GI       |     0.591     |      Pixel count     |
+|        DLSS-RR        |     5.748     |      Pixel count     |
+|         Total         |     7.612     |                      |
+
+</center>
+
+While DLSS-RR is quite expensive, it ends up saving performance overall.
+
+Without upscaling, we would have 4x as many pixels total, meaning ReSTIR DI and GI would be ~4x as expensive. After that, we would need a separate denoising process (usually two separate processes, one for direct and one for indirect), a separate shading pass to apply the denoised lighting, and then an antialiasing method.
+
+Total performance costs would be higher than using the unified upscaling + denoising + antialiasing pipeline that DLSS-RR provides.
 
 ## Future Work
 
