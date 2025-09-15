@@ -49,7 +49,7 @@ Without that reference, it's really hard to know what you're missing or how to i
 
 There's also the practical consideration that if Bevy ever wants to attract AAA game developers, we need these kinds of systems. Recent AAA games like DOOM: The Dark Ages and Cyberpunk 2077 rely heavily on raytracing, and artists working on these types of projects expect their tools to support similar techniques.
 
-And honestly? It's just cool, and something I personally love working on :)
+And honestly? It's just cool, and something I love working on :)
 
 ## Frame Breakdown
 
