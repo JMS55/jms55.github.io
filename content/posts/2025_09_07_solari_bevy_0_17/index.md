@@ -62,7 +62,7 @@ Direct lighting is handled via ReSTIR DI, while indirect lighting is handled by 
 As opposed to coarse screen-space probes, per-pixel ReSTIR brings much better detail, along with being _considerably_ easier to get started with. I had my first prototype working in a weekend.
 
 While I won't be covering ReSTIR from first principles (that could be its own entire blog post), [A Gentle Introduction to ReSTIR:
-Path Reuse in Real-time](https://intro-to-restir.cwyman.org) and [A gentler introduction to ReSTIR](https://interplayoflight.wordpress.com/2023/12/17/a-gentler-introduction-to-restir) are both really great resources. If you haven't played with ReSTIR before, I suggest giving them a skim before continuing with this post. Or continue anyways, and just admire the pretty pixels.
+Path Reuse in Real-time](https://intro-to-restir.cwyman.org) and [A gentler introduction to ReSTIR](https://interplayoflight.wordpress.com/2023/12/17/a-gentler-introduction-to-restir) are both really great resources. If you haven't played with ReSTIR before, I suggest giving them a skim before continuing with this post. Or continue anyways, and just admire the pretty pixels :)
 
 Onto the frame breakdown!
 
@@ -106,9 +106,15 @@ These combined techniques keep draw call overhead and per-pixel overdraw fairly 
 
 ### ReSTIR DI
 
-For direct lighting, Solari uses a pretty standard ReSTIR DI setup.
+In order to calculate direct lighting (light emitted by a light source, bouncing off a surface, and then hitting the camera), for each pixel, we need to loop over every light and point on those lights, and then calculate the light's contribution, as well as whether or not the light is visible.
 
-ReSTIR DI randomly selects points on lights, and then shares the random samples between pixels in order to choose the best light (most contribution to the image) for a given pixel.
+TODO: Diagram of camera -> surface -> sampling light sources
+
+This is very expensive, so realtime applications tend to approximate it by averaging many individual light samples. If you choose those samples well, you can get an approximate result that's very close to the real thing, without tons of expensive calculations.
+
+To quickly estimate direct lighting, Solari uses a pretty standard ReSTIR DI setup.
+
+ReSTIR DI randomly selects points on lights, and then shares the random samples between pixels based in order to choose the best light (most contribution to the image) for a given pixel.
 
 #### DI Structure
 
@@ -126,9 +132,9 @@ Direct lighting is handled in two compute dispatches. The first pass does initia
 
 #### DI Initial Resampling
 
-Initial sampling uses 32 samples from a light tile (more on this later), and chooses the brighest one via resampling importance sampling (RIS), using constant MIS weights.
+Initial sampling uses 32 samples from a light tile (more on this later), and chooses the brightest one via resampling importance sampling (RIS), using constant MIS weights.
 
-32 samples is often overkill, and as this is one of the most expensive parts of Solari, I'm planning on letting users control this number in a future release.
+32 samples is often overkill for scenes with a small number of lights. As this is one of the most expensive parts of Solari, I'm planning on letting users control this number in a future release.
 
 After choosing the best sample, we trace a ray to test visibility, setting the unbiased contribution weight to 0 in the case of occlusion.
 
@@ -150,7 +156,7 @@ A temporal reservoir is then obtained via motion vectors and last frame's pixel 
 
 Additionally, the chosen light from last frame might no longer be visible this frame, e.g. if an object moved behind a wall. We could trace an additional ray here to validate visibility, but it's cheaper to just assume that the temporal light sample is still visible from the current pixel this frame.
 
-Reusing temporal visibility saves one raytrace, at the cost of shadows for moving objects being delayed by 1 frame, and some slighty darker shadows. Overall the artifacts are not very noticable, so I find that it's well worth reusing visibility for the temporal reservoir resampling.
+Reusing temporal visibility saves one raytrace, at the cost of shadows for moving objects being delayed by 1 frame, and some slighty darker/wider shadows. Overall the artifacts are not very noticable, so I find that it's well worth reusing visibility for the temporal reservoir resampling.
 
 The initial and temporal reservoir are then merged together using constant MIS weights. I tried using the balance heuristic, but didn't notice much difference for DI, and constant MIS weights are cheaper (TODO: Re-validate this).
 
@@ -179,7 +185,7 @@ The reservoir produced by the first pass and the spatial reservoir are combined 
 
 #### DI Shading
 
-Once the final reservoir is produced, we can use it to shade the pixel, producing the final direct lighting.
+Once the final reservoir is produced, we can use its chosen light sample to shade the pixel, producing the final direct lighting.
 
 Overall the DI pass uses two raytraces per pixel (1 initial, 1 spatial).
 
@@ -192,7 +198,11 @@ Overall the DI pass uses two raytraces per pixel (1 initial, 1 spatial).
 
 ### ReSTIR GI
 
-For indirect lighting, Solari uses ReSTIR GI with a very similiar setup to the previous ReSTIR DI.
+Indirect lighting (light emitted by a light source, bouncing off more than 1 surface, and then hitting the camera) is even more expensive to calculate than direct lighting, as you need to trace multiple bounces of each ray to calculate the lighting for a given path.
+
+TODO: Diagram of camera -> surface -> hemisphere directions -> world cache voxel
+
+To quickly estimate indirect lighting, Solari uses ReSTIR GI, with a very similiar setup to the previous ReSTIR DI.
 
 ReSTIR GI randomly selects directions in a hemisphere, and then shares the random samples between pixels in order to choose the best 1-bounce path for a given pixel.
 
@@ -223,7 +233,9 @@ There are again two compute dispatches, with the first pass doing initial and te
 
 </center>
 
-GI samples are much more expensive to generate than DI samples, so for initial sampling, we only generate 1 sample. We trace a ray along a random direction chosen from a uniform hemisphere distribution. At the hit point, we need to obtain an estimate of the incoming irradiance (which becomes the outgoing radiance towards the current pixel).
+GI samples are much more expensive to generate than DI samples (tracing paths is more expensive than looping over a list of light sources), so for initial sampling, we only generate 1 sample.
+
+We start by tracing a ray along a random direction chosen from a uniform hemisphere distribution. At the hit point, we need to obtain an estimate of the incoming irradiance, which becomes the outgoing radiance towards the current pixel, i.e. the path's contribution.
 
 To obtain irradiance, we query the world cache at the hit point (more on this later).
 
@@ -261,7 +273,9 @@ fn generate_initial_reservoir(world_position: vec3<f32>, world_normal: vec3<f32>
 
 #### GI Temporal and Spatial Resampling
 
-Temporal reservoir selection for GI is a little different from DI. In addition to reprojecting based on motion vectors, we jitter the reprojected location by a few pixels in either direction using [permutation sampling](TODO). This essentially adds a small spatial component to the temporal resampling, which helps break up temporal correlations. Without permutation sampling, the denoiser (DLSS-RR) would have artifacts. (TODO: Screenshot comparisons)
+Temporal reservoir selection for GI is a little different from DI.
+
+In addition to reprojecting based on motion vectors, we jitter the reprojected location by a few pixels in either direction using [permutation sampling](TODO). This essentially adds a small spatial component to the temporal resampling, which helps break up temporal correlations. Without permutation sampling, the denoiser (DLSS-RR) would have artifacts. (TODO: Screenshot comparisons)
 
 (TODO: Talk about why we didn't use it for DI, re-validate this assumption)
 
@@ -451,15 +465,17 @@ Rendering passes that want to sample the scene's light sources can pick a random
 
 ### World Cache
 
+Whereas light tiles reshape computations to accelerate initial direct light sampling for ReSTIR DI, it's time to talk about how we accelerate initial _indirect_ light sampling for ReSTIR GI via the use of a world-space irradiance cache.
+
 <center>
 
 ![world_cache_close](world_cache_close.png)
 
 </center>
 
-Whereas light tiles reshapes light sampling to accelerate direct lighting, the world cache accelerates sampling _indirect_ lighting for ReSTIR GI.
+The world cache voxelizes the world, storing accumulated irradiance (light hitting the surface) at each voxel.
 
-The world cache voxelizes the world, storing accumulated irradiance (light hitting the surface) in each voxel. When sampling indirect lighting in ReSTIR GI, rather than having to trace additional rays towards light sources to estimate the irradiance, we can simply lookup the irradiance at the given voxel.
+When sampling indirect lighting in ReSTIR GI, rather than having to trace additional rays towards light sources to estimate the irradiance, we can simply lookup the irradiance at the given voxel.
 
 TODO: Diagram of sampling
 
@@ -675,7 +691,9 @@ TODO: Include comparison to pathtraced image
 
 While ideally we would be able to configure DLSS-RR to read directly from our GBuffer, we unfortunately need a small pass to first copy from the GBuffer to some standalone textures. DLSS-RR will read these textures as inputs to help guide the denoising pass.
 
-DLSS-RR is called via the [dlss_wgpu](https://crates.io/crates/dlss_wgpu) wrapper I wrote, which is integrated into bevy_anti_alias as a Bevy plugin. The dlss_wgpu crate is standalone, and can also be used by non-Bevy projects that are using wgpu!
+DLSS-RR is called via the [dlss_wgpu](https://crates.io/crates/dlss_wgpu) wrapper I wrote, which is integrated into bevy_anti_alias as a Bevy plugin.
+
+The dlss_wgpu crate is standalone, and can also be used by non-Bevy projects that are using wgpu!
 
 <center>
 
