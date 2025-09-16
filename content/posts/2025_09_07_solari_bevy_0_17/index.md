@@ -275,7 +275,7 @@ fn generate_initial_reservoir(world_position: vec3<f32>, world_normal: vec3<f32>
 
 Temporal reservoir selection for GI is a little different from DI.
 
-In addition to reprojecting based on motion vectors, we jitter the reprojected location by a few pixels in either direction using [permutation sampling](TODO). This essentially adds a small spatial component to the temporal resampling, which helps break up temporal correlations. Without permutation sampling, the denoiser (DLSS-RR) would have artifacts. (TODO: Screenshot comparisons)
+In addition to reprojecting based on motion vectors, we jitter the reprojected location by a few pixels in either direction using [permutation sampling](https://www.amazon.com/GPU-Zen-Advanced-Rendering-Techniques/dp/B0DNXNM14K). This essentially adds a small spatial component to the temporal resampling, which helps break up temporal correlations. Without permutation sampling, the denoiser (DLSS-RR) would have artifacts. (TODO: Screenshot comparisons)
 
 (TODO: Talk about why we didn't use it for DI, re-validate this assumption)
 
@@ -289,7 +289,7 @@ Additionally, since both temporal and spatial resampling use neighboring pixels,
 
 The Jacobian proved to be one of the hardest parts of ReSTIR GI. While it makes the GI more correct, it also adds a lot of noise in corners. Worse, the Jacobian tends to make the GI calculations "explode" into super high numbers that result in overflow to `inf`, which then spreads over the entire screen due to resampling and denoising.
 
-The best solution I have found to reduce artifacts from the Jacobian is to reject neighbor samples when the Jacobian is greater than 2 (i.e., a neighboring sample reused at the current pixel would have more than 2x the contribution it originally did). While this somewhat works, there are still issues with stability. If I leave Solari running for a couple of minutes in the same spot, it will eventually  lead to overflow. I haven't yet figured out how to prevent this.
+The best solution I have found to reduce artifacts from the Jacobian is to reject neighbor samples when the Jacobian is greater than 2 (i.e., a neighboring sample reused at the current pixel would have more than 2x the contribution it originally did). While this somewhat works, there are still issues with stability. If I leave Solari running for a couple of minutes in the same spot, it will eventually lead to overflow. I haven't yet figured out how to prevent this.
 
 Using the balance heuristic (and factoring in the two Jacobians) for MIS weights when resampling also helped a lot with fighting the noise introduced by the Jacobian.
 
