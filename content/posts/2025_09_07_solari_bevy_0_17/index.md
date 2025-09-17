@@ -87,7 +87,7 @@ The GBuffer pass remains completely unchanged from standard Bevy (it's the same 
 
 By using raster for primary visibility, I maintain the option for people to use low-resolution proxy meshes in the raytracing scene, while still getting high quality meshes and textures in the primary view. The raster meshes can be full resolution with all their geometric detail, while the raytracing acceleration structure contains simplified versions that are cheaper to trace against.
 
-Rasterization also works better with other features like [Virtual Geometry](https://jms55.github.io/tags/virtual-geometry).
+Rasterization also works better with other Bevy features like [Virtual Geometry](https://jms55.github.io/tags/virtual-geometry).
 
 #### Attachments
 
@@ -120,7 +120,7 @@ ReSTIR DI randomly selects points on lights, and then shares the random samples 
 
 #### DI Structure
 
-Reservoirs store the light sample, confidence weight, and unbiased contribution weight.
+Reservoirs store the light sample, confidence weight, and unbiased contribution weight (acting as the sample's PDF).
 
 ```rust
 struct Reservoir {
@@ -181,14 +181,14 @@ We must also trace a ray to test visibility, as the reservoir comes from a neigh
 
 Unlike a lot of other ReSTIR implementations, we only ever use 1 spatial sample. Using more than 1 sample does not tend to improve quality, and increases performance costs. We cannot, however, skip spatial resampling entirely. Having a source of new samples from other pixels is crucial to prevent artifacts from temporal resampling.
 
-Spatial sampling is probably the least well-researched part of ReSTIR. I tried a couple other schemes, including trying to reuse reservoirs across a workgroup/subgroup, similar to [Histogram Stratification for Spatio-Temporal Reservoir Sampling](https://iribis.github.io/publication/2025_Stratified_Histogram_Resampling), but none of them worked out.
-
 <center>
 
 ![spatial_baseline](spatial_baseline.jpg)
 *1 random spatial sample, 6.4 ms*
 
 </center>
+
+Spatial sampling is probably the least well-researched part of ReSTIR. I tried a couple of other schemes, including trying to reuse reservoirs across a workgroup/subgroup similar to [Histogram Stratification for Spatio-Temporal Reservoir Sampling](https://iribis.github.io/publication/2025_Stratified_Histogram_Resampling), but none of them worked out well.
 
 Subgroups-level resampling was very cheap, but had tiling artifacts, and was not easily portable to different machines with different amounts of threads per workgroup.
 
@@ -239,7 +239,7 @@ Where as ReStir DI picks the best light, ReSTIR GI randomly selects directions i
 
 #### GI Structure
 
-Reservoirs store the cached radiance emitted by the sample point, sample point geometry info, confidence weight, and unbiased contribution weight.
+Reservoirs store the cached radiance bouncing off of the sample point, sample point geometry info, confidence weight, and unbiased contribution weight.
 
 ```rust
 struct Reservoir {
@@ -253,7 +253,7 @@ struct Reservoir {
 
 I tried some basic packing schemes for the GI reservoir (Rgb9e5 radiance, octahedral-encoded normals), but didn't find that it meaningfully reduced GI costs. Reservoir memory bandwidth is not a big bottleneck compared to raytracing and reading mesh/texture data for ray intersections.
 
-I've heard people have good results with storing reservoirs as struct-of-arrays instead of array-of-structs, so I'll likely revist this topic at some point.
+I have heard that people had good results storing reservoirs as struct-of-arrays instead of array-of-structs, so I'll likely revist this topic at some point.
 
 ReSTIR GI again uses two compute dispatches, with the first pass doing initial and temporal resampling, and the second pass doing spatial resampling and shading.
 
@@ -314,13 +314,13 @@ In addition to reprojecting based on motion vectors, we jitter the reprojected l
 
 Spatial reservoir selection for GI is identical to DI.
 
-Reservoir merging for GI uses the balance heuristic for MIS weights, and includes the BRDF contribution, as I found that unlike DI, these make a significant quality difference. The balance heuristic is not much more expensive here, as we are only ever merging two reservoirs at a time.
+Reservoir merging for GI uses the balance heuristic for MIS weights, and includes the BRDF contribution, as I found that unlike for DI, these make a significant quality difference. The balance heuristic is not much more expensive here, as we are only ever merging two reservoirs at a time.
 
 #### GI Jacobian
 
 Additionally, since both temporal and spatial resampling use neighboring pixels, we need to add a Jacobian determinant to the MIS weights to account for the change in sampling domain.
 
-The Jacobian proved to be one of the hardest parts of ReSTIR GI. While it makes the GI more correct, it also adds a lot of noise in corners. Worse, the Jacobian tends to make the GI calculations "explode" into super high numbers that result in overflow to `inf`, which then spreads over the entire screen due to resampling and denoising.
+The Jacobian proved to be the absolute hardest part of ReSTIR GI for me. While it makes the GI more correct, it also adds a lot of noise in corners. Worse, the Jacobian tends to make the GI calculations "explode" into super high numbers that result in overflow to `inf`, which then spreads over the entire screen due to resampling and denoising.
 
 The best solution I have found to reduce artifacts from the Jacobian is to reject neighbor samples when the Jacobian is greater than 2 (i.e., a neighboring sample reused at the current pixel would have more than 2x the contribution it originally did). While this somewhat works, there are still issues with stability. If I leave Solari running for a couple of minutes in the same spot, it will eventually lead to overflow. I haven't yet figured out how to prevent this.
 
@@ -330,7 +330,7 @@ Using the balance heuristic (and factoring in the two Jacobians) for MIS weights
 
 Once the final reservoir is produced, we can use it to shade the pixel, producing the final indirect lighting.
 
-Since we're using DLSS-RR for denoising, we can simply add the GI on top of the existing framebuffer (holding the DI). There's no need to write to a separate buffer for use with a separate denoising process.
+Since we're using DLSS-RR for denoising, we can simply add the GI on top of the existing framebuffer (holding the DI). There's no need to write to a separate buffer for use with a separate denoising process, unlike a lot of other GI implementations.
 
 Overall the GI pass uses two raytraces per pixel (1 initial, 1 spatial), same as DI.
 
@@ -347,11 +347,13 @@ I have heard ReSTIR described as a signal _amplifier_. If you feed it decent sam
 
 The better your initial sampling, the better ReSTIR does. The quality of your final result heavily depends on the quality of the initial samples you feed into it.
 
+(TODO: Diagram of feeding mediocre/good samples through a reservoir/sieve)
+
 For this reason, it's important that you improve the initial sampling process. This could take the form of generating more initial samples, or improving your sampling strategy.
 
 For ReSTIR DI, taking more initial samples is viable, as samples are just random lights, and are fairly cheap to generate.
 
-For ReSTIR GI, even 1 initial sample is already expensive, as each sample involves tracing a ray. Instead, we'll have to be smart about _how_ we trace that 1 ray.
+For ReSTIR GI, even 1 initial sample is already expensive, as each sample involves tracing a ray. Instead of increasing initial sample count, we'll have to be smart about _how_ we obtain that 1 sample.
 
 In the next two sections of the frame breakdown, we will discuss how I improved initial sampling for ReSTIR DI and GI.
 
@@ -795,7 +797,17 @@ While Solari currently requires a NVIDIA GPU, the DLSS-RR integration is a separ
 
 (TODO: Add some screenshots of other scenes)
 
-## Reference List
+## Thank You
+
+If you've read this far, thank you, I hope you've enjoyed it! (to be fair, I can't imagine you got this far if you didn't enjoy reading it...)
+
+Solari represents the culmination of a significant amount of research, development, testing, refining, and more than a few tears over the last three years of my life. Not just from me, but also from the shoulders of all the research and work it stands on. I couldn't be more proud of what we've made.
+
+Like Bevy itself, Solari is also free and open source, forever.
+
+If you find Solari useful, consider [donating](https://github.com/sponsors/JMS55) to help fund future development.
+
+## Further Reading
 (TODO)
 * https://blog.traverseresearch.nl/dynamic-diffuse-global-illumination-b56dc0525a0a
 * https://intro-to-restir.cwyman.org
@@ -803,5 +815,3 @@ While Solari currently requires a NVIDIA GPU, the DLSS-RR integration is a separ
 * https://cwyman.org/papers/hpg21_rearchitectingReSTIR.pdf
 * https://github.com/EmbarkStudios/kajiya/blob/main/docs/gi-overview.md
 * https://advances.realtimerendering.com/s2025/content/SOUSA_SIGGRAPH_2025_Final.pdf
-
-TODO Consider sponsoring ....
