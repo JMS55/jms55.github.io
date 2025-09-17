@@ -341,23 +341,29 @@ Overall the GI pass uses two raytraces per pixel (1 initial, 1 spatial), same as
 
 </center>
 
+### Interlude: What's ReSTIR Doing?
+
+I have heard ReSTIR described as a signal _amplifier_. If you feed it decent samples, it's likely to produce a good sample. If you feed it good samples, it's likely to produce a great sample.
+
+The better your initial sampling, the better ReSTIR does. The quality of your final result heavily depends on the quality of the initial samples you feed into it.
+
+For this reason, it's important that you improve the initial sampling process. This could take the form of generating more initial samples, or improving your sampling strategy.
+
+For ReSTIR DI, taking more initial samples is viable, as samples are just random lights, and are fairly cheap to generate.
+
+For ReSTIR GI, even 1 initial sample is already expensive, as each sample involves tracing a ray. Instead, we'll have to be smart about _how_ we trace that 1 ray.
+
+In the next two sections of the frame breakdown, we will discuss how I improved initial sampling for ReSTIR DI and GI.
+
 ### Light Tile Presampling
 
-TODO: Image of light tile buffers
+While generating initial samples for ReSTIR DI is fairly cheap, when we start taking 32 or more samples per pixel, the memory bandwidth costs quickly add up. In order to make 32 samples per pixel viable, we'll need a way to improve our cache coherency.
 
-Now that we've discussed the per-pixel DI and GI code, it's time to discuss how we accelerate the initial sampling steps for each.
-
-In this pass, we will generate some light tile buffers, following section 5 of [Rearchitecting Spatiotemporal Resampling for Production](https://cwyman.org/papers/hpg21_rearchitectingReSTIR.pdf).
-
-This presampling step greatly speeds up passes that want to sample the scene's light sources, namely ReSTIR DI.
-
-#### DI Sampling Bottleneck
-
-TODO: Move content from below here
+In this section, we will generate some light tile buffers, following section 5 of [Rearchitecting Spatiotemporal Resampling for Production](https://cwyman.org/papers/hpg21_rearchitectingReSTIR.pdf).
 
 #### Light Sampling APIs
 
-Before I can explain this step, we first need to talk about Solari's shader API for working with light sources.
+Before I can explain light tiles, we first need to talk about Solari's shader API for working with light sources.
 
 Bevy stores light sources as a big list of objects on the GPU. All emissive meshes and directional lights get collected by the CPU, and put in this list.
 
@@ -460,9 +466,11 @@ Notably, only the first and second steps (generating a `LightSample`, resolving 
 
 #### Presampling Lights
 
-Other steps in the rendering process are going to want to calculate `LightContributions`, e.g. in the ReSTIR DI shader. One thing we could do is perform the whole light sampling process (generate -> resolve  -> calculate contribution) all in one shader.
+TODO: Image of light tile buffers
 
-Indeed, for my first ReSTIR DI prototype, this is what I did - but performance was terrible. In fact, even more than the actual raytracing - light sampling was (and still is) by far the biggest performance bottleneck.
+The straightforward way to implement ReSTIR DI initial sampling is to perform the whole light sampling process (generate -> resolve -> calculate contribution) all in one shader.
+
+Indeed, for my first ReSTIR DI prototype, this is what I did - but performance was terrible.
 
 By generating the light sample, resolving it, and then calculating its contribution all in the same shader, we're introducing a lot of divergent branches and incoherent memory accesses. If there's one thing GPUs hate, it's divergence. GPUs perform better when all threads in a group are executing the same branch and don't need masking, and when the threads are all accessing similar memory locations that are likely in a nearby cache.
 
@@ -494,11 +502,17 @@ We call these presampled sets of lights "light tiles". Following the paper, we p
 
 Samples are generated completely randomly, without any info about the scene - there is no spatial heuristic or any way of identifying "good" samples.
 
-Rendering passes that want to sample the scene's light sources can pick a random tile, and then random samples within the tile, and use `calculate_resolved_light_contribution()` to calculate radiance.
+ReSTIR DI initial sampling can now pick a random tile, and then random samples within the tile, and use `calculate_resolved_light_contribution()` to calculate their radiance.
+
+With light tiles, we have much higher cache hit rates when sampling lights, which greatly improves our performance. In fact, even more than the actual raytracing - light sampling is by far the biggest performance bottleneck in Solari.
 
 ### World Cache
 
-Whereas light tiles reshape computations to accelerate initial direct light sampling for ReSTIR DI, it's time to talk about how we accelerate initial _indirect_ light sampling for ReSTIR GI via the use of a world-space irradiance cache.
+Whereas light tiles accelerate initial sampling for ReSTIR DI, it's time to talk about how we accelerate initial sampling for ReSTIR GI.
+
+Unlike DI, where generating more samples is relatively cheap, for GI we can only afford 1 sample. However, unlike DI, GI is a lot more forgiving of inaccuracies. GI just has to be "mostly correct".
+
+We can take advantage of that fact by sharing the same work amongst multiple pixels, via the use of a world-space irradiance cache.
 
 <center>
 
@@ -514,13 +528,10 @@ TODO: Diagram of sampling
 
 The world cache both amortizes the cost of the GI pass, and reduces variance, especially for newly-disoccluded pixels for which the screen-space ReSTIR GI has no temporal history.
 
-#### GI Sampling Bottleneck
-
-TODO
-
-(talk about performance numbers from before world cache, halved GI time, improved diocclusion quality)
+Adding the world cache both significantly improved quality, and halved the time spent on GI.
 
 #### Cache Querying
+
 The cache uses spatial hashing (TODO: link) to discretize the world. Unlike other options such as SDFs(?) (TODO: Godot), clipmaps (?) (TODO: Kajiya), cards (TODO: Lumen), or bricks (TODO: Brixelizer), spatial hashing requires no explicit build step, and automatically adapts to scene geometry.
 
 With spatial hashing, a given descriptor (e.g., `{position, normal}`) hashes to a `u32` key. This key corresponds to an index within a fixed-size buffer, which holds whatever values you want to store in the hashmap - in our case, irradiance.
@@ -772,11 +783,13 @@ Without upscaling, we would have 4x as many pixels total, meaning ReSTIR DI and 
 
 Total performance costs would be higher than using the unified upscaling + denoising + antialiasing pipeline that DLSS-RR provides.
 
+(TODO: Register count issue)
+
 ## Future Work
 
 (TODO)
 
-(TODO: Register count issue)
+https://suikasibyl.github.io/files/vvmc/paper.pdf
 
 While Solari currently requires a NVIDIA GPU, the DLSS-RR integration is a separate plugin from Solari. Users can optionally choose to bring their own denoiser. In the future, when they release, I'm hoping to add support for [AMD's FSR Ray Regeneration](https://web.archive.org/web/20250822144949/https://www.amd.com/en/products/graphics/technologies/fidelityfx/super-resolution.html#upcoming), whatever XeSS extension [Intel](TODO) eventually releases, and potentially even [Apple's MTL4FXTemporalDenoisedScaler](https://developer.apple.com/documentation/metalfx/mtl4fxtemporaldenoisedscaler). Writing a denoiser from scratch is a lot of work, but it would also be nice to add [ReBLUR](https://developer.download.nvidia.com/video/gputechconf/gtc/2020/presentations/s22699-fast-denoising-with-self-stabilizing-recurrent-blurs.pdf) as a fallback for users of other GPUs.
 
