@@ -87,12 +87,14 @@ The GBuffer pass remains completely unchanged from standard Bevy (it's the same 
 
 By using raster for primary visibility, I maintain the option for people to use low-resolution proxy meshes in the raytracing scene, while still getting high quality meshes and textures in the primary view. The raster meshes can be full resolution with all their geometric detail, while the raytracing acceleration structure contains simplified versions that are cheaper to trace against.
 
+Rasterization also works better with other features like [Virtual Geometry](https://jms55.github.io/tags/virtual-geometry).
+
 #### Attachments
 
 Bevy's GBuffer uses quite a bit of packing. The main attachment is a `Rgba32Uint` texture with each channel storing multiple values:
 
 - **First channel**: sRGB base color and perceptual roughness packed as 4x8unorm
-- **Second channel**: Emissive color stored as Rgb9e5
+- **Second channel**: Emissive color stored as pre-exposed Rgb9e5
 - **Third channel**: Reflectance, metallic, baked diffuse occlusion (unused by Solari), and an unused slot, again packed as 4x8unorm
 - **Fourth channel**: World-space normal encoded into 24 bits via [octahedral encoding](https://www.jcgt.org/published/0003/02/01), plus 8 bits of flags meant for Bevy's default deferred shading (unused by Solari)
 
@@ -134,7 +136,7 @@ Direct lighting is handled in two compute dispatches. The first pass does initia
 
 Initial sampling uses 32 samples from a light tile (more on this later), and chooses the brightest one via resampling importance sampling (RIS), using constant MIS weights.
 
-32 samples is often overkill for scenes with a small number of lights. As this is one of the most expensive parts of Solari, I'm planning on letting users control this number in a future release.
+32 samples per pixel is often overkill for scenes with a small number of lights. As this is one of the most expensive parts of Solari, I'm planning on letting users control this number in a future release.
 
 After choosing the best sample, we trace a ray to test visibility, setting the unbiased contribution weight to 0 in the case of occlusion.
 
@@ -179,13 +181,42 @@ We must also trace a ray to test visibility, as the reservoir comes from a neigh
 
 Unlike a lot of other ReSTIR implementations, we only ever use 1 spatial sample. Using more than 1 sample does not tend to improve quality, and increases performance costs. We cannot, however, skip spatial resampling entirely. Having a source of new samples from other pixels is crucial to prevent artifacts from temporal resampling.
 
-TODO: Talk more about what else I tried here (including workgroup/subgroup-level resampling from the intel paper)
+Spatial sampling is probably the least well-researched part of ReSTIR. I tried a couple other schemes, including trying to reuse reservoirs across a workgroup/subgroup, similar to [Histogram Stratification for Spatio-Temporal Reservoir Sampling](https://iribis.github.io/publication/2025_Stratified_Histogram_Resampling), but none of them worked out.
+
+<center>
+
+![spatial_baseline](spatial_baseline.jpg)
+*1 random spatial sample, 6.4 ms*
+
+</center>
+
+Subgroups-level resampling was very cheap, but had tiling artifacts, and was not easily portable to different machines with different amounts of threads per workgroup.
+
+<center>
+
+![spatial_subgroup](spatial_subgroup.jpg)
+*Subgroup-level spatial resampling, 7.3 ms*
+
+</center>
+
+Workgroup-level resampling had much better quality, but was twice as expensive compared to 1 spatial sample, and introduced correlations that broke the denoiser.
+
+<center>
+
+![spatial_workgroup](spatial_workgroup.jpg)
+*Workgroup-level spatial resampling, 12 ms*
+
+</center>
+
+In the end, I stuck with the 1 random spatial sample I described above.
 
 The reservoir produced by the first pass and the spatial reservoir are combined with the same routine that we used for merging initial and temporal reservoirs.
 
 #### DI Shading
 
 Once the final reservoir is produced, we can use its chosen light sample to shade the pixel, producing the final direct lighting.
+
+I did try out shading the pixel using all 3 samples (initial, temporal, and spatial), weighed by their resampling probabilities as [Rearchitecting Spatiotemporal Resampling for Production](https://cwyman.org/papers/hpg21_rearchitectingReSTIR.pdf) suggests, but had noisier results compared to shading using the final reservoir only. I'm not sure if I messed up the implementation or what.
 
 Overall the DI pass uses two raytraces per pixel (1 initial, 1 spatial).
 
@@ -202,9 +233,9 @@ Indirect lighting (light emitted by a light source, bouncing off more than 1 sur
 
 TODO: Diagram of camera -> surface -> hemisphere directions -> world cache voxel
 
-To quickly estimate indirect lighting, Solari uses ReSTIR GI, with a very similiar setup to the previous ReSTIR DI.
+To quickly estimate indirect lighting, Solari uses ReSTIR GI, with a very similar setup to the previous ReSTIR DI.
 
-ReSTIR GI randomly selects directions in a hemisphere, and then shares the random samples between pixels in order to choose the best 1-bounce path for a given pixel.
+Where as ReStir DI picks the best light, ReSTIR GI randomly selects directions in a hemisphere, and then shares the random samples between pixels in order to choose the best 1-bounce _path_ for a given pixel.
 
 #### GI Structure
 
@@ -220,9 +251,11 @@ struct Reservoir {
 }
 ```
 
-TODO: Talk about packing/SOA
+I tried some basic packing schemes for the GI reservoir (Rgb9e5 radiance, octahedral-encoded normals), but didn't find that it meaningfully reduced GI costs. Reservoir memory bandwidth is not a big bottleneck compared to raytracing and reading mesh/texture data for ray intersections.
 
-There are again two compute dispatches, with the first pass doing initial and temporal resampling, and the second pass doing spatial resampling and shading.
+I've heard people have good results with storing reservoirs as struct-of-arrays instead of array-of-structs, so I'll likely revist this topic at some point.
+
+ReSTIR GI again uses two compute dispatches, with the first pass doing initial and temporal resampling, and the second pass doing spatial resampling and shading.
 
 #### GI Initial Sampling
 
@@ -644,7 +677,11 @@ In order to estimate indirect lighting, we trace a ray using a cosine-hemisphere
 
 You might be thinking "Wait, aren't we _updating_ the cache? But we're also sampling from the same cache in order to... update it?"
 
-TODO discuss multibounce...
+By having the cache sample from itself, we form a full path tracer, where tracing the path is spread out across multiple frames (for performance). In frame 5, world cache cell A samples a light source. In frame 6, a different world cache cell B samples cell A. In frame 7, yet another world cache cell C samples cell B. We've now formed a multi-bounce path light source->A->B->C, and once ReSTIR GI gets involved, light source->A->B->C->primary surface->camera.
+
+By having the cache sample itself, we get full-length multi-bounce paths, instead of just single-path paths. In indoor scenes that make heavy use of indirect lighting, the difference is pretty stark.
+
+TODO: Screenshots of cornell box with/without multibounce
 
 #### Cache Blend
 
@@ -752,5 +789,6 @@ While Solari currently requires a NVIDIA GPU, the DLSS-RR integration is a separ
 * https://interplayoflight.wordpress.com/2023/12/17/a-gentler-introduction-to-restir/
 * https://cwyman.org/papers/hpg21_rearchitectingReSTIR.pdf
 * https://github.com/EmbarkStudios/kajiya/blob/main/docs/gi-overview.md
+* https://advances.realtimerendering.com/s2025/content/SOUSA_SIGGRAPH_2025_Final.pdf
 
-Consider sponsoring ....
+TODO Consider sponsoring ....
