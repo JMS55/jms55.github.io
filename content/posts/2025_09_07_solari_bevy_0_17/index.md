@@ -317,9 +317,11 @@ fn generate_initial_reservoir(world_position: vec3<f32>, world_normal: vec3<f32>
 
 Temporal reservoir selection for GI is a little different from DI.
 
-In addition to reprojecting based on motion vectors, we jitter the reprojected location by a few pixels in either direction using [permutation sampling](https://www.amazon.com/GPU-Zen-Advanced-Rendering-Techniques/dp/B0DNXNM14K). This essentially adds a small spatial component to the temporal resampling, which helps break up temporal correlations. Without permutation sampling, the denoiser (DLSS-RR) would have artifacts. (TODO: Screenshot comparisons)
+In addition to reprojecting based on motion vectors, we jitter the reprojected location by a few pixels in either direction using [permutation sampling](https://www.amazon.com/GPU-Zen-Advanced-Rendering-Techniques/dp/B0DNXNM14K). This essentially adds a small spatial component to the temporal resampling, which helps break up temporal correlations. Without permutation sampling, the denoiser (DLSS-RR) would have artifacts.
 
-(TODO: Talk about why we didn't use it for DI, re-validate this assumption)
+(TODO: Screenshot comparisons with/without permutation sampling)
+
+(TODO: Talk about why we didn't use permutation sampling for DI, re-validate this assumption)
 
 Spatial reservoir selection for GI is identical to DI.
 
@@ -543,7 +545,7 @@ Adding the world cache both significantly improved quality, and halved the time 
 
 #### Cache Querying
 
-The cache uses spatial hashing (TODO: link) to discretize the world. Unlike other options such as SDFs(?) (TODO: Godot), clipmaps (?) (TODO: Kajiya), cards (TODO: Lumen), or bricks (TODO: Brixelizer), spatial hashing requires no explicit build step, and automatically adapts to scene geometry.
+The cache uses [spatial hashing](https://arxiv.org/pdf/1902.05942v1) to discretize the world. Unlike other options such as [clipmaps](https://github.com/EmbarkStudios/kajiya/blob/main/docs/gi-overview.md#irradiance-cache-055ms), [cards](https://advances.realtimerendering.com/s2022/SIGGRAPH2022-Advances-Lumen-Wright%20et%20al.pdf#page=59), or [bricks](https://gpuopen.com/download/GDC2024_GI_with_AMD_FidelityFX_Brixelizer.pdf), spatial hashing requires no explicit build step, and automatically adapts to scene geometry while having minimal light leaks.
 
 With spatial hashing, a given descriptor (e.g., `{position, normal}`) hashes to a `u32` key. This key corresponds to an index within a fixed-size buffer, which holds whatever values you want to store in the hashmap - in our case, irradiance.
 
@@ -817,10 +819,12 @@ Like Bevy itself, Solari is also free and open source, forever.
 If you find Solari useful, consider [donating](https://github.com/sponsors/JMS55) to help fund future development.
 
 ## Further Reading
-(TODO)
-* https://blog.traverseresearch.nl/dynamic-diffuse-global-illumination-b56dc0525a0a
-* https://intro-to-restir.cwyman.org
-* https://interplayoflight.wordpress.com/2023/12/17/a-gentler-introduction-to-restir/
-* https://cwyman.org/papers/hpg21_rearchitectingReSTIR.pdf
-* https://github.com/EmbarkStudios/kajiya/blob/main/docs/gi-overview.md
-* https://advances.realtimerendering.com/s2025/content/SOUSA_SIGGRAPH_2025_Final.pdf
+* [A Gentle Introduction to ReSTIR: Path Reuse in Real-time](https://intro-to-restir.cwyman.org)
+* [A gentler introduction to ReSTIR](https://interplayoflight.wordpress.com/2023/12/17/a-gentler-introduction-to-restir)
+* [Rearchitecting Spatiotemporal Resampling for Production](https://cwyman.org/papers/hpg21_rearchitectingReSTIR.pdf)
+* [Dynamic diffuse global illumination](https://blog.traverseresearch.nl/dynamic-diffuse-global-illumination-b56dc0525a0a)
+* [Kajiya global illumination overview](https://github.com/EmbarkStudios/kajiya/blob/main/docs/gi-overview.md)
+* [Fast as Hell: idTech8 Global Illumination](https://advances.realtimerendering.com/s2025/content/SOUSA_SIGGRAPH_2025_Final.pdf)
+* [Lumen: Real-time Global Illumination in Unreal Engine 5](https://advances.realtimerendering.com/s2022/SIGGRAPH2022-Advances-Lumen-Wright%20et%20al.pdf)
+* [MegaLights: Stochastic Direct Lighting in Unreal Engine 5](https://advances.realtimerendering.com/s2025/content/MegaLights_Stochastic_Direct_Lighting_2025.pdf)
+* [GI-1.0: A Fast Scalable Two-Level Radiance Caching Scheme for Real-Time Global Illumination](https://gpuopen.com/download/GPUOpen2022_GI1_0.pdf)
