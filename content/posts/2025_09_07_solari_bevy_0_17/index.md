@@ -171,7 +171,7 @@ Additionally, the chosen light from last frame might no longer be visible this f
 
 Reusing temporal visibility saves one raytrace, at the cost of shadows for moving objects being delayed by 1 frame, and some slighty darker/wider shadows. Overall the artifacts are not very noticable, so I find that it's well worth reusing visibility for the temporal reservoir resampling.
 
-The initial and temporal reservoir are then merged together using constant MIS weights. I tried using the balance heuristic, but didn't notice much difference for DI, and constant MIS weights are cheaper (TODO: Re-validate this).
+The initial and temporal reservoir are then merged together using constant MIS weights. I tried using the balance heuristic, but didn't notice much difference for DI, and constant MIS weights are much cheaper.
 
 ```rust
 // Reject if tangent plane difference difference more than 0.3% or angle between normals more than 25 degrees
@@ -330,7 +330,14 @@ In addition to reprojecting based on motion vectors, we jitter the reprojected l
 
 </center>
 
-(TODO: Talk about why we didn't use permutation sampling for DI, re-validate this assumption)
+I also tried permutation sampling for ReSTIR DI, and while it did reduce correlation artifacts, it also added even worse artifacts because we reuse visibility, which becomes very obvious under permutation sampling. Tracing an extra ray to validate visibility would fix this, but I'm not quite ready to pay that performance cost.
+
+<center>
+
+![di_permutation_sampling](di_permutation_sampling.png)
+*DI: Permutation sampling and visibility reuse do not work well together*
+
+</center>
 
 Spatial reservoir selection for GI is identical to DI.
 
