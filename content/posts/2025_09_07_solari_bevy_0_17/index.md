@@ -12,15 +12,6 @@ Over the past few years, real-time raytracing has gone from a research curiosity
 
 With the release of v0.17, [Bevy](https://bevy.org) now joins the club with experimental support for hardware raytracing!
 
-Try it out now:
-```bash
-git clone https://github.com/bevyengine/bevy && cd bevy
-git checkout release-0.17.0
-cargo run --release --examples solari --features bevy_solari,https
-# Optionally setup DLSS support for NVIDIA GPUs following https://github.com/bevyengine/dlss_wgpu?tab=readme-ov-file#downloading-the-dlss-sdk
-cargo run --release --examples solari --features bevy_solari,https,dlss
-```
-
 <video style="max-width: 100%; margin: var(--gap) var(--gap) 0 var(--gap); border-radius: 6px;" controls>
   <source src="solari_recording.mp4" type="video/mp4">
 </video>
@@ -29,6 +20,15 @@ cargo run --release --examples solari --features bevy_solari,https,dlss
 *[PICA PICA scene by SEED](https://github.com/SEED-EA/pica-pica-assets)*
 
 </center>
+
+Try it out yourself:
+```bash
+git clone https://github.com/bevyengine/bevy && cd bevy
+git checkout release-0.17.0
+cargo run --release --examples solari --features bevy_solari,https
+# Optionally setup DLSS support for NVIDIA GPUs following https://github.com/bevyengine/dlss_wgpu?tab=readme-ov-file#downloading-the-dlss-sdk
+cargo run --release --examples solari --features bevy_solari,https,dlss
+```
 
 ## Introduction
 
