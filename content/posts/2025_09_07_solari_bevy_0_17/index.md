@@ -268,16 +268,16 @@ ReSTIR GI again uses two compute dispatches, with the first pass doing initial a
 
 #### GI Initial Sampling
 
+GI samples are much more expensive to generate than DI samples (tracing paths is more expensive than looping over a list of light sources), so for initial sampling, we only generate 1 sample.
+
+We start by tracing a ray along a random direction chosen from a uniform hemisphere distribution. At the hit point, we need to obtain an estimate of the incoming irradiance, which becomes the outgoing radiance towards the current pixel, i.e. the path's contribution.
+
 <center>
 
 ![noisy_gi_one_sample](noisy_gi_one_sample.png)
 *One sample GI*
 
 </center>
-
-GI samples are much more expensive to generate than DI samples (tracing paths is more expensive than looping over a list of light sources), so for initial sampling, we only generate 1 sample.
-
-We start by tracing a ray along a random direction chosen from a uniform hemisphere distribution. At the hit point, we need to obtain an estimate of the incoming irradiance, which becomes the outgoing radiance towards the current pixel, i.e. the path's contribution.
 
 To obtain irradiance, we query the world cache at the hit point (more on this later).
 
@@ -360,7 +360,7 @@ The better your initial sampling, the better ReSTIR does. The quality of your fi
 
 (TODO: Diagram of feeding mediocre/good samples through a reservoir/sieve)
 
-For this reason, it's important that you improve the initial sampling process. This could take the form of generating more initial samples, or improving your sampling strategy.
+For this reason, it's important that you spend time improving the initial sampling process. This could take the form of generating more initial samples, or improving your sampling strategy.
 
 For ReSTIR DI, taking more initial samples is viable, as samples are just random lights, and are fairly cheap to generate.
 
@@ -521,7 +521,7 @@ With light tiles, we have much higher cache hit rates when sampling lights, whic
 
 ### World Cache
 
-Whereas light tiles accelerate initial sampling for ReSTIR DI, it's time to talk about how we accelerate initial sampling for ReSTIR GI.
+With light tiles accelerating initial sampling for ReSTIR DI, it's time to talk about how we accelerate initial sampling for ReSTIR GI.
 
 Unlike DI, where generating more samples is relatively cheap, for GI we can only afford 1 sample. However, unlike DI, GI is a lot more forgiving of inaccuracies. GI just has to be "mostly correct".
 
@@ -541,13 +541,13 @@ TODO: Diagram of sampling
 
 The world cache both amortizes the cost of the GI pass, and reduces variance, especially for newly-disoccluded pixels for which the screen-space ReSTIR GI has no temporal history.
 
-Adding the world cache both significantly improved quality, and halved the time spent on GI.
+Adding the world cache both significantly improved quality, and halved the time spent on the initial GI sampling.
 
 #### Cache Querying
 
-The cache uses [spatial hashing](https://arxiv.org/pdf/1902.05942v1) to discretize the world. Unlike other options such as [clipmaps](https://github.com/EmbarkStudios/kajiya/blob/main/docs/gi-overview.md#irradiance-cache-055ms), [cards](https://advances.realtimerendering.com/s2022/SIGGRAPH2022-Advances-Lumen-Wright%20et%20al.pdf#page=59), or [bricks](https://gpuopen.com/download/GDC2024_GI_with_AMD_FidelityFX_Brixelizer.pdf), spatial hashing requires no explicit build step, and automatically adapts to scene geometry while having minimal light leaks.
+The world cache uses [spatial hashing](https://arxiv.org/pdf/1902.05942v1) to discretize the world. Unlike other options such as [clipmaps](https://github.com/EmbarkStudios/kajiya/blob/main/docs/gi-overview.md#irradiance-cache-055ms), [cards](https://advances.realtimerendering.com/s2022/SIGGRAPH2022-Advances-Lumen-Wright%20et%20al.pdf#page=59), or [bricks](https://gpuopen.com/download/GDC2024_GI_with_AMD_FidelityFX_Brixelizer.pdf), spatial hashing requires no explicit build step, and automatically adapts to scene geometry while having minimal light leaks.
 
-With spatial hashing, a given descriptor (e.g., `{position, normal}`) hashes to a `u32` key. This key corresponds to an index within a fixed-size buffer, which holds whatever values you want to store in the hashmap - in our case, irradiance.
+With spatial hashing, a given descriptor (e.g. `{position, normal}`) hashes to a `u32` key. This key corresponds to an index within a fixed-size buffer, which holds whatever values you want to store in the hashmap - in our case, irradiance.
 
 Either the entry that you're querying corresponds to some existing entry (same checksum), and you can return the value, or the entry does not exist (empty checksum), and you can initialize the entry by writing the checksum to it.
 
@@ -701,9 +701,11 @@ In order to estimate indirect lighting, we trace a ray using a cosine-hemisphere
 
 You might be thinking "Wait, aren't we _updating_ the cache? But we're also sampling from the same cache in order to... update it?"
 
-By having the cache sample from itself, we form a full path tracer, where tracing the path is spread out across multiple frames (for performance). In frame 5, world cache cell A samples a light source. In frame 6, a different world cache cell B samples cell A. In frame 7, yet another world cache cell C samples cell B. We've now formed a multi-bounce path light source->A->B->C, and once ReSTIR GI gets involved, light source->A->B->C->primary surface->camera.
+By having the cache sample from itself, we form a full path tracer, where tracing the path is spread out across multiple frames (for performance).
 
-By having the cache sample itself, we get full-length multi-bounce paths, instead of just single-path paths. In indoor scenes that make heavy use of indirect lighting, the difference is pretty stark.
+As an example: In frame 5, world cache cell A samples a light source. In frame 6, a different world cache cell B samples cell A. In frame 7, yet another world cache cell C samples cell B. We've now formed a multi-bounce path `light source->A->B->C`, and once ReSTIR GI gets involved, `light source->A->B->C->primary surface->camera`.
+
+By having the cache sample itself, we get full-length multi-bounce paths, instead of just single-bounce paths. In indoor scenes that make heavy use of indirect lighting, the difference is pretty dramatic.
 
 TODO: Screenshots of cornell box with/without multibounce
 
@@ -788,7 +790,7 @@ TODO: ReSTIR DI is mainly memory bound. Even with the presampled light tiles, th
 
 TODO: Show subpasses
 
-TODO: Compare multiple scenes, especially without any background black pixels
+TODO: Compare multiple scenes, especially without any background black pixels, and add screenshots
 
 While DLSS-RR is quite expensive, it ends up saving performance overall.
 
@@ -798,15 +800,63 @@ Total performance costs would be higher than using the unified upscaling + denoi
 
 (TODO: Register count issue)
 
+Half-res GI
+
+Updating a random subset of cache cells
+
 ## Future Work
 
-(TODO)
+As always, the first release of a new plugin is just the start. I still have a ton of ideas for future improvements to Solari!
 
-https://suikasibyl.github.io/files/vvmc/paper.pdf
+### Feature Parity
 
-While Solari currently requires a NVIDIA GPU, the DLSS-RR integration is a separate plugin from Solari. Users can optionally choose to bring their own denoiser. In the future, when they release, I'm hoping to add support for [AMD's FSR Ray Regeneration](https://web.archive.org/web/20250822144949/https://www.amd.com/en/products/graphics/technologies/fidelityfx/super-resolution.html#upcoming), whatever XeSS extension [Intel](TODO) eventually releases, and potentially even [Apple's MTL4FXTemporalDenoisedScaler](https://developer.apple.com/documentation/metalfx/mtl4fxtemporaldenoisedscaler). Writing a denoiser from scratch is a lot of work, but it would also be nice to add [ReBLUR](https://developer.download.nvidia.com/video/gputechconf/gtc/2020/presentations/s22699-fast-denoising-with-self-stabilizing-recurrent-blurs.pdf) as a fallback for users of other GPUs.
+In terms of feature parity with Bevy's standard renderer, the most important missing feature is support for specular, transparent, and alpha-masked materials.
 
-(TODO: Add some screenshots of other scenes)
+I've been actively prototyping specular material support, and with any luck will be writing about it in a future blog post on Solari changes in Bevy v0.18.
+
+Custom material support is another big one, although it's blocked on raytracing pipeline support in wgpu (which would also unlock shader execution reordering!).
+
+Support for skinned meshes first needs some work done in Bevy to add GPU-driven skinning, but would be a great feature to add.
+
+Finally, Solari is eventually going to want to support more types of lights such as point lights, spot lights, and image-based lighting.
+
+### Light Sampling
+
+Light sampling in Solari is currently purely random (not even uniformly random!), and there's big opportunities to improve it.
+
+Having a large number of lights in the scenes is _theoretically_ viable with ReSTIR, but in practice Solari is not yet there. We need some sort of spatial/visibility-aware sampling to improve the quality of our initial candidate samples.
+
+One approach another Bevy developer is exploring is using [spherical gaussian light trees](https://gpuopen.com/download/Hierarchical_Light_Sampling_with_Accurate_Spherical_Gaussian_Lighting.pdf).
+
+Another promising direction is copying from the recently released [MegaLights](https://advances.realtimerendering.com/s2025/content/MegaLights_Stochastic_Direct_Lighting_2025.pdf) presentation, and adding visible light lists. I want to experiment with implementing light lists in world space, so that it can also be used to improve our GI.
+
+### Chromatic ReSTIR
+
+TODO: Screenshot of problem
+
+Another problem is that overlapping lights of similar brightness, but different chromas (R,G,B) tend to pose a problem for ReSTIR. ReSTIR can only select a single sample, but in this case, there are multiple overlapping lights.
+
+One approach I've been prototyping to solve this is using [ratio control variates](https://suikasibyl.github.io/files/vvmc/paper.pdf) (RCV). The basic idea (if I understand the paper correctly) is that you apply a vector-valued (R,G,B) weight to your lighting integral, based on the fraction of light a given sample contributes, divided by the overall light in the scene.
+
+E.g. if you sample a pure red light, but the scene has a large amount of blue and green light, then you downweight the sample's red contribution, and upweight its blue and green contributions.
+
+The paper gives a scheme involving precomputing (offline) the total amount of light in the scene ahead of time, using light trees. We could easily add RCV support if we go ahead with adding light trees to Solari.
+
+But another option I've been testing (without much luck yet) is to learn an _online_ estimate of the total light in the scene. The idea is that each reservoir keeps track of the total amount of light it sees per channel as you do initial sampling and resampling between reservoirs. When it comes time to shade the final selected sample, you can use this estimate with RCV to weight the sample appropriately.
+
+We'll see if I can get it working!
+
+### GI Quality
+
+TODO: Energy loss, screen-space reprojection, reaction time and validation rays, stability
+
+### Denoising Options
+
+While Solari currently requires a NVIDIA GPU, the DLSS-RR integration is a separate plugin from Solari. Users can optionally choose to bring their own denoiser.
+
+In the future, when they release them, I'm hoping to add support for [AMD's FSR Ray Regeneration](https://web.archive.org/web/20250822144949/https://www.amd.com/en/products/graphics/technologies/fidelityfx/super-resolution.html#upcoming), whatever XeSS extension [Intel](https://community.intel.com/t5/Blogs/Tech-Innovation/Client/Neural-Image-Reconstruction-for-Real-Time-Path-Tracing/post/1688192) eventually releases, and potentially even [Apple's MTL4FXTemporalDenoisedScaler](https://developer.apple.com/documentation/metalfx/mtl4fxtemporaldenoisedscaler). Even [ARM](https://newsroom.arm.com/news/arm-announces-arm-neural-technology) is working on a neural-network based denoiser!
+
+Writing a denoiser from scratch is a lot of work, but it would also be nice to add [ReBLUR](https://developer.download.nvidia.com/video/gputechconf/gtc/2020/presentations/s22699-fast-denoising-with-self-stabilizing-recurrent-blurs.pdf) as a fallback for users of other GPUs.
 
 ## Thank You
 
