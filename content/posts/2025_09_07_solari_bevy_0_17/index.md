@@ -862,7 +862,7 @@ Writing a denoiser from scratch is a lot of work, but it would also be nice to a
 
 If you've read this far, thank you, I hope you've enjoyed it! (to be fair, I can't imagine you got this far if you didn't enjoy reading it...)
 
-Solari represents the culmination of a significant amount of research, development, testing, refining, and more than a few tears over the last three years of my spare time. Not just from me, but also from the shoulders of all the research and work it stands on. I couldn't be more proud of what we've made.
+Solari represents the culmination of a significant amount of research, development, testing, refining, and more than a few tears over the last three years of my spare time. Not just from me, but also from the shoulders of all the research and work it stands on. I couldn't be more proud of what I've made.
 
 Like Bevy itself, Solari is also free and open source, forever.
 
