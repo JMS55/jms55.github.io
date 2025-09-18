@@ -321,9 +321,14 @@ fn generate_initial_reservoir(world_position: vec3<f32>, world_normal: vec3<f32>
 
 Temporal reservoir selection for GI is a little different from DI.
 
-In addition to reprojecting based on motion vectors, we jitter the reprojected location by a few pixels in either direction using [permutation sampling](https://www.amazon.com/GPU-Zen-Advanced-Rendering-Techniques/dp/B0DNXNM14K). This essentially adds a small spatial component to the temporal resampling, which helps break up temporal correlations. Without permutation sampling, the denoiser (DLSS-RR) would have artifacts.
+In addition to reprojecting based on motion vectors, we jitter the reprojected location by a few pixels in either direction using [permutation sampling](https://www.amazon.com/GPU-Zen-Advanced-Rendering-Techniques/dp/B0DNXNM14K). This essentially adds a small spatial component to the temporal resampling, which helps break up temporal correlations.
 
-(TODO: Screenshot comparisons with/without permutation sampling)
+<center>
+
+![no_permutation_sampling](no_permutation_sampling.png)
+*No permutation sampling: The denoiser (DLSS-RR) produces blotchy noise*
+
+</center>
 
 (TODO: Talk about why we didn't use permutation sampling for DI, re-validate this assumption)
 
@@ -482,8 +487,6 @@ fn calculate_resolved_light_contribution(resolved_light_sample: ResolvedLightSam
 Notably, only the first and second steps (generating a `LightSample`, resolving it into a `ResolvedLightSample`) involve branching based on the type of light (directional or emissive). Calculating the light contribution involves no branching.
 
 #### Presampling Lights
-
-TODO: Image of light tile buffers
 
 The straightforward way to implement ReSTIR DI initial sampling is to perform the whole light sampling process (generate -> resolve -> calculate contribution) all in one shader.
 
@@ -711,7 +714,15 @@ As an example: In frame 5, world cache cell A samples a light source. In frame 6
 
 By having the cache sample itself, we get full-length multi-bounce paths, instead of just single-bounce paths. In indoor scenes that make heavy use of indirect lighting, the difference is pretty dramatic.
 
-TODO: Screenshots of cornell box with/without multibounce
+<center>
+
+![cornell_box_no_multi_bounce](cornell_box_no_multi_bounce.png)
+*Single-bounce lighting*
+
+![cornell_box_multi_bounce](cornell_box_multi_bounce.png)
+*Multi-bounce lighting*
+
+</center>
 
 #### Cache Blend
 
@@ -752,9 +763,10 @@ Once we have our noisy estimate of the scene, we run it through DLSS-RR to upsca
 ![denoised_full](denoised_full.png)
 *Denoised and antialaised image*
 
-</center>
+![pathtraced](pathtraced.png)
+*Pathtraced reference*
 
-TODO: Include comparison to pathtraced image
+</center>
 
 While ideally we would be able to configure DLSS-RR to read directly from our GBuffer, we unfortunately need a small pass to first copy from the GBuffer to some standalone textures. DLSS-RR will read these textures as inputs to help guide the denoising pass.
 
@@ -858,8 +870,6 @@ The main one is that when we create a cache entry, we set its world-space positi
 
 This means that if a bad position or normal that poorly represents the cache voxel is chosen when initializing the voxel, then it's stuck with that. This leads to weird artifacts that I haven't figured out how to solve.
 
-TODO: Screenshot
-
 Another unsolved problem is overall loss of energy. Compare the below screenshots of the current Solari scheme to a different scheme where instead of terminating in the world cache, the GI system traces an additional ray towards a random light.
 
 ```rust
@@ -873,7 +883,12 @@ reservoir.radiance = direct_lighting.radiance;
 reservoir.unbiased_contribution_weight = direct_lighting.inverse_pdf * uniform_hemisphere_inverse_pdf();
 ```
 
-TODO: Screenshots
+<center>
+
+![no_world_cache](no_world_cache.png)
+*Alternate GI scheme, without the world cache*
+
+</center>
 
 Despite the alternate scheme having higher variance and no multibounce pathtracing, it's actually _brighter_ than using the world cache. For some reason, the voxelized nature of the world cache leads to a loss of energy.
 
@@ -881,7 +896,11 @@ I've been thinking about trying out reprojecting the last frame to get multi bou
 
 Finally, the biggest problem with GI in general is both the overall lack of stability, and the slow reaction time to scene changes. The voxelized nature of the world cache, combined with how ReSTIR amplifies samples, means that bright outliers (e.g. world cache voxels much bighter than their neighbors) lead to temporal instability as shown below.
 
-(TODO: Video)
+<center>
+
+![gi_outlier](gi_outlier.png)
+
+</center>
 
 While we could slow down the temporal accumulation speed to improve stability, that would slow down how fast Solari can react to changes in the scene's lighting. Our goal is realtime, _fully_ dynamic lighting. Not sorta realtime, but actual realtime.
 
@@ -912,6 +931,8 @@ If you find Solari useful, consider [donating](https://github.com/sponsors/JMS55
 ## Further Reading
 * [A Gentle Introduction to ReSTIR: Path Reuse in Real-time](https://intro-to-restir.cwyman.org)
 * [A gentler introduction to ReSTIR](https://interplayoflight.wordpress.com/2023/12/17/a-gentler-introduction-to-restir)
+* [Spatiotemporal Reservoir Resampling for Real-time Ray Tracing with Dynamic Direct Lighting](https://research.nvidia.com/labs/rtr/publication/bitterli2020spatiotemporal)
+* [ReSTIR GI: Path Resampling for Real-Time Path Tracing](https://research.nvidia.com/publication/2021-06_restir-gi-path-resampling-real-time-path-tracing)
 * [Rearchitecting Spatiotemporal Resampling for Production](https://cwyman.org/papers/hpg21_rearchitectingReSTIR.pdf)
 * [Dynamic diffuse global illumination](https://blog.traverseresearch.nl/dynamic-diffuse-global-illumination-b56dc0525a0a)
 * [Kajiya global illumination overview](https://github.com/EmbarkStudios/kajiya/blob/main/docs/gi-overview.md)
