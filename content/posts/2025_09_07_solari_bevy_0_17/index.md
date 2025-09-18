@@ -868,7 +868,7 @@ While the world cache greatly improves GI quality and performance, it also bring
 
 The main one is that when we create a cache entry, we set its world-space position and normal. Every frame when the cache entry samples lighting, it uses that position and normal for sampling. The position and normal are fixed, and can never be updated.
 
-This means that if a bad position or normal that poorly represents the cache voxel is chosen when initializing the voxel, then it's stuck with that. This leads to weird artifacts that I haven't figured out how to solve.
+This means that if a bad position or normal that poorly represents the cache voxel is chosen when initializing the voxel, then it's stuck with that. This leads to weird artifacts that I haven't figured out how to solve, like some screenshots having orange lighting around the robot, and others not.
 
 Another unsolved problem is overall loss of energy. Compare the below screenshots of the current Solari scheme to a different scheme where instead of terminating in the world cache, the GI system traces an additional ray towards a random light.
 
