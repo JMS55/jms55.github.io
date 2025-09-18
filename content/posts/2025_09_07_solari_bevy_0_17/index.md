@@ -850,7 +850,44 @@ We'll see if I can get it working!
 
 ### GI Quality
 
-TODO: Energy loss, screen-space reprojection, reaction time and validation rays, stability
+While the world cache greatly improves GI quality and performance, it also brings its own set of downsides.
+
+The main one is that when we create a cache entry, we set its world-space position and normal. Every frame when the cache entry samples lighting, it uses that position and normal for sampling. The position and normal are fixed, and can never be updated.
+
+This means that if a bad position or normal that poorly represents the cache voxel is chosen when initializing the voxel, then it's stuck with that. This leads to weird artifacts that I haven't figured out how to solve.
+
+TODO: Screenshot
+
+Another unsolved problem is overall loss of energy. Compare the below screenshots of the current Solari scheme to a different scheme where instead of terminating in the world cache, the GI system traces an additional ray towards a random light.
+
+```rust
+// Baseline scheme using the world cache
+reservoir.radiance = query_world_cache(sample_point.world_position, sample_point.geometric_world_normal, view.world_position);
+reservoir.unbiased_contribution_weight = uniform_hemisphere_inverse_pdf();
+
+// Alternate scheme sampling and tracing a ray towards 1 random light
+let direct_lighting = sample_random_light(sample_point.world_position, sample_point.world_normal, rng);
+reservoir.radiance = direct_lighting.radiance;
+reservoir.unbiased_contribution_weight = direct_lighting.inverse_pdf * uniform_hemisphere_inverse_pdf();
+```
+
+TODO: Screenshots
+
+Despite the alternate scheme having higher variance and no multibounce pathtracing, it's actually _brighter_ than using the world cache. For some reason, the voxelized nature of the world cache leads to a loss of energy.
+
+I've been thinking about trying out reprojecting the last frame to get multi bounce for rays that hit within the camera's view, instead of always relying on the world cache. That might mitigate some of the energy loss.
+
+Finally, the biggest problem with GI in general is both the overall lack of stability, and the slow reaction time to scene changes. The voxelized nature of the world cache, combined with how ReSTIR amplifies samples, means that bright outliers (e.g. world cache voxels much bighter than their neighbors) lead to temporal instability as shown below.
+
+(TODO: Video)
+
+While we could slow down the temporal accumulation speed to improve stability, that would slow down how fast Solari can react to changes in the scene's lighting. Our goal is realtime, _fully_ dynamic lighting. Not sorta realtime, but actual realtime.
+
+Unfortunately the lack of validation rays in the ReSTIR GI temporal pass, combined with the recursive nature of the world cache, means that Solari already takes a decent amount of time to react to changes. Animated and moving light sources in particular leave trails behind in the GI. Slowing down the temporal accumulation speed would make it even worse.
+
+Going forwards with the project, I'm looking to mitigate all of these problems.
+
+While it would be more expensive, one option I've considered is combining the alternate sampling scheme with some kind of world-space feedback mechanism like the MegaLights visible light list I described above. The GI pass could trace an additional ray towards a light instead of sampling the world cache. If the light is visible, we could add it to a list stored in a world-space voxel, to be fed back into the (GI or DI) light sampling for future frames.
 
 ### Denoising Options
 
