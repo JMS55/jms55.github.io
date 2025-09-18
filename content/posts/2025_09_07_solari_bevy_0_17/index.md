@@ -272,7 +272,9 @@ ReSTIR GI again uses two compute dispatches, with the first pass doing initial a
 
 GI samples are much more expensive to generate than DI samples (tracing paths is more expensive than looping over a list of light sources), so for initial sampling, we only generate 1 sample.
 
-We start by tracing a ray along a random direction chosen from a uniform hemisphere distribution. At the hit point, we need to obtain an estimate of the incoming irradiance, which becomes the outgoing radiance towards the current pixel, i.e. the path's contribution.
+We start by tracing a ray along a random direction chosen from a uniform hemisphere distribution. At some point I also want to try using [spatiotemporal blue noise](https://github.com/electronicarts/fastnoise). Although DLSS-RR recommends white noise, the docs do say that blue noise with a sufficiently long period can also work.
+
+At the ray's hit point, we need to obtain an estimate of the incoming irradiance, which becomes the outgoing radiance towards the current pixel, i.e. the path's contribution.
 
 <center>
 
