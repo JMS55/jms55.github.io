@@ -88,6 +88,8 @@ The first step of Solari is also the most boring: rasterize a standard GBuffer.
 ![gbuffer_position](gbuffer_position.png)
 *Position reconstructed from depth buffer*
 
+TODO: Emissive, perceptual roughness, metallic, and reflectance, and arrange in a grid
+
 </center>
 
 #### Why Raster?
