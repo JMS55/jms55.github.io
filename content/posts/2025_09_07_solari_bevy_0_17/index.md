@@ -794,30 +794,68 @@ The dlss_wgpu crate is standalone, and can also be used by non-Bevy projects tha
 
 ## Performance
 
-Timings for the above scene were taken on an RTX 3080, rendered at 1600x900, and upscaled to 3200x1800 using DLSS-RR performance mode.
+Timings for all scenes were measured on an RTX 3080, rendered at 1600x900, and upscaled to 3200x1800 using DLSS-RR performance mode.
 
 <center>
 
-|          Pass         | Duration (ms) |     Dependent On     |
-|:---------------------:|:-------------:|:--------------------:|
-| Presample Light Tiles |     0.028     |      Fixed cost      |
-|      World Cache      |     0.135     | World size, somewhat |
-|       ReSTIR DI       |     1.110     |      Pixel count     |
-|       ReSTIR GI       |     0.591     |      Pixel count     |
-|        DLSS-RR        |     5.748     |      Pixel count     |
-|         Total         |     7.612     |                      |
+![pica_pica_perf](pica_pica_perf.png)
+*PICA PICA*
+
+![bistro_perf](bistro_perf.png)
+*Bistro*
+
+![cornell_box_perf](cornell_box_perf.png)
+*Cornell Box*
+
+<!-- |                Pass               | PICA PICA Duration (ms) | Bistro Duration (ms) | Cornell Box Duration (ms) | Dependent On |
+|:---------------------------------:|:-----------------------:|:--------------------:|:-------------------------:|:------------:|
+| Presample Light Tiles             | 0.02761                 | 0.08403              | 0.02436                   | Negligible   |
+| World Cache: Decay Cells          | 0.01508                 | 0.02007              | 0.01484                   | Negligible   |
+| World Cache: Compaction P1        | 0.03823                 | 0.04357              | 0.03776                   | Negligible   |
+| World Cache: Compaction P2        | 0.00862                 | 0.00903              | 0.00858                   | Negligible   |
+| World Cache: Write Active Cells   | 0.01451                 | 0.01942              | 0.00138                   | Negligible   |
+| World Cache: Sample Lighting      | 0.06009                 | 2.09000              | 0.05367                   | World size   |
+| World Cache: Blend New Samples    | 0.01286                 | 0.06737              | 0.01272                   | Negligible   |
+| ReSTIR DI: Initial + Temporal     | 1.25000                 | 1.85000              | 1.28000                   | Pixel count  |
+| ReSTIR DI: Spatial + Shade        | 0.18628                 | 0.65952              | 0.18127                   | Pixel count  |
+| ReSTIR GI: Initial + Temporal     | 0.36913                 | 2.75000              | 0.32722                   | Pixel count  |
+| ReSTIR GI: Spatial + Shade        | 0.44301                 | 0.59905              | 0.45791                   | Pixel count  |
+| DLSS-RR: Copy Inputs From GBuffer | 0.04185                 | 0.06789              | 0.03517                   | Pixel count  |
+| DLSS-RR                           | 5.75000                 | 6.29000              | 5.82000                   | Pixel count  |
+| Total                             | 8.21727                 | 14.54995             | 8.25488                   | N/A          | -->
+
+|                Pass               | PICA PICA Duration (ms) | Bistro Duration (ms) | Cornell Box Duration (ms) | Dependent On |
+|:---------------------------------:|:-----------------------:|:--------------------:|:-------------------------:|:------------:|
+| Presample Light Tiles             | 0.03                    | 0.08                 | 0.02                      | Negligible   |
+| World Cache: Decay Cells          | 0.02                    | 0.02                 | 0.01                      | Negligible   |
+| World Cache: Compaction P1        | 0.04                    | 0.04                 | 0.04                      | Negligible   |
+| World Cache: Compaction P2        | 0.01                    | 0.01                 | 0.01                      | Negligible   |
+| World Cache: Write Active Cells   | 0.01                    | 0.02                 | 0.01                      | Negligible   |
+| World Cache: Sample Lighting      | 0.06                    | 2.09                 | 0.05                      | World size   |
+| World Cache: Blend New Samples    | 0.01                    | 0.07                 | 0.01                      | Negligible   |
+| ReSTIR DI: Initial + Temporal     | 1.25                    | 1.85                 | 1.28                      | Pixel count  |
+| ReSTIR DI: Spatial + Shade        | 0.19                    | 0.66                 | 0.18                      | Pixel count  |
+| ReSTIR GI: Initial + Temporal     | 0.37                    | 2.75                 | 0.33                      | Pixel count  |
+| ReSTIR GI: Spatial + Shade        | 0.44                    | 0.60                 | 0.46                      | Pixel count  |
+| DLSS-RR: Copy Inputs From GBuffer | 0.04                    | 0.07                 | 0.04                      | Pixel count  |
+| DLSS-RR                           | 5.75                    | 6.29                 | 5.82                      | Pixel count  |
+| Total                             | 8.22                    | 14.55                | 8.25                      | N/A          |
 
 </center>
 
 TODO: ReSTIR DI is mainly memory bound. Even with the presampled light tiles, the main cost is the 32 s
 
-TODO: Show subpasses
-
-TODO: Compare multiple scenes, especially without any background black pixels, and add screenshots
-
-While DLSS-RR is quite expensive, it ends up saving performance overall.
+While DLSS-RR is quite expensive, it still ends up saving performance overall.
 
 Without upscaling, we would have 4x as many pixels total, meaning ReSTIR DI and GI would be ~4x as expensive. After that, we would need a separate denoising process (usually two separate processes, one for direct and one for indirect), a separate shading pass to apply the denoised lighting, and then an antialiasing method.
+
+DLSS-RR also performs much better on Ada and Blackwell GPUs.
+
+<center>
+
+![dlss_rr_perf](dlss_rr_perf.png)
+
+</center>
 
 Total performance costs would be higher than using the unified upscaling + denoising + antialiasing pipeline that DLSS-RR provides.
 
