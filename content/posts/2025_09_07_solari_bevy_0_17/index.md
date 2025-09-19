@@ -88,8 +88,6 @@ The first step of Solari is also the most boring: rasterize a standard GBuffer.
 ![gbuffer_position](gbuffer_position.png)
 *Position reconstructed from depth buffer*
 
-TODO: Emissive, perceptual roughness, metallic, and reflectance, and arrange in a grid
-
 </center>
 
 #### Why Raster?
@@ -793,6 +791,8 @@ The dlss_wgpu crate is standalone, and can also be used by non-Bevy projects tha
 
 ## Performance
 
+### Numbers
+
 Timings for all scenes were measured on an RTX 3080, rendered at 1600x900, and upscaled to 3200x1800 using DLSS-RR performance mode.
 
 <center>
@@ -842,13 +842,15 @@ Timings for all scenes were measured on an RTX 3080, rendered at 1600x900, and u
 
 </center>
 
-TODO: ReSTIR DI is mainly memory bound. Even with the presampled light tiles, the main cost is the 32 s
+### Upscaling Benefits
 
 While DLSS-RR is quite expensive, it still ends up saving performance overall.
 
 Without upscaling, we would have 4x as many pixels total, meaning ReSTIR DI and GI would be ~4x as expensive. After that, we would need a separate denoising process (usually two separate processes, one for direct and one for indirect), a separate shading pass to apply the denoised lighting, and then an antialiasing method.
 
-DLSS-RR also performs much better on Ada and Blackwell GPUs.
+Total performance costs would be higher than using the unified upscaling + denoising + antialiasing pipeline that DLSS-RR provides.
+
+DLSS-RR also performs much better on the newer Ada and Blackwell GPUs.
 
 <center>
 
@@ -856,13 +858,44 @@ DLSS-RR also performs much better on Ada and Blackwell GPUs.
 
 </center>
 
-Total performance costs would be higher than using the unified upscaling + denoising + antialiasing pipeline that DLSS-RR provides.
+### NSight Trace
 
-(TODO: Register count issue)
+Looking at a GPU trace, our main ReSTIR DI/GI passes are primarily memory bound.
 
-Half-res GI
+The ReSTIR DI initial and temporal pass is mainly limited by loads from global memory (blue bar), which source-code level profiling reveals to come from loading `ResolvedLightSamplePacked` samples from light tiles during initial sampling.
 
-Updating a random subset of cache cells
+The ReSTIR DI spatial and shade pass, and both ReSTIR GI passes, are limited by raytracing throughput (yellow bar).
+
+<center>
+
+![nsight_trace](nsight_trace.png)
+*NSight Graphics GPU Trace*
+
+</center>
+
+There are typically three ways to improve memory-bound shaders:
+1. Loading less data
+2. Improving cache hit rate
+3. Hiding the latency
+
+For ReSTIR DI initial sampling, this would correspond to:
+1. Taking less than 32 initial samples (viable, depending on the scene)
+2. Can't do this - we're already hitting 95% L2 cache throughput
+3. Would need to increase [occupancy](https://gpuopen.com/learn/occupancy-explained)
+
+Unfortunately, the only real optimization I think we could do is hiding the latency by improving the occupancy. More threads for the GPU to swap between when while waiting for memory loads to finish = finishing the overall workload faster.
+
+NSight shows that we have a mediocre 32 out of a hardware maximum of 48 warps occupied, limited by the "registers per thread limiter". I.e. our shader code uses too many registers per thread, and NSight does not have enough register space to allocate additional warps.
+
+Source-code level profiling shows that the majority of live registers are consumed by the [triangle resolve function](https://github.com/bevyengine/bevy/blob/8b36cca28c4ea00425e1414fd88c8b82297e2b96/crates/bevy_solari/src/scene/raytracing_scene_bindings.wgsl#L177-L215), which maps a point on a mesh to surface data like position, normal, material properties, etc. I'm not really sure how to reduce register usage here.
+
+For the other 3 passes limited by raytracing throughput, we have the same issue. Not a ton we can do besides hiding the latency, which runs into the same issue with register count and occupancy.
+
+For GI specifically though, there _is_ a way I have thought of to do less work, again at the cost of worse quality depending on the scene.
+
+For the world cache, rather than trace rays for every active cell, we could do it for a random subset of cells each frame (up to some maximum), to help limit the cost of updating many cache entries.
+
+For the ReSTIR GI passes, we could perform them at quarter resolution (half the pixels along each axis). GI is not particuarly important to have exactly per-pixel data, so we can calculate it at a lower resolution, and then [upscale](https://www.nvidia.com/en-us/on-demand/session/gdc25-gdc1002) (timestamp 17:22). This upscaling would be in addition to the the DLSS-RR upscaling.
 
 ## Future Work
 
