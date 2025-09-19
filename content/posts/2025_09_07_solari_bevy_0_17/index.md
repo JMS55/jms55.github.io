@@ -791,7 +791,6 @@ The dlss_wgpu crate is standalone, and can also be used by non-Bevy projects tha
 
 </center>
 
-
 ## Performance
 
 Timings for the above scene were taken on an RTX 3080, rendered at 1600x900, and upscaled to 3200x1800 using DLSS-RR performance mode.
