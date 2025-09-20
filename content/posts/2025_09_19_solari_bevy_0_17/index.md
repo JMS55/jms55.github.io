@@ -1,5 +1,5 @@
 +++
-title = "Hardware Raytracing in Bevy 0.17 (Solari)"
+title = "Realtime Raytracing in Bevy 0.17 (Solari)"
 date = "2025-09-19"
 
 [taxonomies]
