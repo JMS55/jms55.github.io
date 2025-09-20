@@ -32,7 +32,7 @@ cargo run --release --examples solari --features bevy_solari,https,dlss
 
 ## Introduction
 
-Back in 2023, I [started](https://github.com/bevyengine/bevy/pull/10000) an ambitious project called Solari to integrate hardware raytracing into Bevy's rendering pipeline. I was experimenting with [Lumen](https://youtu.be/2GYXuM10riw)-style screen space probes for global illumination, and later extended it to use [radiance cascades](https://radiance-cascades.com).
+Back in 2023, I [started](https://github.com/bevyengine/bevy/pull/10000) a project I called Solari to integrate hardware raytracing into Bevy's rendering pipeline. I was experimenting with [Lumen](https://youtu.be/2GYXuM10riw)-style screen space probes for global illumination, and later extended it to use [radiance cascades](https://radiance-cascades.com).
 
 These techniques, while theoretically sound, proved challenging to use in practice. Screen space probes were tricky to get good quality out of (reusing and reprojecting the same probe across multiple pixels is hard!), and radiance cascades brought its own set of artifacts and performance costs.
 
@@ -111,8 +111,6 @@ These combined techniques keep draw call overhead and per-pixel overdraw fairly 
 ### ReSTIR DI
 
 In order to calculate direct lighting (light emitted by a light source, bouncing off a surface, and then hitting the camera), for each pixel, we need to loop over every light and point on those lights, and then calculate the light's contribution, as well as whether or not the light is visible.
-
-TODO: Diagram of camera -> surface -> sampling light sources
 
 This is very expensive, so realtime applications tend to approximate it by averaging many individual light samples. If you choose those samples well, you can get an approximate result that's very close to the real thing, without tons of expensive calculations.
 
@@ -207,8 +205,6 @@ Overall the DI pass uses two raytraces per pixel (1 initial, 1 spatial).
 ### ReSTIR GI
 
 Indirect lighting (light emitted by a light source, bouncing off more than 1 surface, and then hitting the camera) is even more expensive to calculate than direct lighting, as you need to trace multiple bounces of each ray to calculate the lighting for a given path.
-
-TODO: Diagram of camera -> surface -> hemisphere directions -> world cache voxel
 
 To quickly estimate indirect lighting, Solari uses ReSTIR GI, with a very similar setup to the previous ReSTIR DI.
 
@@ -314,13 +310,11 @@ Overall the GI pass uses two raytraces per pixel (1 initial, 1 spatial), same as
 
 {{ figure(src="noisy_gi.png", caption="GI with 1 initial candidate, 1 temporal resample, and 1 spatial resample") }}
 
-### Interlude: What's ReSTIR Doing?
+### Interlude: What is ReSTIR Doing?
 
 I have heard ReSTIR described as a signal _amplifier_. If you feed it decent samples, it's likely to produce a good sample. If you feed it good samples, it's likely to produce a great sample.
 
 The better your initial sampling, the better ReSTIR does. The quality of your final result heavily depends on the quality of the initial samples you feed into it.
-
-(TODO: Diagram of feeding mediocre/good samples through a reservoir/sieve)
 
 For this reason, it's important that you spend time improving the initial sampling process. This could take the form of generating more initial samples, or improving your sampling strategy.
 
@@ -493,8 +487,6 @@ The world cache voxelizes the world, storing accumulated irradiance (light hitti
 
 When sampling indirect lighting in ReSTIR GI, rather than having to trace additional rays towards light sources to estimate the irradiance, we can simply lookup the irradiance at the given voxel.
 
-TODO: Diagram of sampling
-
 The world cache both amortizes the cost of the GI pass, and reduces variance, especially for newly-disoccluded pixels for which the screen-space ReSTIR GI has no temporal history.
 
 Adding the world cache both significantly improved quality, and halved the time spent on the initial GI sampling.
@@ -658,7 +650,7 @@ As an example: In frame 5, world cache cell A samples a light source. In frame 6
 
 By having the cache sample itself, we get full-length multi-bounce paths, instead of just single-bounce paths. In indoor scenes that make heavy use of indirect lighting, the difference is pretty dramatic.
 
-{{ figure(src="cornell_box_no_multi_bounce.png", caption="Single-bounce lighting) }}
+{{ figure(src="cornell_box_no_multi_bounce.png", caption="Single-bounce lighting") }}
 {{ figure(src="cornell_box_multi_bounce.png", caption="Multi-bounce lighting") }}
 
 #### Cache Blend
@@ -825,8 +817,6 @@ Another promising direction is copying from the recently released [MegaLights](h
 
 ### Chromatic ReSTIR
 
-TODO: Screenshot of problem
-
 Another problem is that overlapping lights of similar brightness, but different chromas (R,G,B) tend to pose a problem for ReSTIR. ReSTIR can only select a single sample, but in this case, there are multiple overlapping lights.
 
 One approach I've been prototyping to solve this is using [ratio control variates](https://suikasibyl.github.io/files/vvmc/paper.pdf) (RCV). The basic idea (if I understand the paper correctly) is that you apply a vector-valued (R,G,B) weight to your lighting integral, based on the fraction of light a given sample contributes, divided by the overall light in the scene.
@@ -892,7 +882,7 @@ If you've read this far, thank you, I hope you've enjoyed it! (to be fair, I can
 
 Solari represents the culmination of a significant amount of research, development, testing, refining, and more than a few tears over the last three years of my spare time. Not just from me, but also from the shoulders of all the research and work it stands on. I couldn't be more proud of what I've made.
 
-Like Bevy itself, Solari is also free and open source, forever.
+Like the rest of Bevy, Solari is also free and open source, forever.
 
 If you find Solari useful, consider [donating](https://github.com/sponsors/JMS55) to help fund future development.
 
