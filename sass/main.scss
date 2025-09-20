@@ -62,9 +62,13 @@ a:focus-visible {
 
 .prose {
   h1 {
-    font-size: 1.15em;
+    // MODIFICATION
+    // font-size: 1.15em;
     font-weight: bolder;
-    margin: 1.5em 0 0.75em;
+    // margin: 1.5em 0 0.75em;
+
+    font-size: 2em;
+    margin: 1.5em 0 0.35em;
   }
 
   h2 {
