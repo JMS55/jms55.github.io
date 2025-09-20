@@ -7,7 +7,7 @@
 
 base_url = "https://jms55.github.io"
 title = "JMS55's Blog"
-description = "xxxx xxxx xxxx"
+description = "Bevy, Rust, Graphics, etc"
 default_language = "en"
 theme = "serene"
 output_dir = "public"
