@@ -79,16 +79,9 @@ Onto the frame breakdown!
 
 The first step of Solari is also the most boring: rasterize a standard GBuffer.
 
-<center>
-
-![gbuffer_base_color](gbuffer_base_color.png)
-*Base color*
-![gbuffer_normals](gbuffer_normals.png)
-*Normals*
-![gbuffer_position](gbuffer_position.png)
-*Position reconstructed from depth buffer*
-
-</center>
+{{ figure(src="gbuffer_base_color.png", caption="Base color") }}
+{{ figure(src="gbuffer_normals.png", caption="Normals") }}
+{{ figure(src="gbuffer_position.png", caption="Position reconstructed from depth buffer") }}
 
 #### Why Raster?
 
@@ -149,17 +142,12 @@ Initial sampling uses 32 samples from a light tile (more on this later), and cho
 
 After choosing the best sample, we trace a ray to test visibility, setting the unbiased contribution weight to 0 in the case of occlusion.
 
-> All raytracing in Solari is handled via inline ray queries. Wgpu does not yet support raytracing pipelines, so I haven't gotten a chance to see play around with them.
+{% note() %}
+All raytracing in Solari is handled via inline ray queries. Wgpu does not yet support raytracing pipelines, so I haven't gotten a chance to see play around with them.
+{% end %}
 
-<center>
-
-![noisy_di_one_sample](noisy_di_one_sample.png)
-*One candidate sample DI*
-
-![noisy_di_32_samples](noisy_di_32_samples.png)
-*32 candidate sample DI, one sample chosen via RIS*
-
-</center>
+{{ figure(src="noisy_di_one_sample.png", caption="One candidate sample DI") }}
+{{ figure(src="noisy_di_32_samples.png", caption="32 candidate sample DI, one sample chosen via RIS") }}
 
 #### DI Temporal Resampling
 
@@ -190,32 +178,17 @@ We must also trace a ray to test visibility, as the reservoir comes from a neigh
 
 Unlike a lot of other ReSTIR implementations, we only ever use 1 spatial sample. Using more than 1 sample does not tend to improve quality, and increases performance costs. We cannot, however, skip spatial resampling entirely. Having a source of new samples from other pixels is crucial to prevent artifacts from temporal resampling.
 
-<center>
-
-![spatial_baseline](spatial_baseline.jpg)
-*1 random spatial sample, 6.4 ms*
-
-</center>
+{{ figure(src="spatial_baseline.jpg", caption="1 random spatial sample, 6.4 ms") }}
 
 Spatial sampling is probably the least well-researched part of ReSTIR. I tried a couple of other schemes, including trying to reuse reservoirs across a workgroup/subgroup similar to [Histogram Stratification for Spatio-Temporal Reservoir Sampling](https://iribis.github.io/publication/2025_Stratified_Histogram_Resampling), but none of them worked out well.
 
 Subgroups-level resampling was very cheap, but had tiling artifacts, and was not easily portable to different machines with different amounts of threads per workgroup.
 
-<center>
-
-![spatial_subgroup](spatial_subgroup.jpg)
-*Subgroup-level spatial resampling, 7.3 ms*
-
-</center>
+{{ figure(src="spatial_subgroup.jpg", caption="Subgroup-level spatial resampling, 7.3 ms") }}
 
 Workgroup-level resampling had much better quality, but was twice as expensive compared to 1 spatial sample, and introduced correlations that broke the denoiser.
 
-<center>
-
-![spatial_workgroup](spatial_workgroup.jpg)
-*Workgroup-level spatial resampling, 12 ms*
-
-</center>
+{{ figure(src="spatial_workgroup.jpg", caption="Workgroup-level spatial resampling, 12 ms") }}
 
 In the end, I stuck with the 1 random spatial sample I described above.
 
@@ -229,12 +202,7 @@ I did try out shading the pixel using all 3 samples (initial, temporal, and spat
 
 Overall the DI pass uses two raytraces per pixel (1 initial, 1 spatial).
 
-<center>
-
-![noisy_di](noisy_di.png)
-*DI with 32 initial candidates, 1 temporal resample, and 1 spatial resample*
-
-</center>
+{{ figure(src="noisy_di.png", caption="DI with 32 initial candidates, 1 temporal resample, and 1 spatial resample") }}
 
 ### ReSTIR GI
 
@@ -274,12 +242,7 @@ We start by tracing a ray along a random direction chosen from a uniform hemisph
 
 At the ray's hit point, we need to obtain an estimate of the incoming irradiance, which becomes the outgoing radiance towards the current pixel, i.e. the path's contribution.
 
-<center>
-
-![noisy_gi_one_sample](noisy_gi_one_sample.png)
-*One sample GI*
-
-</center>
+{{ figure(src="noisy_gi_one_sample.png", caption="One sample GI") }}
 
 To obtain irradiance, we query the world cache at the hit point (more on this later).
 
@@ -321,21 +284,11 @@ Temporal reservoir selection for GI is a little different from DI.
 
 In addition to reprojecting based on motion vectors, we jitter the reprojected location by a few pixels in either direction using [permutation sampling](https://www.amazon.com/GPU-Zen-Advanced-Rendering-Techniques/dp/B0DNXNM14K). This essentially adds a small spatial component to the temporal resampling, which helps break up temporal correlations.
 
-<center>
-
-![no_permutation_sampling](no_permutation_sampling.png)
-*No permutation sampling: The denoiser (DLSS-RR) produces blotchy noise*
-
-</center>
+{{ figure(src="no_permutation_sampling.png", caption="No permutation sampling: The denoiser (DLSS-RR) produces blotchy noise") }}
 
 I also tried permutation sampling for ReSTIR DI, and while it did reduce correlation artifacts, it also added even worse artifacts because we reuse visibility, which becomes very obvious under permutation sampling. Tracing an extra ray to validate visibility would fix this, but I'm not quite ready to pay that performance cost.
 
-<center>
-
-![di_permutation_sampling](di_permutation_sampling.png)
-*DI: Permutation sampling and visibility reuse do not work well together*
-
-</center>
+{{ figure(src="di_permutation_sampling.png", caption="DI: Permutation sampling and visibility reuse do not work well together") }}
 
 Spatial reservoir selection for GI is identical to DI.
 
@@ -359,12 +312,7 @@ Since we're using DLSS-RR for denoising, we can simply add the GI on top of the 
 
 Overall the GI pass uses two raytraces per pixel (1 initial, 1 spatial), same as DI.
 
-<center>
-
-![noisy_gi](noisy_gi.png)
-*GI with 1 initial candidate, 1 temporal resample, and 1 spatial resample*
-
-</center>
+{{ figure(src="noisy_gi.png", caption="GI with 1 initial candidate, 1 temporal resample, and 1 spatial resample") }}
 
 ### Interlude: What's ReSTIR Doing?
 
@@ -539,11 +487,7 @@ Unlike DI, where generating more samples is relatively cheap, for GI we can only
 
 We can take advantage of that fact by sharing the same work amongst multiple pixels, via the use of a world-space irradiance cache.
 
-<center>
-
 ![world_cache_close](world_cache_close.png)
-
-</center>
 
 The world cache voxelizes the world, storing accumulated irradiance (light hitting the surface) at each voxel.
 
@@ -631,12 +575,7 @@ fn compute_checksum(world_position: vec3<u32>, world_normal: vec3<u32>) -> u32 {
 }
 ```
 
-<center>
-
-![world_cache_far](world_cache_far.png)
-*World cache from further away, showing LOD*
-
-</center>
+{{ figure(src="world_cache_far.png", caption="World cache from further away, showing LOD") }}
 
 #### Cache Decay
 
@@ -719,15 +658,8 @@ As an example: In frame 5, world cache cell A samples a light source. In frame 6
 
 By having the cache sample itself, we get full-length multi-bounce paths, instead of just single-bounce paths. In indoor scenes that make heavy use of indirect lighting, the difference is pretty dramatic.
 
-<center>
-
-![cornell_box_no_multi_bounce](cornell_box_no_multi_bounce.png)
-*Single-bounce lighting*
-
-![cornell_box_multi_bounce](cornell_box_multi_bounce.png)
-*Multi-bounce lighting*
-
-</center>
+{{ figure(src="cornell_box_no_multi_bounce.png", caption="Single-bounce lighting) }}
+{{ figure(src="cornell_box_multi_bounce.png", caption="Multi-bounce lighting") }}
 
 #### Cache Blend
 
@@ -760,34 +692,20 @@ fn blend_new_samples(@builtin(global_invocation_id) active_cell_id: vec3<u32>) {
 
 Once we have our noisy estimate of the scene, we run it through DLSS-RR to upscale, antialias, and denoise it.
 
-<center>
-
-![noisy_full](noisy_full.png)
-*Noisy and aliased image*
-
-![denoised_full](denoised_full.png)
-*Denoised and antialaised image*
-
-![pathtraced](pathtraced.png)
-*Pathtraced reference*
-
-</center>
+{{ figure(src="noisy_full.png", caption="Noisy and aliased image") }}
+{{ figure(src="denoised_full.png", caption="Denoised and antialaised image") }}
+{{ figure(src="pathtraced.png", caption="Pathtraced reference") }}
 
 While ideally we would be able to configure DLSS-RR to read directly from our GBuffer, we unfortunately need a small pass to first copy from the GBuffer to some standalone textures. DLSS-RR will read these textures as inputs to help guide the denoising pass.
 
 DLSS-RR is called via the [dlss_wgpu](https://crates.io/crates/dlss_wgpu) wrapper I wrote, which is integrated into bevy_anti_alias as a Bevy plugin.
 
+{% note() %}
 The dlss_wgpu crate is standalone, and can also be used by non-Bevy projects that are using wgpu!
+{% end %}
 
-<center>
-
-![denoised_di](denoised_di.png)
-*Denoised and antialaised image - DI only*
-
-![denoised_gi](denoised_gi.png)
-*Denoised and antialaised image - GI only*
-
-</center>
+{{ figure(src="denoised_di.png", caption="Denoised and antialaised image - DI only") }}
+{{ figure(src="denoised_gi.png", caption="Denoised and antialaised image - GI only") }}
 
 ## Performance
 
@@ -795,16 +713,9 @@ The dlss_wgpu crate is standalone, and can also be used by non-Bevy projects tha
 
 Timings for all scenes were measured on an RTX 3080, rendered at 1600x900, and upscaled to 3200x1800 using DLSS-RR performance mode.
 
-<center>
-
-![pica_pica_perf](pica_pica_perf.png)
-*PICA PICA*
-
-![bistro_perf](bistro_perf.png)
-*Bistro*
-
-![cornell_box_perf](cornell_box_perf.png)
-*Cornell Box*
+{{ figure(src="pica_pica_perf.png", caption="PICA PICA") }}
+{{ figure(src="bistro_perf.png", caption="Bistro") }}
+{{ figure(src="cornell_box_perf.png", caption="Cornell Box") }}
 
 <!-- |                Pass               | PICA PICA Duration (ms) | Bistro Duration (ms) | Cornell Box Duration (ms) | Dependent On |
 |:---------------------------------:|:-----------------------:|:--------------------:|:-------------------------:|:------------:|
@@ -840,8 +751,6 @@ Timings for all scenes were measured on an RTX 3080, rendered at 1600x900, and u
 | DLSS-RR                           | 5.75                    | 6.29                 | 5.82                      | Pixel count  |
 | Total                             | 8.22                    | 14.55                | 8.25                      | N/A          |
 
-</center>
-
 ### Upscaling Benefits
 
 While DLSS-RR is quite expensive, it still ends up saving performance overall.
@@ -852,11 +761,7 @@ Total performance costs would be higher than using the unified upscaling + denoi
 
 DLSS-RR also performs much better on the newer Ada and Blackwell GPUs.
 
-<center>
-
 ![dlss_rr_perf](dlss_rr_perf.png)
-
-</center>
 
 ### NSight Trace
 
@@ -866,12 +771,7 @@ The ReSTIR DI initial and temporal pass is mainly limited by loads from global m
 
 The ReSTIR DI spatial and shade pass, and both ReSTIR GI passes, are limited by raytracing throughput (yellow bar).
 
-<center>
-
-![nsight_trace](nsight_trace.png)
-*NSight Graphics GPU Trace*
-
-</center>
+{{ figure(src="nsight_trace.png", caption="NSight Graphics GPU Trace") }}
 
 There are typically three ways to improve memory-bound shaders:
 1. Loading less data
@@ -960,12 +860,7 @@ reservoir.radiance = direct_lighting.radiance;
 reservoir.unbiased_contribution_weight = direct_lighting.inverse_pdf * uniform_hemisphere_inverse_pdf();
 ```
 
-<center>
-
-![no_world_cache](no_world_cache.png)
-*Alternate GI scheme, without the world cache*
-
-</center>
+{{ figure(src="no_world_cache.png", caption="Alternate GI scheme, without the world cache*") }}
 
 Despite the alternate scheme having higher variance and no multibounce pathtracing, it's actually _brighter_ than using the world cache. For some reason, the voxelized nature of the world cache leads to a loss of energy.
 
@@ -973,11 +868,7 @@ I've been thinking about trying out reprojecting the last frame to get multi bou
 
 Finally, the biggest problem with GI in general is both the overall lack of stability, and the slow reaction time to scene changes. The voxelized nature of the world cache, combined with how ReSTIR amplifies samples, means that bright outliers (e.g. world cache voxels much bighter than their neighbors) lead to temporal instability as shown below.
 
-<center>
-
 ![gi_outlier](gi_outlier.png)
-
-</center>
 
 While we could slow down the temporal accumulation speed to improve stability, that would slow down how fast Solari can react to changes in the scene's lighting. Our goal is realtime, _fully_ dynamic lighting. Not sorta realtime, but actual realtime.
 
