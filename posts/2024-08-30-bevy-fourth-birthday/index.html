@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light dark">
+  
+  
+    
+  
+  <meta name="description" content="Bevy, Rust, Graphics, etc">
+
+  <title>Bevy&#x27;s Fourth Birthday - A Year of Meshlets</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="https://jms55.github.io/img/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="https://jms55.github.io/img/favicon-16x16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="https://jms55.github.io/img/apple-touch-icon.png">
+  
+  <style>
+
+  /* light mode colors */
+  body {
+    --primary-color: #5871a2;
+    --primary-pale-color: #5871a233;
+    --primary-decoration-color: #5871a210;
+    --bg-color: #ffffff;
+    --text-color: #2f3030;
+    --text-pale-color: #767676;
+    --text-decoration-color: #a9a9a9;
+    --highlight-mark-color: #5f75b020;
+
+    --callout-note-color: #5871a2;
+    --callout-tip-color: #268556;
+    --callout-important-color: #885fc9;
+    --callout-warning-color: #ab6632;
+    --callout-caution-color: #c64e4e;
+  }
+
+  /* dark mode colors */
+  body.dark {
+    --primary-color: #6f8fd1;
+    --primary-pale-color: #6f8fd166;
+    --primary-decoration-color: #6f8fd112;
+    --bg-color: #1c1c1c;
+    --text-color: #c1c1c1;
+    --text-pale-color: #848484;
+    --text-decoration-color: #5f5f5f;
+    --highlight-mark-color: #8296cb3b;
+
+    --callout-note-color: #6f8fd1;
+    --callout-tip-color: #47976f;
+    --callout-important-color: #9776cd;
+    --callout-warning-color: #ad7a52;
+    --callout-caution-color: #d06161;
+  }
+
+  /* typography */
+  body {
+    --main-font: ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+    --code-font: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+    --homepage-max-width: 768px;
+    --main-max-width: 768px;
+    --avatar-size: 60px;
+    --font-size: 16px;
+    --line-height: 1.75;
+    --img-border-radius: 0px;
+    --detail-border-radius: 0px;
+    --dark-mode-img-brightness: 0.75;
+    --dark-mode-chart-brightness: 0.75;
+    --inline-code-border-radius: 2px;
+    --inline-code-bg-color: var(--primary-decoration-color);
+    --block-code-border-radius: 0px;
+    --block-code-border-color: var(--primary-color);
+    --detail-border-color: var(--primary-color);
+  }
+
+</style>
+
+  <link rel="stylesheet" href="https://jms55.github.io/main.css">
+  
+
+
+
+  
+</head>
+
+<body class="post">
+  
+  
+<div id="wrapper">
+  <div id="blank"></div>
+  <aside>
+    
+    
+    <nav>
+      <ul>
+        
+        <li>
+          <a class="h2" href="#introduction">Introduction</a>
+          
+        </li>
+        
+        <li>
+          <a class="h2" href="#a-year-11-months-of-meshlets">A Year 11 Months of Meshlets</a>
+          
+        </li>
+        
+        <li>
+          <a class="h2" href="#bevy-in-general">Bevy in General</a>
+          
+        </li>
+        
+        <li>
+          <a class="h2" href="#solarn-t">Solarn&#x27;t</a>
+          
+        </li>
+        
+        <li>
+          <a class="h2" href="#writing">Writing</a>
+          
+        </li>
+        
+      </ul>
+    </nav>
+    
+    
+    <button id="back-to-top" aria-label="back to top">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-up"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>
+
+    </button>
+    
+  </aside>
+  <main>
+    
+<header>
+  <nav>
+    <a id="back-link" href="https:&#x2F;&#x2F;jms55.github.io&#x2F;posts">← Back</a>
+  </nav>
+</header>
+
+
+    <div>
+      
+      
+      
+      
+      <div id="copy-cfg" style="display: none;" data-copy-icon="&lt;svg xmlns=&quot;http:&#x2F;&#x2F;www.w3.org&#x2F;2000&#x2F;svg&quot; viewBox=&quot;0 0 24 24&quot; width=&quot;18&quot; height=&quot;18&quot;&gt;&lt;path d=&quot;M6.9998 6V3C6.9998 2.44772 7.44752 2 7.9998 2H19.9998C20.5521 2 20.9998 2.44772 20.9998 3V17C20.9998 17.5523 20.5521 18 19.9998 18H16.9998V20.9991C16.9998 21.5519 16.5499 22 15.993 22H4.00666C3.45059 22 3 21.5554 3 20.9991L3.0026 7.00087C3.0027 6.44811 3.45264 6 4.00942 6H6.9998ZM5.00242 8L5.00019 20H14.9998V8H5.00242ZM8.9998 6H16.9998V16H18.9998V4H8.9998V6Z&quot; fill=&quot;currentColor&quot;&gt;&lt;&#x2F;path&gt;&lt;&#x2F;svg&gt;
+" data-check-icon="&lt;svg xmlns=&quot;http:&#x2F;&#x2F;www.w3.org&#x2F;2000&#x2F;svg&quot; viewBox=&quot;0 0 24 24&quot; width=&quot;18&quot; height=&quot;18&quot;&gt;&lt;path d=&quot;M10.0007 15.1709L19.1931 5.97852L20.6073 7.39273L10.0007 17.9993L3.63672 11.6354L5.05093 10.2212L10.0007 15.1709Z&quot; fill=&quot;currentColor&quot;&gt;&lt;&#x2F;path&gt;&lt;&#x2F;svg&gt;
+"></div>
+      
+      <article class="prose">
+        <h1>Bevy&#x27;s Fourth Birthday - A Year of Meshlets</h1>
+        <div id="post-info">
+          <div id="date">
+            <span id="publish">Aug 30, 2024</span>
+            </div>
+
+          
+          <div id="tags">
+            <a class="instant" href="https://jms55.github.io/tags/bevy"><span>#</span>bevy</a>
+          </div>
+          
+        </div>
+
+        
+        
+
+        
+
+        <blockquote>
+<p>Written in response to <a rel="nofollow noreferrer" href="https://bevyengine.org/news/bevys-fourth-birthday">Bevy's Fourth Birthday</a>.</p>
+</blockquote>
+<h3 id="introduction">Introduction<a class="zola-anchor" href="#introduction" aria-label="Anchor link for: introduction" style="visibility: hidden;"></a>
+</h3>
+<p>The subtitle of this post is "Bevy's Fourth Birthday; Already???". I feel like I <em>just</em> wrote Bevy's <em>third</em> birthday reflections only a couple of months ago... time flies!</p>
+<p>It's been an awesome year, with a lot accomplished. Lets talk about that.</p>
+<h3 id="a-year-11-months-of-meshlets"><del>A Year</del> 11 Months of Meshlets<a class="zola-anchor" href="#a-year-11-months-of-meshlets" aria-label="Anchor link for: a-year-11-months-of-meshlets" style="visibility: hidden;"></a>
+</h3>
+<p>What have I been doing in Bevy in the last year? The answer is learning and reimplementing the techniques behind Nanite (virtual geometry). That's mostly it.</p>
+<p>No really - the first commit I can find related to Bevy's meshlet feature (I need a better name for it...) is dated September 30th 2023. That's a little less than 2 months since the time I wrote Bevy's third birthday post, and around 11 months before the time of this writing.</p>
+<p>I <em>did</em> work on some other stuff - PCF being the most notable feature, along with some optimizations like async pipeline compilation to prevent shader stutter, and some experimental work that didn't pan out like solari and an improved render graph. But the large majority of my time spent has been on meshlets. In fact, this is going to be the third post on my blog in total - the first being Bevy's third birthday post, and the second being a huge writeup on my initial learnings from implementing meshlets.</p>
+<p>And I'm going to say it - I'm really proud of my work on this. It's an absolutely <em>massive</em> project spanning so many different concepts. It's been immensely rewarding, but also immensely draining. I've felt like quitting at times, and questioned the value it provides given that it's an AAA focused feature for a non-AAA-ready engine. But I've stuck with the project, and right now I can say that it's been worth it. Maybe it's not production ready yet (it's definitely not). Maybe there's still a ton of major things left to do, let alone optimize and tweak. Maybe occlusion culling is broken and I'm really avoiding looking at it because it's going to be painful to debug and fix; who can say?</p>
+<p>But I've learned a lot (really, a <em>lot</em>). It got referenced during a SIGGRAPH 2024 Advances in Real-Time Rendering in Games presentation. Brian Karis (the author of Nanite) mentioned that they enjoyed my blog post explaining it. Getting recognition and seeing people enjoy it has been awesome! And most of all, I'm immensely proud of myself and the work I put into it. Meshlets has been a journey, but a worthwhile one.</p>
+<p>Needless to say, in the next year, expect even more meshlet work. A lot has already been done since my last blog post - you'll see some of that when Bevy 0.15 releases. Hopefully I'll continue to be able to avoid burnout.</p>
+<h3 id="bevy-in-general">Bevy in General<a class="zola-anchor" href="#bevy-in-general" aria-label="Anchor link for: bevy-in-general" style="visibility: hidden;"></a>
+</h3>
+<p>Bevy 0.12, 0.13, and 0.14 were all released in the last year, and have brought an absolutely massive amount of improvements. Nice job everyone! Bevy is not just one person, or even 10, and I think that has really shown this year more than ever.</p>
+<p>Unlike last year, I don't have much I want to discuss in depth here, but there's a few things I want to talk about, in no particular order.</p>
+<p>Alice was hired (thank you sponsors) as Bevy's project manager. She's done an amazing job helping push forward PRs, coordinate developers, and generally get things done. I think I speak for all the Bevy devs when I say getting things done is nice. I'm looking forwards to more of that next year - thanks Alice!</p>
+<p>One thing I'd like to see from project management going forwards is closing 90% of our open PRs. We have hundreds of open PRs, some dating back to 2021. There's no way any of that is getting merged, and in my opinion, we should be closing old PRs and converting stuff we still want to open issues. The more open PRs we have, the harder it is for maintainers and new contributors to help review and push forward work. A <em>lot</em> of PRs end up rotting, and we're losing contributors sadly. I've started this process for PRs labeled rendering, but there's still a lot left to do, and a bunch of PRs that need SME or maintainer decisions. Gamedev is a bit unique given the extremely wide range of subjects (rendering, physics, assets, game logic, artist tooling, etc), but maybe there are things we can learn from other large open source projects. Blender, Godot, others - any advice for us?</p>
+<p>One of Bevy's most requested features (including from me) is a GUI program (editor) for modifying, inspecting, and profiling scenes. A couple of months ago I volunteered to help coordinate and push forward editor-related work, and then uhh, pretty much stopped working on it a few weeks after. Turns out, I didn't have the motivation to do both editor work, and meshlet work. Meshlet work ended up winning out. Sorry to everyone I let down on that. I <em>am</em> still excited to work on the editor, but unfortunately I've realized I'm not so motivated to work on more foundational work such as scene editing, asset processing, and especially UI frameworks. These subjects tend to circular around with out much real progress, and turns out I am not a leader able to push forward discussions in these areas.</p>
+<p>Side note, I <em>also</em> released my own UI framework this year (competing with the tens of other Bevy UI projects). It's called <a rel="nofollow noreferrer" href="https://github.com/JMS55/bevy_dioxus/blob/main/examples/demo.rs">bevy_dioxus</a>, and it builds on top of the excellent Dioxus library to provide reactivity. Rendering is handled by spawning bevy_ui entities. No documentation, but it's a fairly small amount of fairly clean code, and it's usable and integrates well with Bevy's ECS. No reinventing the wheel here. For a few weeks work, I'm pretty happy with the process of making it and how it turned out.</p>
+<p>Rendering is in pretty good shape now. Still lots more to implement or improve, but it's pretty usable! Going forwards, it would be nice to put more focus on documentation, ease of use, and ergonomics. The Material/AsBindGroup API is pretty footgun-y and not always performant, and there's a general lack of documentation for lower-level APIs besides "ask existing developers how to use things". A new render graph that automatically handled resources could help a lot with this, along with more asset-driven material APIs, and there's been some interest and design work in these space that I'm looking forward to.</p>
+<p>Assets and asset processing needs a <em>lot</em> of work. Ignoring the editor (which will need to build on these APIs), Bevy still needs a lot of work on extending the asset processing API, and implementing asset workflows for baking lighting, compressing textures, etc. A real battle-tested end-to-end asset workflow, from artists to developers to built game, really needs developing. I'm hoping that this will be a bigger focus next year, in parallel with the editor.</p>
+<h3 id="solarn-t">Solarn't<a class="zola-anchor" href="#solarn-t" aria-label="Anchor link for: solarn-t" style="visibility: hidden;"></a>
+</h3>
+<p>Last year I demoed a realtime, fully dynamic raytraced GI solution I called Bevy Solari... and now a year later I've written nothing else on it, and a lot about virtual geometry. What gives? Well, I did work on it for a few months more after that blog post, but the project kind of died for a variety of reasons.</p>
+<p>I was using a custom, somewhat buggy fork of wgpu/naga/naga_oil, and it became very difficult to constantly rebase on top of Bevy's and those project's upstream branches. The approach I was using (screen space probes based on Lumen and GI-1.0, and later screen space radiance cascades) started souring on me for complexity and quality reasons. My world space radiance cache was completely broken (I've sinced learned what I was doing wrong, thanks Darius Bouma!) and I lost motivation to work on it. And finally I ended up starting meshlets, and later transitioned all of my time to it. So, Solari is dead, at least for now.</p>
+<p>Nowadays I feel like ReSTIR-based techniques (ReSTIR DI and GI plus screen space denoisers) hold much more promise. DDGI is also a great solution that I initially discarded for quality reasons, but its pretty simple to implement, very easy to scale up or down in cost, and gives fairly decent results all things considered. DDGI is probably worth another consideration, not even necessarily for being the main Bevy Solari project, but as an easier project to start with, and more scalable alternative to ReSTIR. No reason both could not coexist.</p>
+<p>If raytracing gets upstreamed into wgpu, I would happily pick this project back up, particularly as I start to feel the need for a break from meshlets.</p>
+<h3 id="writing">Writing<a class="zola-anchor" href="#writing" aria-label="Anchor link for: writing" style="visibility: hidden;"></a>
+</h3>
+<p>Last year I finally started a blog... but didn't end up writing much. Or I did, but 80% of it was concentrated into one really long, really time-consuming post. It took something like a month to write.</p>
+<p>I also wrote a rather long post on reddit's /r/rust about things I disliked in Rust (after using it for so long, and recently using a lot of Java developing an enterprise application) (I do still love Rust, that hasn't changed). Surprisingly to me, a lot of people liked it and it sparked some interesting discussions. Seperate from the post's contents, people also asked me if I had a blog where they could read more of my writing. I of course, had to tell them that yes I do, but it only has two posts, one of which is extremely niche and technical, so there's not much all that much to read.</p>
+<p>Needless to say, this year, I'd like to try to blog more. I'm going to try to get more writing out, and focus less on quality and spending so much time editing. Starting of course, with this post.</p>
+<p>With my new focus on spending less time writing, I'm ending this post now without trying to find a conclusion that flows better. See everyone next year!</p>
+
+      </article>
+
+      
+      
+
+      
+      
+      <div class="giscus"></div>
+      <script src="https://giscus.app/client.js"
+        data-repo="JMS55/jms55.github.io"
+        data-repo-id="R_kgDOKFxX0Q"
+        data-category="Announcements"
+        data-category-id="DIC_kwDOKFxX0c4Cvqkk"
+        data-mapping="url"
+        data-strict="0"
+        data-reactions-enabled="0"
+        data-emit-metadata="0"
+        data-input-position="top"
+        data-theme="https://jms55.github.io/giscus_light.css"
+        data-lang="en"
+        crossorigin="anonymous"
+        async>
+</script>
+
+      
+    </div>
+
+    
+
+
+<footer>
+  <div class="left">
+    <div class="copyright">
+      © 2025 JMS55
+      
+      <span>|</span>
+      Built with <a href="https://www.getzola.org" rel="noreferrer" target="_blank">zola</a> and <a href="https://github.com/isunjn/serene" rel="noreferrer" target="_blank">serene</a>
+      
+    </div>
+  </div>
+
+  <div class="right">
+    
+    
+      
+    
+    
+    <a id="rss-btn" href="https://jms55.github.io/atom.xml">RSS</a>
+    
+    
+
+    
+  </div>
+</footer>
+
+
+
+
+<dialog id="rss-mask">
+  <div>
+    <a href="https:&#x2F;&#x2F;jms55.github.io&#x2F;atom.xml">https:&#x2F;&#x2F;jms55.github.io&#x2F;atom.xml</a>
+    
+    
+    <button autofocus aria-label="copy" data-link="https:&#x2F;&#x2F;jms55.github.io&#x2F;atom.xml" data-copy-icon="&lt;svg xmlns=&quot;http:&#x2F;&#x2F;www.w3.org&#x2F;2000&#x2F;svg&quot; viewBox=&quot;0 0 24 24&quot; width=&quot;18&quot; height=&quot;18&quot;&gt;&lt;path d=&quot;M6.9998 6V3C6.9998 2.44772 7.44752 2 7.9998 2H19.9998C20.5521 2 20.9998 2.44772 20.9998 3V17C20.9998 17.5523 20.5521 18 19.9998 18H16.9998V20.9991C16.9998 21.5519 16.5499 22 15.993 22H4.00666C3.45059 22 3 21.5554 3 20.9991L3.0026 7.00087C3.0027 6.44811 3.45264 6 4.00942 6H6.9998ZM5.00242 8L5.00019 20H14.9998V8H5.00242ZM8.9998 6H16.9998V16H18.9998V4H8.9998V6Z&quot; fill=&quot;currentColor&quot;&gt;&lt;&#x2F;path&gt;&lt;&#x2F;svg&gt;
+" data-check-icon="&lt;svg xmlns=&quot;http:&#x2F;&#x2F;www.w3.org&#x2F;2000&#x2F;svg&quot; viewBox=&quot;0 0 24 24&quot; width=&quot;18&quot; height=&quot;18&quot;&gt;&lt;path d=&quot;M10.0007 15.1709L19.1931 5.97852L20.6073 7.39273L10.0007 17.9993L3.63672 11.6354L5.05093 10.2212L10.0007 15.1709Z&quot; fill=&quot;currentColor&quot;&gt;&lt;&#x2F;path&gt;&lt;&#x2F;svg&gt;
+" >
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18"><path d="M6.9998 6V3C6.9998 2.44772 7.44752 2 7.9998 2H19.9998C20.5521 2 20.9998 2.44772 20.9998 3V17C20.9998 17.5523 20.5521 18 19.9998 18H16.9998V20.9991C16.9998 21.5519 16.5499 22 15.993 22H4.00666C3.45059 22 3 21.5554 3 20.9991L3.0026 7.00087C3.0027 6.44811 3.45264 6 4.00942 6H6.9998ZM5.00242 8L5.00019 20H14.9998V8H5.00242ZM8.9998 6H16.9998V16H18.9998V4H8.9998V6Z" fill="currentColor"></path></svg>
+
+    </button>
+  </div>
+</dialog>
+
+
+
+  </main>
+</div>
+
+  
+<script src="/js/lightense.min.js"></script>
+
+
+  <script src="https://jms55.github.io/js/main.js"></script>
+</body>
+
+</html>
