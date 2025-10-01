@@ -141,7 +141,7 @@ Initial sampling uses 32 samples from a light tile (more on this later), and cho
 After choosing the best sample, we trace a ray to test visibility, setting the unbiased contribution weight to 0 in the case of occlusion.
 
 {% note() %}
-All raytracing in Solari is handled via inline ray queries. Wgpu does not yet support raytracing pipelines, so I haven't gotten a chance to see play around with them.
+All raytracing in Solari is handled via inline ray queries. Wgpu does not yet support raytracing pipelines, so I haven't gotten a chance to play around with them.
 {% end %}
 
 {{ figure(src="noisy_di_one_sample.png", caption="One candidate sample DI") }}
