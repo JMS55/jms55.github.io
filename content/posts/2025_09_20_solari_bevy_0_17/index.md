@@ -25,9 +25,9 @@ Try it out yourself:
 ```bash
 git clone https://github.com/bevyengine/bevy && cd bevy
 git checkout release-0.17.0
-cargo run --release --examples solari --features bevy_solari,https
+cargo run --release --example solari --features bevy_solari,https
 # Optionally setup DLSS support for NVIDIA GPUs following https://github.com/bevyengine/dlss_wgpu?tab=readme-ov-file#downloading-the-dlss-sdk
-cargo run --release --examples solari --features bevy_solari,https,dlss
+cargo run --release --example solari --features bevy_solari,https,dlss
 ```
 
 ## Introduction
