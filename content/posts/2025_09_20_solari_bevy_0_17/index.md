@@ -685,7 +685,7 @@ fn blend_new_samples(@builtin(global_invocation_id) active_cell_id: vec3<u32>) {
 Once we have our noisy estimate of the scene, we run it through DLSS-RR to upscale, antialias, and denoise it.
 
 {{ figure(src="noisy_full.png", caption="Noisy and aliased image") }}
-{{ figure(src="denoised_full.png", caption="Denoised and antialaised image") }}
+{{ figure(src="denoised_full.png", caption="Denoised and antialiased image") }}
 {{ figure(src="pathtraced.png", caption="Pathtraced reference") }}
 
 While ideally we would be able to configure DLSS-RR to read directly from our GBuffer, we unfortunately need a small pass to first copy from the GBuffer to some standalone textures. DLSS-RR will read these textures as inputs to help guide the denoising pass.
@@ -696,8 +696,8 @@ DLSS-RR is called via the [dlss_wgpu](https://crates.io/crates/dlss_wgpu) wrappe
 The dlss_wgpu crate is standalone, and can also be used by non-Bevy projects that are using wgpu!
 {% end %}
 
-{{ figure(src="denoised_di.png", caption="Denoised and antialaised image - DI only") }}
-{{ figure(src="denoised_gi.png", caption="Denoised and antialaised image - GI only") }}
+{{ figure(src="denoised_di.png", caption="Denoised and antialiased image - DI only") }}
+{{ figure(src="denoised_gi.png", caption="Denoised and antialiased image - GI only") }}
 
 ## Performance
 
