@@ -850,7 +850,7 @@ reservoir.radiance = direct_lighting.radiance;
 reservoir.unbiased_contribution_weight = direct_lighting.inverse_pdf * uniform_hemisphere_inverse_pdf();
 ```
 
-{{ figure(src="no_world_cache.png", caption="Alternate GI scheme, without the world cache*") }}
+{{ figure(src="no_world_cache.png", caption="Alternate GI scheme, without the world cache") }}
 
 Despite the alternate scheme having higher variance and no multibounce pathtracing, it's actually _brighter_ than using the world cache. For some reason, the voxelized nature of the world cache leads to a loss of energy.
 
