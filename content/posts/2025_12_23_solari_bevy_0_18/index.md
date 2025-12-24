@@ -202,6 +202,16 @@ There are two tricky things to note with these functions:
 So in practice you call them like so:
 
 ```rust
+// https://jcgt.org/published/0006/01/01/paper.pdf
+fn orthonormalize(z_basis: vec3<f32>) -> mat3x3<f32> {
+    let sign = copysign(1.0, z_basis.z);
+    let a = -1.0 / (sign + z_basis.z);
+    let b = z_basis.x * z_basis.y * a;
+    let x_basis = vec3(1.0 + sign * z_basis.x * z_basis.x * a, sign * b, -sign * z_basis.x);
+    let y_basis = vec3(b, sign + z_basis.y * z_basis.y * a, -z_basis.y);
+    return mat3x3(x_basis, y_basis, z_basis);
+}
+
 let TBN = orthonormalize(surface.world_normal);
 let T = TBN[0];
 let B = TBN[1];
