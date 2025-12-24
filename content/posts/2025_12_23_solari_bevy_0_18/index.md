@@ -25,7 +25,7 @@ Bevy 0.17 saw the initial release of Solari, with the following components:
 
 ReSTIR DI handles the first bounce of lighting, ReSTIR GI handles the second bounce of lighting, and the world cache handles all subsequent bounces.
 
-Summed together and denoised we get full, pathtraced lighting, close to the quality from a offline movie-quality pathtracer - but running much, much faster due to heavy temporal and spatial amortization.
+Summed together and denoised we get full, pathtraced lighting, close to the quality of a offline movie-quality pathtracer - but running much, much faster due to heavy temporal and spatial amortization.
 
 Or at least, that's the theory.
 
@@ -43,7 +43,7 @@ To that end, Bevy 0.18 brings many quality (and some performance!) improvements 
 
 ## Specular Materials
 
-In Bevy 0.17, Solari only supported diffuse materials. Diffuse materials were easier to get started with, because they don't depend on the incident light direction - they scatter the same no matter where the light is coming from.
+In Bevy 0.17, Solari only supported diffuse materials. Diffuse materials were easier to get started with, because they don't depend on the incident light direction - they scatter the same no matter what direction the light is coming from.
 
 Of course, games want more than just purely diffuse materials. Most PBR materials combine a diffuse lobe (Burley in Bevy's standard renderer, Lambert in Solari) with a specular lobe (usually GGX).
 
@@ -112,7 +112,7 @@ fn evaluate_specular_brdf(
 
 Diffuse is nearly the same as in Solari 0.17, except the diffuse BRDF was changed so that it returns 0 for metallic materials, as metallic materials have no diffuse lobe.
 
-For specular, a lot of the code is reused from `bevy_pbr`, so the BRDF evaluation is only a couple of lines of function calls.
+For specular, a lot of the code can be reused from `bevy_pbr`, so the BRDF evaluation is only a couple of lines of function calls.
 
 One thing to note is that special care must be taken to avoid NaNs.
 
@@ -130,7 +130,7 @@ Given this is a pathtracer, we don't just want to evaluate the BRDF; we also wan
 
 There are a couple of different methods to sample the overall BRDF for non-metallic materials that have both a diffuse and specular lobe, but let's skip that for now and just discuss sampling each individually.
 
-Sampling the diffuse (lambert) BRDF is pretty simple - it's just a cosine-weighted hemisphere (Code from Solari 0.17):
+Sampling the diffuse (Lambert) BRDF is pretty simple - it's just a cosine-weighted hemisphere (code from Solari 0.17):
 
 ```rust
 // https://www.realtimerendering.com/raytracinggems/unofficial_RayTracingGems_v1.9.pdf#0004286901.INDD%3ASec28%3A303
@@ -233,9 +233,9 @@ This restores mirror-like behavior, while still preventing NaNs in BRDF evaluati
 
 ### Specular DI
 
-Now that we've covered Solari's update material BRDF, let's talk about how lighting has changed.
+Now that we've covered Solari's updated material BRDF, let's talk about how lighting has changed.
 
-To recap, for direct lighting, Solari is using ReSTIR DI.
+To recap: For direct lighting, Solari is using ReSTIR DI.
 
 We take a series of random initial samples from light sources, and use RIS to choose the best one. This is essentially fancy next event estimation (NEE).
 
@@ -248,17 +248,95 @@ To add support for specular materials, there's a couple of different places that
 1. Account for the specular BRDF to the target function during initial resampling
 2. Account for the specular BRDF during temporal and spatial resampling
 3. Trace a BRDF ray during initial sampling and combine it with the NEE samples using multiple importance sampling (MIS)
-  * Only way to sample DI for zero-roughness mirror surfaces
-  * Improves quality for glossy (mid-roughness) surfaces
-  * Improves quality for area lights that are very close to the surface
+    * This is the only way to sample DI for zero-roughness mirror surfaces
+    * Improves quality for glossy (mid-roughness) surfaces
+    * Improves quality for area lights that are very close to the surface
 4. Account for the specular BRDF during shading of the final selected sample
 
-For Bevy 0.18, Solari is only doing #4.
+For Bevy 0.18, I ended up spending most of my time on GI, so for DI I only did #4.
 
-(TODO: Talk about how we only did 4, and not 1-3)
-(TODO: Talk about how if we did do this, you could use seperate ReSTIR reservoirs/passes, or combined)
+#1 and #2 are tricky because the whole point of ReSTIR is to share samples across pixels. But for specular, samples are not (easily) shareable, as unlike the diffuse lobe, a strong source of light for pixel A might be outside the specular lobe of pixel B and have zero contribution.
+
+Maybe in practice it's not a big deal, or maybe using a second set of reservoirs for specular would help, but for now I've chosen to skip these, and treat all surfaces (including metallic ones) as purely diffuse during resampling.
+
+#3 requires an extra raytrace, which costs a lot of performance, and so again I've skipped it.
+
+When I get more time to experiment, I'll play around with these and see if any of them work well.
+
+So to sum it up, for DI, all I did was swap `albedo / PI` with a call to `evaluate_brdf()` during the final shading step.
+
+### Diffuse GI Changes
+
+Indirect lighting is where specular gets much more interesting.
+
+First off, as far as the world cache is concerned, all surfaces are diffuse only, with no specular lobe. This means that when you query the cache, you treat the query point as a diffuse surface. When updating cache entries, you also treat the cache point as a diffuse surface.
+
+For per-pixel GI, Solari splits the lighting calculations into two seperate passes - one for the diffuse lobe, and one for the specular lobe.
+
+The diffuse lobe is handled by the existing ReSTIR GI pass. ReSTIR GI resampling is exactly the same as in Bevy 0.17 - like DI, only the final shading changes.
+
+For the ReSTIR GI final shading step, we're still shading using only the diffuse lobe, but now we need to skip shading metallic pixels that don't have a diffuse lobe.
 
 ### Specular GI
+
+The specular lobe, on the other hand, is handled by an entirely new dedicated specular GI pass.
+
+The basic structure of the pass looks like this (simplified):
+
+```rust
+let surface = load_from_gbuffer(pixel_id);
+let wo = normalize(view.world_position - surface.world_position);
+
+var radiance: vec3<f32>;
+var wi: vec3<f32>;
+if surface.material.roughness > 0.4 {
+    // Surface is very rough, reuse the ReSTIR GI reservoir
+    let gi_reservoir = gi_reservoirs_a[pixel_index];
+    wi = normalize(gi_reservoir.sample_point_world_position - surface.world_position);
+
+    radiance = gi_reservoir.radiance * gi_reservoir.unbiased_contribution_weight;
+} else {
+    // Surface is glossy or mirror-like, trace a new path
+    let wi_tangent = sample_ggx_vndf(wo_tangent, surface.material.roughness, &rng);
+    wi = wi_tangent.x * T + wi_tangent.y * B + wi_tangent.z * N;
+
+    let pdf = ggx_vndf_pdf(wo_tangent, wi_tangent, surface.material.roughness);
+    radiance = trace_glossy_path(surface.world_position, wi, &rng) / pdf;
+}
+
+// Final shading
+let brdf = evaluate_specular_brdf(surface.world_normal, wo, wi, surface.material...);
+let cos_theta = saturate(dot(wi, surface.world_normal));
+radiance *= brdf * cos_theta * view.exposure;
+```
+
+For rough surfaces, the specular lobe is wide enough to approximate the diffuse lobe. We can just skip tracing any new rays, and reuse the ReSTIR GI sample directly. This saves a lot of performance, with minimal quality loss.
+
+For glossy or mirror surfaces, we need to trace a new path, following the best direction from importance sampling the GGX distribution.
+
+The full code is a bit long, so I'm just going to link to the [source on GitHub](https://github.com/bevyengine/bevy/blob/main/crates/bevy_solari/src/realtime/specular_gi.wgsl#L71-L150).
+
+The basic idea is:
+* We trace up to three bounces (after three bounces, the quality loss from skipping further bounces is minimal)
+* Lighting comes from either hitting an emissive surface, NEE, or querying the world cache
+* Emissive contributions are skipped on the first bounce, as ReSTIR DI handles those paths
+* We only query the world cache when hitting a rough surface (otherwise reflections would show the grid-like world cache)
+* After hitting a rough surface and querying the world cache, we terminate the path
+* We skip NEE for mirror surfaces
+* We apply MIS between the emissive contribution and the NEE contribution
+* Each bounce samples the GGX distribution to find the next bounce direction (if the surface was rough enough, we would have terminated in the world cache)
+
+As you can see there's a lot of small details, which took me a while to figure out.
+
+And there are still some large remaining issues:
+* NEE during is using entirely random samples, and tends to be noisy
+* Glossy surfaces don't have any sort of path guiding, and tends to be noisy
+* Terminating in the world cache still leads to quality issues sometimes, especially on curved surfaces
+  * TODO: Validate if this is what I was seeing in the cornell box scene
+* No specular motion vectors to aid the denoiser leads to ghosting
+
+TODO: Talk about ReSTIR PT and why I didn't want to use it
+TODO: Talk about how to fix each of these
 
 ## Energy Loss Bug
 
