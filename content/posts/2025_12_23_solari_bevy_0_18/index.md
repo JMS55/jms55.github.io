@@ -6,6 +6,8 @@ date = "2025-12-23"
 tags = ["bevy", "raytracing"]
 +++
 
+## Introduction
+
 It's been approximately three months since [my last post](@/posts/2025_09_20_solari_bevy_0_17/index.md), which means it's time to talk about all the work I've been doing for the upcoming release of Bevy 0.18!
 
 Like last time, this cycle has seen me focused entirely on Solari - Bevy's next-gen, fully dynamic raytraced lighting system, allowing artists and developers to get high quality lighting - without having to spend time on static baking.
@@ -124,7 +126,7 @@ m.roughness = m.perceptual_roughness * m.perceptual_roughness;
 
 ### BRDF Sampling
 
-Given this is a pathtracer, we don't just want to evaluate the BRDF; we also want to importance sample it, to choose directions that would contribute a lot of outgoing light.
+Given this is a pathtracer, we don't just want to evaluate the BRDF; we also want to importance sample it to choose directions that would contribute a lot of outgoing light.
 
 There are a couple of different methods to sample the overall BRDF for non-metallic materials that have both a diffuse and specular lobe, but let's skip that for now and just discuss sampling each individually.
 
@@ -203,15 +205,6 @@ So in practice you call them like so:
 
 ```rust
 // https://jcgt.org/published/0006/01/01/paper.pdf
-fn orthonormalize(z_basis: vec3<f32>) -> mat3x3<f32> {
-    let sign = copysign(1.0, z_basis.z);
-    let a = -1.0 / (sign + z_basis.z);
-    let b = z_basis.x * z_basis.y * a;
-    let x_basis = vec3(1.0 + sign * z_basis.x * z_basis.x * a, sign * b, -sign * z_basis.x);
-    let y_basis = vec3(b, sign + z_basis.y * z_basis.y * a, -z_basis.y);
-    return mat3x3(x_basis, y_basis, z_basis);
-}
-
 let TBN = orthonormalize(surface.world_normal);
 let T = TBN[0];
 let B = TBN[1];
@@ -239,6 +232,31 @@ To get around this, when importance sampling the specular BRDF for a material wi
 This restores mirror-like behavior, while still preventing NaNs in BRDF evaluation.
 
 ### Specular DI
+
+Now that we've covered Solari's update material BRDF, let's talk about how lighting has changed.
+
+To recap, for direct lighting, Solari is using ReSTIR DI.
+
+We take a series of random initial samples from light sources, and use RIS to choose the best one. This is essentially fancy next event estimation (NEE).
+
+We then do some temporal and spatial resampling to share good samples between frames/pixels.
+
+Finally, we shade using the final selected sample (which in Bevy 0.17 used only the diffuse BRDF).
+
+To add support for specular materials, there's a couple of different places that we should modify:
+
+1. Account for the specular BRDF to the target function during initial resampling
+2. Account for the specular BRDF during temporal and spatial resampling
+3. Trace a BRDF ray during initial sampling and combine it with the NEE samples using multiple importance sampling (MIS)
+  * Only way to sample DI for zero-roughness mirror surfaces
+  * Improves quality for glossy (mid-roughness) surfaces
+  * Improves quality for area lights that are very close to the surface
+4. Account for the specular BRDF during shading of the final selected sample
+
+For Bevy 0.18, Solari is only doing #4.
+
+(TODO: Talk about how we only did 4, and not 1-3)
+(TODO: Talk about how if we did do this, you could use seperate ReSTIR reservoirs/passes, or combined)
 
 ### Specular GI
 
