@@ -260,7 +260,7 @@ For Bevy 0.18, Solari is only doing #4.
 
 ### Specular GI
 
-## Energy Loss
+## Energy Loss Bug
 
 ## Resampling Bias
 
