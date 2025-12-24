@@ -329,14 +329,17 @@ The basic idea is:
 As you can see there's a lot of small details, which took me a while to figure out.
 
 And there are still some large remaining issues:
-* NEE during is using entirely random samples, and tends to be noisy
-* Glossy surfaces don't have any sort of path guiding, and tends to be noisy
+* NEE is using entirely random samples, which leads to noisy reflections
+* Glossy surfaces don't have any sort of path guiding to choose good directions, which also leads to noisy reflections
+* No specular motion vectors to aid the denoiser leads to ghosting when objects in reflections move around
 * Terminating in the world cache still leads to quality issues sometimes, especially on curved surfaces
   * TODO: Validate if this is what I was seeing in the cornell box scene
-* No specular motion vectors to aid the denoiser leads to ghosting
 
-TODO: Talk about ReSTIR PT and why I didn't want to use it
-TODO: Talk about how to fix each of these
+Specular motion vectors are something I plan to work on, following either ["Rendering Perfect Reflections and Refractions in Path-Traced Games"](https://developer.nvidia.com/blog/rendering-perfect-reflections-and-refractions-in-path-traced-games) or ["Temporally Reliable Motion Vectors for Real-time Ray Tracing"](https://zheng95z.github.io/publications/trmv21). I just need to spend some more time understanding the theory.
+
+For improving sampling during the path trace, this is technically what ReSTIR PT was invented to solve. However, ReSTIR PT is also very performance intensive, and I'm not convinced it's the path we should go down for Solari.
+
+I have some other ideas in mind for improving sampling, which I'll talk about at the end of this post.
 
 ## Energy Loss Bug
 
