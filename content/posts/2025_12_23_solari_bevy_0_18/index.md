@@ -375,9 +375,30 @@ fn unpack_resolved_light_sample(packed: ResolvedLightSamplePacked, exposure: f32
 
 With this fix, we're much closer to matching the reference.
 
-## Resampling Bias
+## DI Resampling Bias
+
+* Permutation sampling
+* Resampling order
+* MIS
 
 ## World Cache Improvements
+
+The world cache is the oldest part of Solari - it was copied nearly wholesale from my original prototype 3 years ago, without any real changes except for the addition of the LOD system.
+
+Because of this, it was also the jankiest part of Solari.
+
+As I started testing on more complex scenes, it became clear that there were significant problems:
+* On the cornell box scene, it worked fine.
+* On the PICA PICA scene, it worked ok when conditions were static, but under dynamic conditions the GI was fairly laggy.
+* On Bistro, performance wasn't good, especially as you started moving around the scene.
+
+In Bevy 0.18, I spent a large amount of time fixing these issues.
+
+### Cache Lag
+
+### Cache Lifetimes
+
+### Misc Cache Tweaks
 
 ## What's Next
 * Specular motion vectors
