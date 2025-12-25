@@ -402,7 +402,7 @@ In Bevy 0.18, it now looks like this:
 4. Choose spatial sample
 5. Spatial resampling
 6. Store final reservoir for next frame temporal reuse
-7. Test visibility of final reservoirs
+7. Test visibility of final reservoir
 8. Final shading
 
 The two big differences are:
