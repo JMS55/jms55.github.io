@@ -377,6 +377,8 @@ With this fix, we're much closer to matching the reference.
 
 ## DI Resampling Bias
 
+TODO
+
 * Permutation sampling
 * Resampling order
 * MIS
@@ -396,11 +398,54 @@ In Bevy 0.18, I spent a large amount of time fixing these issues.
 
 ### Cache Lag
 
+In the PICA PICA scene, if you turn off all the lights, it would take a good while for the light to completely fade. The reason being that: A) the world cache samples itself, recursively propogating light around the scene for a while, and B) the exponential blend between new and current radiance samples keeps the old radiance around for a decent amount of time.
+
+To combat this, we could increase the blend factor, to keep the lighting responsive. However that would lead to way more noise and instability under static lighting conditions.
+
+What we really need is an adaptive blend factor, which [Guillaume Boissé](https://bsky.app/profile/gboisse.bsky.social/post/3m5blga3ftk2a) was kind enough to share with me.
+
+We keep track of the change in luminance between frames, and use that to compute an adaptive blend factor.
+
+```rust
+let old_radiance = world_cache_radiance[cell_index];
+let new_radiance = world_cache_active_cells_new_radiance[active_cell_id.x];
+let luminance_delta = world_cache_luminance_deltas[cell_index];
+
+// https://bsky.app/profile/gboisse.bsky.social/post/3m5blga3ftk2a
+let sample_count = min(old_radiance.a + 1.0, WORLD_CACHE_MAX_TEMPORAL_SAMPLES);
+let alpha = abs(luminance_delta) / max(luminance(old_radiance.rgb), 0.001);
+let max_sample_count = mix(WORLD_CACHE_MAX_TEMPORAL_SAMPLES, 1.0, pow(saturate(alpha), 1.0 / 8.0));
+let blend_amount = 1.0 / min(sample_count, max_sample_count);
+
+let blended_radiance = mix(old_radiance.rgb, new_radiance, blend_amount);
+let blended_luminance_delta = mix(luminance_delta, luminance(blended_radiance) - luminance(old_radiance.rgb), 1.0 / 8.0);
+
+world_cache_radiance[cell_index] = vec4(blended_radiance, sample_count);
+world_cache_luminance_deltas[cell_index] = blended_luminance_delta;
+```
+
+Now GI is stable under static conditions, but reacts pretty fast under dynamic conditions. It's not perfect - we're still heavily relying on temporal accumulation and denoising - but it's a heck of a lot better.
+
+Once again, thanks a ton to Guillaume Boissé for this code! I was struggling to come up with something myself, and this perfectly solved my problem!
+
 ### Cache Lifetimes
+
+TODO (make sure to credit Miles)
 
 ### Misc Cache Tweaks
 
+Finally, I tweaked a bunch of other things based on my testing in Bistro:
+
+* Limited indirect rays sent from cache entries during the world cache update step to a max of 50 meters - This prevents long raytraces from holding up the whole threadgroup, improving performance, and prevents far-away samples from influencing the cache, reducing variance.
+* Switched the world cache update workgroup size from 1024 to 64 threads - Much more appropriate for raytracing workloads. This fixed some really weird GPU usage traces I was seeing in NSight.
+* Make the world cache transition LODs faster - In a large scene like Bistro, we had way too many cache entries for far-away areas.
+
+Combined, these changes brought the world cache update step from 1.42ms to a much more reasonable 0.09ms in Bistro.
+
 ## What's Next
+
+TODO
+
 * Specular motion vectors
 * RT pipelines and SER
 * Direct light guiding
