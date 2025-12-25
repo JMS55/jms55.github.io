@@ -314,7 +314,7 @@ For rough surfaces, the specular lobe is wide enough to approximate the diffuse 
 
 For glossy or mirror surfaces, we need to trace a new path, following the best direction from importance sampling the GGX distribution.
 
-The full code is a bit long, so I'm just going to link to the [source on GitHub](https://github.com/bevyengine/bevy/blob/main/crates/bevy_solari/src/realtime/specular_gi.wgsl#L71-L150).
+The full code for `trace_glossy_path` is a bit long, so I'm just going to link to the [source on GitHub](https://github.com/bevyengine/bevy/blob/64c7bec4068aa063bfaa2cddcb90733f0e081cf8/crates/bevy_solari/src/realtime/specular_gi.wgsl#L71-L150).
 
 The basic idea is:
 * We trace up to three bounces (after three bounces, the quality loss from skipping further bounces is minimal)
