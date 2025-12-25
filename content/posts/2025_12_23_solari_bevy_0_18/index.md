@@ -430,7 +430,64 @@ Once again, thanks a ton to Guillaume Boissé for this code! I was struggling to
 
 ### Cache Lifetimes
 
-TODO (make sure to credit IsaacSM and Miles)
+While Solari was working great on smaller scenes, on larger scenes like Bistro, performance was much worse.
+
+The world cache update pass was taking way too long, and worse, as I moved around the scene, it got worse and worse.
+
+The reason is that since cache entries sample each other (in order to get multibounce lighting), they were keeping each other alive forever. So once you stepped into an area, it would forever be present in the world cache, even when you left the area.
+
+The solution (thanks to @IsaacSM and @NthTensor) ended up being pretty simple!
+
+```rust
+fn query_world_cache(world_position: vec3<f32>, world_normal: vec3<f32>, view_position: vec3<f32>, cell_lifetime: u32, rng: ptr<function, u32>) -> vec3<f32> {
+    let cell_size = get_cell_size(world_position, view_position);
+
+    let world_position_quantized = bitcast<vec3<u32>>(quantize_position(world_position, cell_size));
+    let world_normal_quantized = bitcast<vec3<u32>>(quantize_normal(world_normal));
+    var key = compute_key(world_position_quantized, world_normal_quantized);
+    let checksum = compute_checksum(world_position_quantized, world_normal_quantized);
+
+    for (var i = 0u; i < WORLD_CACHE_MAX_SEARCH_STEPS; i++) {
+        let existing_checksum = atomicCompareExchangeWeak(&world_cache_checksums[key], WORLD_CACHE_EMPTY_CELL, checksum).old_value;
+
+        // Cell already exists or is empty - reset lifetime
+        if existing_checksum == checksum || existing_checksum == WORLD_CACHE_EMPTY_CELL {
+#ifndef WORLD_CACHE_QUERY_ATOMIC_MAX_LIFETIME
+            atomicStore(&world_cache_life[key], cell_lifetime);
+#else
+            atomicMax(&world_cache_life[key], cell_lifetime);
+#endif
+        }
+
+        if existing_checksum == checksum {
+            // Cache entry already exists - get radiance
+            return world_cache_radiance[key].rgb;
+        } else if existing_checksum == WORLD_CACHE_EMPTY_CELL {
+            // Cell is empty - initialize it
+            world_cache_geometry_data[key].world_position = world_position;
+            world_cache_geometry_data[key].world_normal = world_normal;
+            return vec3(0.0);
+        } else {
+            // Collision - linear probe to next entry
+            key += 1u;
+        }
+    }
+
+    return vec3(0.0);
+}
+```
+
+When a ReSTIR GI or specular GI pixel is querying the world cache, nothing has changed. We still perform `atomicStore(&world_cache_life[key], WORLD_CACHE_CELL_LIFETIME)`, resetting the lifetime of the queried cache entry.
+
+However when a world cache entry is querying another entry during the world cache update pass, the algorithm changes.
+
+Now we're instead doing `atomicMax(&world_cache_life[key], cell_lifetime_of_querier)`.
+
+When the camera is in a given area, ReSTIR GI and specular GI pixels will reset world cache entries to their max lifetime. Then during world cache update the next frame, those world cache entries will copy their max lifetime to other entries nearby.
+
+However once the camera moves away from the area, there will be no more pixels querying the world cache. When world cache entries go to query each other, they'll copy over their current lifetimes (which is decreasing each frame). After a couple of frames, all the world cache entries will go dead.
+
+No more performance wasted on areas away from the camera!
 
 ### Misc Cache Tweaks
 
