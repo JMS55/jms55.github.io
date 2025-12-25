@@ -409,11 +409,11 @@ The two big differences are:
 * The second visibility test was moved from the spatial sample, to the final sample after all resampling steps
 * The second visibility test is performed for the final shading, but is _not_ fed forward for next frame's temporal resampling
 
-TODO
+TODO: Talk about why not feed forward
+TODO: Talk about increased noise
+TODO: Talk about applying this to ReSTIR GI
 
-* Permutation sampling
-* Resampling order
-* MIS
+Additionally, like we were doing with ReSTIR GI, we now use the balance heuristic for ReSTIR DI resampling, instead of constant MIS weights. This makes a small difference, but _does_ slightly increase emissive light brightness, matching the pathtraced reference better.
 
 ## World Cache Improvements
 
