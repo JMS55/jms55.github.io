@@ -375,7 +375,39 @@ fn unpack_resolved_light_sample(packed: ResolvedLightSamplePacked, exposure: f32
 
 With this fix, we're much closer to matching the reference.
 
-## DI Resampling Bias
+## DI Resampling
+
+One of the problems I wasn't able to solve in Bevy 0.17 was ReSTIR DI correlations introducing artifacts when denoising with DLSS-RR.
+
+For ReSTIR GI, I was able to solve this with permutation sampling during temporal reuse. But for ReSTIR DI, trying to use permutation sampling lead to artifacts on shadow penumbras due to the way I was doing visibility reuse.
+
+I played with resampling ordering a bit more this cycle, and was able to come up with a solution.
+
+In Bevy 0.17, the whole ReSTIR DI algorithm looked like this:
+
+1. Initial sampling
+2. Test visibility of initial sample
+3. Temporal resampling
+4. Choose spatial sample
+5. Test visibility of spatial sample
+6. Spatial resampling
+7. Store final reservoir for next frame temporal reuse
+8. Final shading
+
+In Bevy 0.18, it now looks like this:
+
+1. Initial sampling
+2. Test visibility of initial sample
+3. Temporal resampling
+4. Choose spatial sample
+5. Spatial resampling
+6. Store final reservoir for next frame temporal reuse
+7. Test visibility of final reservoirs
+8. Final shading
+
+The two big differences are:
+* The second visibility test was moved from the spatial sample, to the final sample after all resampling steps
+* The second visibility test is performed for the final shading, but is _not_ fed forward for next frame's temporal resampling
 
 TODO
 
