@@ -430,7 +430,7 @@ Once again, thanks a ton to Guillaume Boissé for this code! I was struggling to
 
 ### Cache Lifetimes
 
-TODO (make sure to credit Miles)
+TODO (make sure to credit IsaacSM and Miles)
 
 ### Misc Cache Tweaks
 
