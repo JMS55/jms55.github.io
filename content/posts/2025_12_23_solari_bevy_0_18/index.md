@@ -343,6 +343,38 @@ I have some other ideas in mind for improving sampling, which I'll talk about at
 
 ## Energy Loss Bug
 
+One of the big problems Solari had in 0.17 was overall energy loss compared to a pathtraced reference.
+
+At the time, I chalked it up to an inherent limitation of the world cache and moved on.
+
+However, while experimenting with various things this cycle, I realized that not only was it not the world cache, but DI also was losing energy, and not just GI!
+
+After many painful days of narrowing down the issue, I tracked it down to the [light tile code](@posts/2025-09-20-solari-bevy-0-17/#light-tile-presampling), which was shared between DI and the world cache.
+
+The rgb9e5 packing of the light radiance I was doing did not have enough bits to encode the light, and so energy was being lost.
+
+The fix (thanks to @SparkyPotato) was to apply a log2-based encoding to the radiance before packing. This allocates more bits towards the values that human perception cares about, and less bits towards the values that we have a harder time seeing.
+
+```rust
+fn pack_resolved_light_sample(sample: ResolvedLightSample) -> ResolvedLightSamplePacked {
+    return ResolvedLightSamplePacked(
+        // ...
+        vec3_to_rgb9e5_(log2(sample.radiance * view.exposure + 1.0)),
+        // ...
+    );
+}
+
+fn unpack_resolved_light_sample(packed: ResolvedLightSamplePacked, exposure: f32) -> ResolvedLightSample {
+    return ResolvedLightSample(
+        // ...
+        (exp2(rgb9e5_to_vec3_(packed.radiance)) - 1.0) / exposure,
+        // ...
+    );
+}
+```
+
+With this fix, we're much closer to matching the reference.
+
 ## Resampling Bias
 
 ## World Cache Improvements
