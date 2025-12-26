@@ -551,11 +551,14 @@ Combined, these changes brought the world cache update step from 1.42ms to a muc
 
 ## What's Next
 
-TODO
+Solari has improved a ton in Bevy 0.18, but there's (of course) still more work to be done!
 
-* Specular motion vectors
-* RT pipelines and SER
-* Direct light guiding
-* Indirect light guiding
-* FSR4
-* https://github.com/bevyengine/bevy/issues/20203
+First, some general issues (many of these carrying over from my last blog post):
+* Feature parity for things like skinned and morphed meshes, alpha masks, transparent materials, support for more types of light sources, etc still need implementing.
+* Specular motion vectors are not implemented, so mirror and glossy indirect reflections can have ghosting.
+* Solari is still NVIDIA only in practice due to relying on DLSS-RR (FSR-RR _did_ release since my last blog post, but to my sadness is currently DirectX12 only - no Vulkan support. AMD employees - please reach out!)
+* Shader execution reordering (blocked on wgpu support) and half-resolution GI (on top of DLSS upscaling) would bring major performance improvements.
+
+DI quality: github.com/bevyengine/bevy/pull/21366, LTC https://ishaanshah.xyz/risltc, better-than-random light sampling https://blog.traverseresearch.nl/fast-cdf-generation-on-the-gpu-for-light-picking-5c50b97c552b
+
+GI quality: Handling when ray_length less than cache cell_size, path guiding https://research.nvidia.com/labs/rtr/publication/zeng2025restirpg
