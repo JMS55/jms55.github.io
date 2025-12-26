@@ -409,11 +409,29 @@ The two big differences are:
 * The second visibility test was moved from the spatial sample, to the final sample after all resampling steps
 * The second visibility test is performed for the final shading, but is _not_ fed forward for next frame's temporal resampling
 
-TODO: Talk about why not feed forward
-TODO: Talk about increased noise
-TODO: Talk about applying this to ReSTIR GI
+Moving the second visibility test from the spatial sample only to after all resampling was the key change.
 
-Additionally, like we were doing with ReSTIR GI, we now use the balance heuristic for ReSTIR DI resampling, instead of constant MIS weights. This makes a small difference, but _does_ slightly increase emissive light brightness, matching the pathtraced reference better.
+Before permutation sampling, it was ok to not re-test visibility for the temporal sample. The the light was visible to the pixel last frame, it's probably still visible this frame. Same for if the light was not visible last frame. When this assumption is wrong, e.g. for moving objects, it just led to a 1-frame lag in shadows that's almost unnoticable - an acceptable tradeoff.
+
+With permutation sampling, we can no longer trust that the visibility of the temporal sample is correct to reuse. The temporal sample now may come from a neighboring pixel, and at shadow pneumbras, the visibility is changing very frequently. It's no longer safe to reuse visibility, even on static scenes - we must retest visibility.
+
+The best way to test visibility without using extra ray traces is to move it right before shading of the final sample, where incorrect visibility would show up on screen
+
+The second change (not feeding forward the second visibility test to the next frame) is not strictly necessary, but keeps direct lighting unbiased.
+
+If you were to feed forward the second visibility test, the following might happen:
+1. A pixel checks visibility and finds that the light is occluded, setting the reservoir's contribution to 0
+2. The reservoir is stored for reuse next frame
+3. \<Next frame\>
+4. The reservoir is reused temporally for the same pixel (say that the initial sample happened to also be 0 contribution)
+5. The reservoir is reused spatially by a different pixel, which sees that it has zero contribution, and does not choose it via resampling
+    * Except since this is a different pixel, the light is not occluded, and the sample should have had non-zero contribution!
+
+Reusing visibility like this leads to bias in the form of shadows that "halo" objects, expanding further out than they should.
+
+Interestingly, when I tried these modifications to ReSTIR GI, it made things _more_ biased. Indirect shadows became very feint and sometimes disappeared altogether. ReSTIR GI still uses the same algorithm it did in Bevy 0.17.
+
+One final note on DI resampling: like we were doing with ReSTIR GI, we now use the balance heuristic for ReSTIR DI resampling, instead of constant MIS weights. This makes a small difference (hence why I never noticed it until now), but it _does_ slightly increase emissive light brightness, matching the pathtraced reference better.
 
 ## World Cache Improvements
 
