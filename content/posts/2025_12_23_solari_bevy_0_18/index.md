@@ -459,7 +459,7 @@ Reusing visibility like this leads to bias in the form of shadows that "halo" ob
 
 {{ figure(src="di_feed_forward_bad.png", caption="Feeding forward final visibility leads to over-shadowing artifacts") }}
 
-Interestingly, when I tried these modifications to ReSTIR GI, it made things _more_ biased. Indirect shadows became very faint and sometimes disappeared altogether. ReSTIR GI still uses the same algorithm it did in Bevy 0.17.
+While so far I've only talked about DI resampling, these changes actually apply to GI resampling too. Solari's ReSTIR GI pass now uses the same modified ordering as the DI resampling, which fixes indirect shadow artifacts. It's just that incorrect shadow edges are not as obvious with GI as they are for DI, so it's less important.
 
 One final note on DI resampling: like we were doing with ReSTIR GI, we now use the balance heuristic for ReSTIR DI resampling, instead of constant MIS weights. This makes a small difference (hence why I never noticed it until now), but it _does_ slightly increase emissive light brightness, matching the pathtraced reference better.
 
