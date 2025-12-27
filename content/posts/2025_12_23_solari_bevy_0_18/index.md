@@ -403,11 +403,11 @@ With this fix, we're much closer to matching the reference.
 
 One of the problems I wasn't able to solve in Bevy 0.17 was ReSTIR DI correlations introducing artifacts when denoising with DLSS-RR.
 
-TODO: Screenshot of DLSS-RR artifacts
+{{ figure(src="di_correlations.png", caption="Correlations from ReSTIR DI confusing the denoiser") }}
 
 For ReSTIR GI, I was able to solve this with permutation sampling during temporal reuse. But for ReSTIR DI, trying to use permutation sampling lead to artifacts on shadow penumbras due to the way I was doing visibility reuse.
 
-TODO: Screenshot of artifacts
+{{ figure(src="di_permutation_artifacts.png", caption="Visibility reuse messing up shadows when using permutation sampling") }}
 
 I played with resampling ordering a bit more this cycle, and was able to come up with a solution.
 
@@ -457,11 +457,13 @@ If you were to feed forward the second visibility test, the following might happ
 
 Reusing visibility like this leads to bias in the form of shadows that "halo" objects, expanding further out than they should.
 
+{{ figure(src="di_feed_forward_bad.png", caption="Feeding forward final visibility leads to over-shadowing artifacts") }}
+
 Interestingly, when I tried these modifications to ReSTIR GI, it made things _more_ biased. Indirect shadows became very faint and sometimes disappeared altogether. ReSTIR GI still uses the same algorithm it did in Bevy 0.17.
 
 One final note on DI resampling: like we were doing with ReSTIR GI, we now use the balance heuristic for ReSTIR DI resampling, instead of constant MIS weights. This makes a small difference (hence why I never noticed it until now), but it _does_ slightly increase emissive light brightness, matching the pathtraced reference better.
 
-TODO: Screenshot of 0.17 vs 0.18 DI
+{{ figure(src="di_good_018.png", caption="Final ReSTIR DI output after all the changes") }}
 
 ## World Cache Improvements
 
@@ -575,9 +577,9 @@ No more performance wasted on areas the camera will never see!
 
 ### Misc Cache Tweaks
 
-Finally, I tweaked a bunch of other things based on my testing in Bistro:
+{{ figure(src="bistro_trace.png", caption="NSight trace of Bistro showing an expensive and spiky world cache update") }}
 
-TODO: Trace of Bistro in 0.17
+Finally, I tweaked a bunch of other things based on my testing in Bistro:
 
 * Limited indirect rays sent from cache entries during the world cache update step to a max of 50 meters - This prevents long raytraces from holding up the whole threadgroup, improving performance, and prevents far-away samples from influencing the cache, reducing variance.
 * Switched the world cache update workgroup size from 1024 to 64 threads - Much more appropriate for raytracing workloads. This fixed some really weird GPU usage traces I was seeing in NSight.
@@ -640,9 +642,7 @@ Additionally as a final note on GI quality, currently one of Solari's worst form
 
 And it's actually very easy to identify the cases where this happens. Light leaks tend to occur when the length of the ray querying the cache is less than the size of the cache cell.
 
-I tried both sampling last frame's screen-space texture, and [hashing `ray_t < cell_size`](https://gboisse.github.io/posts/this-is-us), but neither helped unfortunately. More experimentation is needed.
-
-TODO: Screenshot
+I tried both sampling last frame's screen-space texture, and [hashing `ray_t < cell_size`](https://gboisse.github.io/posts/this-is-us), but unfortunately neither helped. More experimentation is needed.
 
 #### Specular
 
