@@ -634,7 +634,7 @@ All three techniques share the same basic idea: build a local distribution of in
 
 It's the same exact idea as improving DI sampling - discretize to world space, estimate a local distribution, use for sampling. And again the same questions arise - using a small set of candidate paths traced from the camera and splatting into the cache; build on top of the existing cache update pass; both?
 
-The same questions also apply to the world irradiance cache itself. Currently the cache is updated in a dedicated pass at the start of the frame, sampling from a fixed point for each active cache cell. Other caches like NVIDIA's [SHARC](https://github.com/NVIDIA-RTX/SHARC), NVIDIA's [NRC](https://research.nvidia.com/publication/2021-06_real-time-neural-radiance-caching-path-tracing) or AMD's [FSR Radiance Caching](https://gpuopen.com/manuals/fsr_sdk/techniques/radiance-cache/#training-the-cache) splat candidate paths traced from the camera.
+The same questions also apply to the world irradiance cache itself. Currently the cache is updated in a dedicated pass at the start of the frame, sampling from a fixed point for each active cache cell. Other caches like NVIDIA's [SHARC](https://github.com/NVIDIA-RTX/SHARC), NVIDIA's [NRC](https://research.nvidia.com/publication/2021-06_real-time-neural-radiance-caching-path-tracing) and AMD's [FSR Radiance Caching](https://gpuopen.com/manuals/fsr_sdk/techniques/radiance-cache/#training-the-cache) all splat candidate paths traced from the camera.
 
 Lots of room for experimentation.
 
@@ -657,4 +657,24 @@ Specular DI and GI in Solari 0.18 was a pretty initial implementation, and as I'
 
 ## Performance and Quality Results
 
-TODO
+All results were captured on an RTX 3080 locked to base clocks in NSight, at 1600x900 upscaled to 3200x1800 via DLSS-RR.
+
+### PICA PICA
+
+{{ figure(src="pica_pica_realtime.png", caption="PICA PICA - Solari realtime") }}
+{{ figure(src="pica_pica_reference.png", caption="PICA PICA - Pathraced reference (ignore the black noise - it's a bug)") }}
+
+### Bistro
+
+{{ figure(src="bistro_realtime.png", caption="Bistro - Solari realtime (ignore the foilage - Solari doesn't support alpha masks yet)") }}
+{{ figure(src="bistro_reference.png", caption="Bistro - Pathraced reference") }}
+
+### Dragons
+
+{{ figure(src="dragons_realtime.png", caption="Dragons - Solari realtime") }}
+{{ figure(src="dragons_reference.png", caption="Dragons - Pathraced reference") }}
+
+### Cornell Box
+
+{{ figure(src="cornell_box_realtime.png", caption="Cornell Box - Solari realtime") }}
+{{ figure(src="cornell_box_reference.png", caption="Cornell Box - Pathraced reference") }}
