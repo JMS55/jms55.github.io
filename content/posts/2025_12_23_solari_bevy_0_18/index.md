@@ -455,7 +455,7 @@ If you were to feed forward the second visibility test, the following might happ
 
 Reusing visibility like this leads to bias in the form of shadows that "halo" objects, expanding further out than they should.
 
-Interestingly, when I tried these modifications to ReSTIR GI, it made things _more_ biased. Indirect shadows became very feint and sometimes disappeared altogether. ReSTIR GI still uses the same algorithm it did in Bevy 0.17.
+Interestingly, when I tried these modifications to ReSTIR GI, it made things _more_ biased. Indirect shadows became very faint and sometimes disappeared altogether. ReSTIR GI still uses the same algorithm it did in Bevy 0.17.
 
 One final note on DI resampling: like we were doing with ReSTIR GI, we now use the balance heuristic for ReSTIR DI resampling, instead of constant MIS weights. This makes a small difference (hence why I never noticed it until now), but it _does_ slightly increase emissive light brightness, matching the pathtraced reference better.
 
