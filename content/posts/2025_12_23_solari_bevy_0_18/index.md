@@ -39,13 +39,13 @@ To that end, Bevy 0.18 brings many quality (and some performance!) improvements 
 
 * Specular material support
 * Fixed the loss of brightness in the scene compared to the reference
-* Eliminated correlations and bias from ReSTIR DI resampling
-* Greatly reduced GI lag
-* Greatly improved performance on larger scenes
+* Reduced correlations and bias from ReSTIR resampling
+* Reduced GI lag
+* Improved performance on larger scenes
 
 ## Specular Materials
 
-In Bevy 0.17, Solari only supported diffuse materials. Diffuse materials were easier to get started with, because they don't depend on the incident light direction - they scatter the same no matter what direction the light is coming from.
+In Bevy 0.17, Solari only supported diffuse materials. Diffuse materials were easier to get started with, as they don't depend on the incident light direction - they scatter the same no matter what direction the light is coming from.
 
 Of course, games want more than just purely diffuse materials. Most PBR materials combine a diffuse lobe (Burley in Bevy's standard renderer, Lambert in Solari) with a specular lobe (usually GGX).
 
@@ -399,7 +399,7 @@ With this fix, we're much closer to matching the reference.
 {{ figure(src="energy_loss.png", caption="Energy loss due to poor encoding of radiance in light tiles") }}
 {{ figure(src="energy_loss_fixed.png", caption="Correct energy due to a better encoding") }}
 
-## DI Resampling
+## Resampling Correlations/Bias
 
 One of the problems I wasn't able to solve in Bevy 0.17 was ReSTIR DI correlations introducing artifacts when denoising with DLSS-RR.
 
