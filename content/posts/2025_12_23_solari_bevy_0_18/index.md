@@ -51,7 +51,7 @@ Of course, games want more than just purely diffuse materials. Most PBR material
 
 In Bevy 0.18, Solari now supports specular materials using a multiscattering GGX lobe, which gets added to the diffuse lobe.
 
-{{ figure(src="dragons.png", caption="Metallic and non-metallic meshes of varying roughness") }}
+{{ figure(src="dragons_realtime.png", caption="Metallic and non-metallic meshes of varying roughness") }}
 
 ### BRDF Evaluation
 
