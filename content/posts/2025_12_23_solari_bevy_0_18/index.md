@@ -12,7 +12,7 @@ It's been approximately three months since [my last post](@/posts/2025_09_20_sol
 
 Like last time, this cycle has seen me focused entirely on Solari - Bevy's next-gen, fully dynamic raytraced lighting system, allowing artists and developers to get high quality lighting - without having to spend any time on static baking.
 
-TODO: Headline screenshot
+{{ figure(src="headline.png", caption="PICA PICA using Solari in Bevy 0.18") }}
 
 Before getting into what's changed in this release, let's take a quick look back at where Solari was in Bevy 0.17.
 
@@ -51,7 +51,7 @@ Of course, games want more than just purely diffuse materials. Most PBR material
 
 In Bevy 0.18, Solari now supports specular materials using a multiscattering GGX lobe, which gets added to the diffuse lobe.
 
-TODO: Dragons scene screenshot
+{{ figure(src="dragons.png", caption="Metallic and non-metallic meshes of varying roughness") }}
 
 ### BRDF Evaluation
 
@@ -239,7 +239,8 @@ To get around this, when importance sampling the specular BRDF for a material wi
 
 This restores mirror-like behavior, while still preventing NaNs in BRDF evaluation.
 
-TODO: Screenshots with/without this change
+{{ figure(src="without_mirror_fix.png", caption="Without the fix - a little blurry") }}
+{{ figure(src="with_mirror_fix.png", caption="With the fix - perfect mirror!") }}
 
 ### Specular DI
 
@@ -293,7 +294,7 @@ The diffuse lobe is handled by the existing ReSTIR GI pass. ReSTIR GI resampling
 
 For the ReSTIR GI final shading step, we're still shading using only the diffuse lobe, but now we need to skip shading metallic pixels that don't have a diffuse lobe.
 
-TODO: Screenshot of diffuse GI contribution only
+{{ figure(src="diffuse_gi.png", caption="Diffuse GI only - metallic surfaces are black because they don't have any diffuse contribution") }}
 
 ### Specular GI
 
@@ -334,7 +335,7 @@ For glossy or mirror surfaces, we need to trace a new path, following the best d
 
 The full code for `trace_glossy_path` is a bit long, so I'm just going to link to the [source on GitHub](https://github.com/bevyengine/bevy/blob/64c7bec4068aa063bfaa2cddcb90733f0e081cf8/crates/bevy_solari/src/realtime/specular_gi.wgsl#L71-L150).
 
-TODO: Screenshot of specular contribution only
+{{ figure(src="specular_gi.png", caption="Specular GI only") }}
 
 The basic outline is:
 * We trace up to three bounces (after three bounces, the quality loss from skipping further bounces is minimal)
@@ -393,7 +394,8 @@ fn unpack_resolved_light_sample(packed: ResolvedLightSamplePacked, exposure: f32
 
 With this fix, we're much closer to matching the reference.
 
-TODO: Screenshot comparisons with/without fix
+{{ figure(src="energy_loss.png", caption="Energy loss due to poor encoding of radiance in light tiles") }}
+{{ figure(src="energy_loss_fixed.png", caption="Correct energy with a better encoding") }}
 
 ## DI Resampling
 
