@@ -482,7 +482,14 @@ In Bevy 0.18, I spent a large amount of time fixing these issues.
 
 In the PICA PICA scene, if you turn off all the lights, it would take a good while for the light to completely fade. The reason being that: A) the world cache samples itself, recursively propagating light around the scene for a while, and B) the exponential blend between new and current radiance samples keeps the old radiance around for a decent amount of time.
 
-TODO: Video of GI lag
+<video style="max-width: 100%; margin: var(--gap) var(--gap) 0 var(--gap); border-radius: 6px;" controls>
+  <source src="gi_lag.mp4" type="video/mp4">
+</video>
+<center>
+
+*Laggy GI with fixed blend factor*
+
+</center>
 
 To combat this, we could increase the blend factor, to keep the lighting responsive. However that would lead to way more noise and instability under static lighting conditions.
 
@@ -510,7 +517,14 @@ world_cache_luminance_deltas[cell_index] = blended_luminance_delta;
 
 Now GI is stable under static conditions, but reacts pretty fast under dynamic conditions. It's not perfect - we're still heavily relying on temporal accumulation and denoising - but it's a heck of a lot better.
 
-TODO: Video of adaptive blend
+<video style="max-width: 100%; margin: var(--gap) var(--gap) 0 var(--gap); border-radius: 6px;" controls>
+  <source src="gi_less_lag.mp4" type="video/mp4">
+</video>
+<center>
+
+*Less-laggy GI with adaptive blend factor*
+
+</center>
 
 Once again, thanks a ton to Guillaume Boissé for this code! I was struggling to come up with something myself, and this perfectly solved my problem!
 
