@@ -262,8 +262,8 @@ Finally, we shade using the final selected sample (which in Bevy 0.17 used only 
 
 To add support for specular materials, there's a couple of different places that we should modify:
 
-1. Account for the specular BRDF to the target function during initial resampling
-2. Account for the specular BRDF during temporal and spatial resampling
+1. Account for the specular BRDF in the target function during initial resampling
+2. Account for the specular BRDF in the target functions during temporal and spatial resampling
 3. Trace a BRDF ray during initial sampling and combine it with the NEE samples using multiple importance sampling (MIS)
     * This is the only way to sample DI for zero-roughness mirror surfaces
     * Improves quality for glossy (mid-roughness) surfaces
@@ -342,6 +342,8 @@ The basic outline is:
 * Lighting comes from any of: hitting an emissive surface, NEE, or terminating in the world cache
 * Each bounce samples the GGX distribution to find the next bounce direction (if the surface was rough enough, we would have terminated in the world cache - more on this in a second)
 
+It's essentially just a standard pathtracer, except with theortically higher coherence from always following the specular lobe.
+
 However, there are many subtle details that took me some time to figure out:
 * Emissive contributions are skipped on the first bounce, as ReSTIR DI handles those paths
 * We only query the world cache when hitting a rough surface (otherwise reflections would show the grid-like world cache)
@@ -354,7 +356,7 @@ And there are still some large remaining issues:
 * No specular motion vectors to aid the denoiser leads to ghosting when objects in reflections move around
 * Terminating in the world cache still leads to quality issues sometimes, especially on curved surfaces
 
-Specular motion vectors are something I plan to work on, following either ["Rendering Perfect Reflections and Refractions in Path-Traced Games"](https://developer.nvidia.com/blog/rendering-perfect-reflections-and-refractions-in-path-traced-games) or ["Temporally Reliable Motion Vectors for Real-time Ray Tracing"](https://zheng95z.github.io/publications/trmv21). I just need to spend some more time understanding the theory.
+Specular motion vectors are something I plan to work on. I just need to spend some more time understanding the theory.
 
 As for improving sampling during the path trace, this is technically what ReSTIR PT was invented to solve. However, ReSTIR PT is also very performance intensive. I'm not convinced it's the path we should go down for Solari.
 
@@ -366,7 +368,7 @@ One of the big problems Solari had in 0.17 was overall energy loss compared to a
 
 At the time, I chalked it up to an inherent limitation of the world cache and moved on.
 
-However, while experimenting with various things this cycle, I realized that not only was it not the world cache, but DI also was losing energy, and not just GI!
+However, while experimenting with various things this cycle, I realized that not only was it not due to the world cache, but DI also was losing energy, and not just GI!
 
 After many painful days of narrowing down the issue, I tracked it down to the [light tile code](@posts/2025-09-20-solari-bevy-0-17/#light-tile-presampling), which was shared between DI and the world cache.
 
@@ -395,7 +397,7 @@ fn unpack_resolved_light_sample(packed: ResolvedLightSamplePacked, exposure: f32
 With this fix, we're much closer to matching the reference.
 
 {{ figure(src="energy_loss.png", caption="Energy loss due to poor encoding of radiance in light tiles") }}
-{{ figure(src="energy_loss_fixed.png", caption="Correct energy with a better encoding") }}
+{{ figure(src="energy_loss_fixed.png", caption="Correct energy due to a better encoding") }}
 
 ## DI Resampling
 
@@ -567,9 +569,9 @@ Now we're instead doing `atomicMax(&world_cache_life[key], cell_lifetime_of_quer
 
 When the camera is in a given area, ReSTIR GI and specular GI pixels will reset world cache entries to their max lifetime. Then during world cache update the next frame, those world cache entries will copy their max lifetime to other entries nearby.
 
-However once the camera moves away from the area, there will be no more pixels querying the world cache. When world cache entries go to query each other, they'll copy over their current lifetimes (which is decreasing each frame). After a couple of frames, all the world cache entries will go dead.
+However once the camera moves away from the area, there will be no more pixels querying the world cache. When world cache entries go to query each other, they'll copy over their current lifetimes (which are decaying each frame). After a couple of frames, all the world cache entries in the area will go dead.
 
-No more performance wasted on areas away from the camera!
+No more performance wasted on areas the camera will never see!
 
 ### Misc Cache Tweaks
 
@@ -583,24 +585,73 @@ TODO: Trace of Bistro in 0.17
 
 Combined, these changes brought the world cache update step from 1.42ms to a much more reasonable 0.09ms in Bistro.
 
-TODO: Performance breakdown table
-
 ## What's Next
 
-This blog post just scratched the surface of the past three months. I didn't even cover stuff I tried that didn't work out; but I'm a little sick of writing this and perfect is the enemy of good and all that.
+This blog post just scratched the surface of the past three months. I didn't even cover stuff I tried that didn't work out; but I'm a little sick of writing this and want to get something posted rather than spend a month perfecting it.
 
 So with that, let's talk about the future!
 
 Solari has improved a ton in these past three months, but of course there's still more work to be done!
 
-First, some general issues (many of these carrying over from my last blog post):
+### General Improvements
+
+First, some general issues carrying over from my last blog post:
 * Feature parity for things like skinned and morphed meshes, alpha masks, transparent materials, support for more types of light sources, etc still need implementing.
-* Specular motion vectors are not implemented, so mirror and glossy indirect reflections can have ghosting.
 * Solari is still NVIDIA only in practice due to relying on DLSS-RR (FSR-RR _did_ release since my last blog post, but to my immense sadness is currently DirectX 12 only - no Vulkan support. AMD employees - please reach out!)
 * Shader execution reordering (blocked on wgpu support) and half-resolution GI (on top of DLSS upscaling) would bring major performance improvements.
 
-DI quality: github.com/bevyengine/bevy/pull/21366, LTC https://ishaanshah.xyz/risltc, better-than-random light sampling https://blog.traverseresearch.nl/fast-cdf-generation-on-the-gpu-for-light-picking-5c50b97c552b
+### Sampling Improvements
 
-GI quality: Handling when ray_length less than cache cell_size, path guiding https://research.nvidia.com/labs/rtr/publication/zeng2025restirpg
+The other major improvements I want to make are to sampling quality. There are a bunch of different papers and techniques I want to experiment with.
 
-Specular: Experimenting with ReSTIR
+#### DI Sampling
+
+For DI, our initial sampling is totally random, which is pretty terrible. The minimal improvement would be to build a [global CDF](https://blog.traverseresearch.nl/fast-cdf-generation-on-the-gpu-for-light-picking-5c50b97c552b) of lights in the scene. A better, but much more complex and expensive method would be to build the [spherical gaussian light tree](https://gpuopen.com/download/Hierarchical_Light_Sampling_with_Accurate_Spherical_Gaussian_Lighting.pdf) I mentioned in my last post.
+
+However, we can get even better results by building and caching a _local_ distribution of lights at discrete points in the scene.
+
+[Disney's Hyperion renderer](https://www.yiningkarlli.com/projects/cachepoints.html) uses a set of randomly traced candidate paths to pick cache points in the scene, and estimates both the unshadowed light contribution and visibility of a light at each cache point, stored as a small CDF table.
+
+Unreal Engine's [MegaLights](https://advances.realtimerendering.com/s2025/content/MegaLights_Stochastic_Direct_Lighting_2025.pdf) uses a similar idea in screen space. @SparkyPotato has been [experimenting with a world-space equivalent](https://github.com/bevyengine/bevy/pull/21366) of the idea in Solari.
+
+Unlike Disney's cache points, we already have a good way to discretize the scene - the spatial hashing we use for the GI world cache. We're already sampling DI at each world cache cell - why not additionally build up a CDF, and use that to improve light sampling for ReSTIR DI and Specular GI NEE? Or, we could go the other way, and splat each per-pixel sample from ReSTIR DI and Specular GI NEE back into the world cache. Or... both? Lots of things to experiment with (and not enough time!)
+
+Lastly, [lineraly-transformed cosines](https://ishaanshah.xyz/risltc) (LTCs) are a promising avenue to explore to improve resampling quality.
+
+#### GI Sampling
+
+Like DI, we can also improve our GI sampling.
+
+Recently, realtime pathtracing research has been retracing (pun intended) the steps that offline pathtracing took, and researching path guiding techniques. There are several promising avenues to explore:
+
+* [Markov chain resampling](https://www.lalber.org/2025/04/markov-chain-path-guiding)
+* [ReSTIR PT splatting](https://research.nvidia.com/labs/rtr/publication/zeng2025restirpg)
+* [Parallax-aware vMF mixtures](https://uni-tuebingen.de/fakultaeten/mathematisch-naturwissenschaftliche-fakultaet/fachbereiche/informatik/lehrstuehle/computergrafik/lehrstuhl/veroeffentlichungen/robust-fitting-of-parallax-aware-mixtures-for-path-guiding)
+
+All three techniques share the same basic idea: build a local distribution of incident light in world-space, stored as a combination of several vMF lobes. The main differences are how samples get fed into the distribution, and the exact steps used to update the distribution.
+
+It's the same exact idea as improving DI sampling - discretize to world space, estimate a local distribution, use for sampling. And again the same questions arise - using a small set of candidate paths traced from the camera and splatting into the cache; build on top of the existing cache update pass; both?
+
+Lots of room for experimentation.
+
+Additionally as a final note on GI quality, currently one of Solari's worst form of artifacts is GI light leaks on the edges of objects. While hashing the surface normal helps, on curved surfaces and corners, it's not a perfect solution.
+
+And it's actually very easy to identify the cases where this happens. Light leaks tend to occur when the length of the ray querying the cache is less than the size of the cache cell.
+
+I tried both sampling last frame's screen-space texture, and [hashing `ray_t < cell_size`](https://gboisse.github.io/posts/this-is-us), but neither helped unfortunately. More experimentation is needed.
+
+TODO: Screenshot
+
+#### Specular
+
+Specular DI and GI in Solari 0.18 was a pretty initial implementation, and as I've mentioned throughout the post, there's a lot that could be improved.
+
+* Specular motion vectors are not implemented, so mirror and glossy indirect reflections can have ghosting.
+    * I need to implement either ["Rendering Perfect Reflections and Refractions in Path-Traced Games"](https://developer.nvidia.com/blog/rendering-perfect-reflections-and-refractions-in-path-traced-games) or ["Temporally Reliable Motion Vectors for Real-time Ray Tracing"](https://zheng95z.github.io/publications/trmv21).
+* Local light sampling would greatly help NEE quality for specular GI. Currently, NEE is heavily undersampled. DLSS-RR does its best, but you can see some cross-stich patterns on glossy reflections where the denoiser is struggling.
+* Path guiding for GI would help with tracing glossy paths.
+* Experimenting with ReSTIR for both specular DI and specular GI.
+
+## Performance and Quality Results
+
+TODO
