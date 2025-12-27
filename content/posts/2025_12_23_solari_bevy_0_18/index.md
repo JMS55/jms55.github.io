@@ -632,6 +632,8 @@ All three techniques share the same basic idea: build a local distribution of in
 
 It's the same exact idea as improving DI sampling - discretize to world space, estimate a local distribution, use for sampling. And again the same questions arise - using a small set of candidate paths traced from the camera and splatting into the cache; build on top of the existing cache update pass; both?
 
+The same questions also apply to the world irradiance cache itself. Currently the cache is updated in a dedicated pass at the start of the frame, sampling from a fixed point for each active cache cell. Other caches like NVIDIA's [SHARC](https://github.com/NVIDIA-RTX/SHARC), NVIDIA's [NRC](https://research.nvidia.com/publication/2021-06_real-time-neural-radiance-caching-path-tracing) or AMD's [FSR Radiance Caching](https://gpuopen.com/manuals/fsr_sdk/techniques/radiance-cache/#training-the-cache) splat candidate paths traced from the camera.
+
 Lots of room for experimentation.
 
 Additionally as a final note on GI quality, currently one of Solari's worst form of artifacts is GI light leaks on the edges of objects. While hashing the surface normal helps, on curved surfaces and corners, it's not a perfect solution.
@@ -651,6 +653,7 @@ Specular DI and GI in Solari 0.18 was a pretty initial implementation, and as I'
 * Local light sampling would greatly help NEE quality for specular GI. Currently, NEE is heavily undersampled. DLSS-RR does its best, but you can see some cross-stich patterns on glossy reflections where the denoiser is struggling.
 * Path guiding for GI would help with tracing glossy paths.
 * Experimenting with ReSTIR for both specular DI and specular GI.
+* Potentially terminating a specular GI path into the world cache sooner based on total roughness/cone-spread of the path.
 
 ## Performance and Quality Results
 
