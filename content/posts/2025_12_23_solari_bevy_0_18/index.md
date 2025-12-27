@@ -10,7 +10,9 @@ tags = ["bevy", "raytracing"]
 
 It's been approximately three months since [my last post](@/posts/2025_09_20_solari_bevy_0_17/index.md), which means it's time to talk about all the work I've been doing for the upcoming release of Bevy 0.18!
 
-Like last time, this cycle has seen me focused entirely on Solari - Bevy's next-gen, fully dynamic raytraced lighting system, allowing artists and developers to get high quality lighting - without having to spend time on static baking.
+Like last time, this cycle has seen me focused entirely on Solari - Bevy's next-gen, fully dynamic raytraced lighting system, allowing artists and developers to get high quality lighting - without having to spend any time on static baking.
+
+TODO: Headline screenshot
 
 Before getting into what's changed in this release, let's take a quick look back at where Solari was in Bevy 0.17.
 
@@ -31,13 +33,13 @@ Or at least, that's the theory.
 
 In practice, all the amortization and shortcuts gives up some accuracy (making the result biased) in order to improve performance.
 
-My goal with Solari is to get _as close as possible_ to the offline reference (zero bias), while getting "good enough" performance for realtime. Quality is currently the main priority.
+My goal with Solari is to get _as close as possible_ to the offline reference (zero bias), while getting "good enough" performance for realtime. Going into the 0.18 dev cycle, improving quality was my main priority.
 
 To that end, Bevy 0.18 brings many quality (and some performance!) improvements to Solari:
 
 * Specular material support
 * Fixed the loss of brightness in the scene compared to the reference
-* Eliminated bias from ReSTIR DI resampling
+* Eliminated correlations and bias from ReSTIR DI resampling
 * Greatly reduced GI lag
 * Greatly improved performance on larger scenes
 
@@ -48,6 +50,8 @@ In Bevy 0.17, Solari only supported diffuse materials. Diffuse materials were ea
 Of course, games want more than just purely diffuse materials. Most PBR materials combine a diffuse lobe (Burley in Bevy's standard renderer, Lambert in Solari) with a specular lobe (usually GGX).
 
 In Bevy 0.18, Solari now supports specular materials using a multiscattering GGX lobe, which gets added to the diffuse lobe.
+
+TODO: Dragons scene screenshot
 
 ### BRDF Evaluation
 
@@ -114,7 +118,7 @@ Diffuse is nearly the same as in Solari 0.17, except the diffuse BRDF was change
 
 For specular, a lot of the code can be reused from `bevy_pbr`, so the BRDF evaluation is only a couple of lines of function calls.
 
-One thing to note is that special care must be taken to avoid NaNs.
+One thing though that tripped me up is that special care must be taken to avoid NaNs.
 
 In addition to clamping `NdotV` in the BRDF, we also limit roughness to 0.001 when loading materials, as zero roughness materials cause NaNs in the visibility function.
 
@@ -210,11 +214,15 @@ let T = TBN[0];
 let B = TBN[1];
 let N = TBN[2];
 
-let wo_tangent = vec3(dot(wo, T), dot(wo, B), dot(wo, N)); // Convert input from world space to tangent space
-let wi_tangent = sample_ggx_vndf(wo_tangent, surface.material.roughness, &rng); // Swap wo and wi
-let wi = wi_tangent.x * T + wi_tangent.y * B + wi_tangent.z * N; // Convert output from tangent space to world space
+// Convert input from world space to tangent space
+let wo_tangent = vec3(dot(wo, T), dot(wo, B), dot(wo, N));
+// Swapped wo and wi
+let wi_tangent = sample_ggx_vndf(wo_tangent, surface.material.roughness, &rng);
+// Convert output from tangent space to world space
+let wi = wi_tangent.x * T + wi_tangent.y * B + wi_tangent.z * N;
 
-let pdf = ggx_vndf_pdf(wo_tangent, wi_tangent, surface.material.roughness); // Swap wo and wi
+// Swapped wo and wi
+let pdf = ggx_vndf_pdf(wo_tangent, wi_tangent, surface.material.roughness);
 ```
 
 One final thing to note is this line of code I added to `sample_ggx_vndf`, which doesn't appear in the paper:
@@ -231,9 +239,15 @@ To get around this, when importance sampling the specular BRDF for a material wi
 
 This restores mirror-like behavior, while still preventing NaNs in BRDF evaluation.
 
+TODO: Screenshots with/without this change
+
 ### Specular DI
 
 Now that we've covered Solari's updated material BRDF, let's talk about how lighting has changed.
+
+First up - specular direct lighting.
+
+#### Status Quo
 
 To recap: For direct lighting, Solari is using ReSTIR DI.
 
@@ -242,6 +256,8 @@ We take a series of random initial samples from light sources, and use RIS to ch
 We then do some temporal and spatial resampling to share good samples between frames/pixels.
 
 Finally, we shade using the final selected sample (which in Bevy 0.17 used only the diffuse BRDF).
+
+#### Changes
 
 To add support for specular materials, there's a couple of different places that we should modify:
 
@@ -276,6 +292,8 @@ For per-pixel GI, Solari splits the lighting calculations into two seperate pass
 The diffuse lobe is handled by the existing ReSTIR GI pass. ReSTIR GI resampling is exactly the same as in Bevy 0.17 - like DI, only the final shading changes.
 
 For the ReSTIR GI final shading step, we're still shading using only the diffuse lobe, but now we need to skip shading metallic pixels that don't have a diffuse lobe.
+
+TODO: Screenshot of diffuse GI contribution only
 
 ### Specular GI
 
@@ -316,28 +334,28 @@ For glossy or mirror surfaces, we need to trace a new path, following the best d
 
 The full code for `trace_glossy_path` is a bit long, so I'm just going to link to the [source on GitHub](https://github.com/bevyengine/bevy/blob/64c7bec4068aa063bfaa2cddcb90733f0e081cf8/crates/bevy_solari/src/realtime/specular_gi.wgsl#L71-L150).
 
-The basic idea is:
+TODO: Screenshot of specular contribution only
+
+The basic outline is:
 * We trace up to three bounces (after three bounces, the quality loss from skipping further bounces is minimal)
-* Lighting comes from either hitting an emissive surface, NEE, or querying the world cache
+* Lighting comes from any of: hitting an emissive surface, NEE, or terminating in the world cache
+* Each bounce samples the GGX distribution to find the next bounce direction (if the surface was rough enough, we would have terminated in the world cache - more on this in a second)
+
+However, there are many subtle details that took me some time to figure out:
 * Emissive contributions are skipped on the first bounce, as ReSTIR DI handles those paths
 * We only query the world cache when hitting a rough surface (otherwise reflections would show the grid-like world cache)
-* After hitting a rough surface and querying the world cache, we terminate the path
 * We skip NEE for mirror surfaces
 * We apply MIS between the emissive contribution and the NEE contribution
-* Each bounce samples the GGX distribution to find the next bounce direction (if the surface was rough enough, we would have terminated in the world cache)
-
-As you can see there's a lot of small details, which took me a while to figure out.
 
 And there are still some large remaining issues:
 * NEE is using entirely random samples, which leads to noisy reflections
 * Glossy surfaces don't have any sort of path guiding to choose good directions, which also leads to noisy reflections
 * No specular motion vectors to aid the denoiser leads to ghosting when objects in reflections move around
 * Terminating in the world cache still leads to quality issues sometimes, especially on curved surfaces
-  * TODO: Validate if this is what I was seeing in the cornell box scene
 
 Specular motion vectors are something I plan to work on, following either ["Rendering Perfect Reflections and Refractions in Path-Traced Games"](https://developer.nvidia.com/blog/rendering-perfect-reflections-and-refractions-in-path-traced-games) or ["Temporally Reliable Motion Vectors for Real-time Ray Tracing"](https://zheng95z.github.io/publications/trmv21). I just need to spend some more time understanding the theory.
 
-For improving sampling during the path trace, this is technically what ReSTIR PT was invented to solve. However, ReSTIR PT is also very performance intensive, and I'm not convinced it's the path we should go down for Solari.
+As for improving sampling during the path trace, this is technically what ReSTIR PT was invented to solve. However, ReSTIR PT is also very performance intensive. I'm not convinced it's the path we should go down for Solari.
 
 I have some other ideas in mind for improving sampling, which I'll talk about at the end of this post.
 
@@ -375,11 +393,17 @@ fn unpack_resolved_light_sample(packed: ResolvedLightSamplePacked, exposure: f32
 
 With this fix, we're much closer to matching the reference.
 
+TODO: Screenshot comparisons with/without fix
+
 ## DI Resampling
 
 One of the problems I wasn't able to solve in Bevy 0.17 was ReSTIR DI correlations introducing artifacts when denoising with DLSS-RR.
 
+TODO: Screenshot of DLSS-RR artifacts
+
 For ReSTIR GI, I was able to solve this with permutation sampling during temporal reuse. But for ReSTIR DI, trying to use permutation sampling lead to artifacts on shadow penumbras due to the way I was doing visibility reuse.
+
+TODO: Screenshot of artifacts
 
 I played with resampling ordering a bit more this cycle, and was able to come up with a solution.
 
@@ -433,9 +457,11 @@ Interestingly, when I tried these modifications to ReSTIR GI, it made things _mo
 
 One final note on DI resampling: like we were doing with ReSTIR GI, we now use the balance heuristic for ReSTIR DI resampling, instead of constant MIS weights. This makes a small difference (hence why I never noticed it until now), but it _does_ slightly increase emissive light brightness, matching the pathtraced reference better.
 
+TODO: Screenshot of 0.17 vs 0.18 DI
+
 ## World Cache Improvements
 
-The world cache is the oldest part of Solari - it was copied nearly wholesale from my original prototype 3 years ago, without any real changes except for the addition of the LOD system.
+The world cache is the oldest part of Solari - it was copied nearly wholesale from my original prototype three years ago, without any real changes in Bevy 0.17 except for the addition of the LOD system.
 
 Because of this, it was also the jankiest part of Solari.
 
@@ -449,6 +475,8 @@ In Bevy 0.18, I spent a large amount of time fixing these issues.
 ### Cache Lag
 
 In the PICA PICA scene, if you turn off all the lights, it would take a good while for the light to completely fade. The reason being that: A) the world cache samples itself, recursively propogating light around the scene for a while, and B) the exponential blend between new and current radiance samples keeps the old radiance around for a decent amount of time.
+
+TODO: Video of GI lag
 
 To combat this, we could increase the blend factor, to keep the lighting responsive. However that would lead to way more noise and instability under static lighting conditions.
 
@@ -475,6 +503,8 @@ world_cache_luminance_deltas[cell_index] = blended_luminance_delta;
 ```
 
 Now GI is stable under static conditions, but reacts pretty fast under dynamic conditions. It's not perfect - we're still heavily relying on temporal accumulation and denoising - but it's a heck of a lot better.
+
+TODO: Video of adaptive blend
 
 Once again, thanks a ton to Guillaume Boissé for this code! I was struggling to come up with something myself, and this perfectly solved my problem!
 
@@ -543,22 +573,32 @@ No more performance wasted on areas away from the camera!
 
 Finally, I tweaked a bunch of other things based on my testing in Bistro:
 
+TODO: Trace of Bistro in 0.17
+
 * Limited indirect rays sent from cache entries during the world cache update step to a max of 50 meters - This prevents long raytraces from holding up the whole threadgroup, improving performance, and prevents far-away samples from influencing the cache, reducing variance.
 * Switched the world cache update workgroup size from 1024 to 64 threads - Much more appropriate for raytracing workloads. This fixed some really weird GPU usage traces I was seeing in NSight.
 * Make the world cache transition LODs faster - In a large scene like Bistro, we had way too many cache entries for far-away areas.
 
 Combined, these changes brought the world cache update step from 1.42ms to a much more reasonable 0.09ms in Bistro.
 
+TODO: Performance breakdown table
+
 ## What's Next
 
-Solari has improved a ton in Bevy 0.18, but there's (of course) still more work to be done!
+This blog post just scratched the surface of the past three months. I didn't even cover stuff I tried that didn't work out; but I'm a little sick of writing this and perfect is the enemy of good and all that.
+
+So with that, let's talk about the future!
+
+Solari has improved a ton in these past three months, but of course there's still more work to be done!
 
 First, some general issues (many of these carrying over from my last blog post):
 * Feature parity for things like skinned and morphed meshes, alpha masks, transparent materials, support for more types of light sources, etc still need implementing.
 * Specular motion vectors are not implemented, so mirror and glossy indirect reflections can have ghosting.
-* Solari is still NVIDIA only in practice due to relying on DLSS-RR (FSR-RR _did_ release since my last blog post, but to my sadness is currently DirectX12 only - no Vulkan support. AMD employees - please reach out!)
+* Solari is still NVIDIA only in practice due to relying on DLSS-RR (FSR-RR _did_ release since my last blog post, but to my immense sadness is currently DirectX 12 only - no Vulkan support. AMD employees - please reach out!)
 * Shader execution reordering (blocked on wgpu support) and half-resolution GI (on top of DLSS upscaling) would bring major performance improvements.
 
 DI quality: github.com/bevyengine/bevy/pull/21366, LTC https://ishaanshah.xyz/risltc, better-than-random light sampling https://blog.traverseresearch.nl/fast-cdf-generation-on-the-gpu-for-light-picking-5c50b97c552b
 
 GI quality: Handling when ray_length less than cache cell_size, path guiding https://research.nvidia.com/labs/rtr/publication/zeng2025restirpg
+
+Specular: Experimenting with ReSTIR
