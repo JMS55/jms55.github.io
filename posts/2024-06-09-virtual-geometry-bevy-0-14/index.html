@@ -1,0 +1,1037 @@
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light dark">
+  
+  
+    
+  
+  <meta name="description" content="Bevy, Rust, Graphics, etc">
+
+  <title>Virtual Geometry in Bevy 0.14</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="https://jms55.github.io/img/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="https://jms55.github.io/img/favicon-16x16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="https://jms55.github.io/img/apple-touch-icon.png">
+  
+  <style>
+
+  /* light mode colors */
+  body {
+    --primary-color: #5871a2;
+    --primary-pale-color: #5871a233;
+    --primary-decoration-color: #5871a210;
+    --bg-color: #ffffff;
+    --text-color: #2f3030;
+    --text-pale-color: #767676;
+    --text-decoration-color: #a9a9a9;
+    --highlight-mark-color: #5f75b020;
+
+    --callout-note-color: #5871a2;
+    --callout-tip-color: #268556;
+    --callout-important-color: #885fc9;
+    --callout-warning-color: #ab6632;
+    --callout-caution-color: #c64e4e;
+  }
+
+  /* dark mode colors */
+  body.dark {
+    --primary-color: #6f8fd1;
+    --primary-pale-color: #6f8fd166;
+    --primary-decoration-color: #6f8fd112;
+    --bg-color: #1c1c1c;
+    --text-color: #c1c1c1;
+    --text-pale-color: #848484;
+    --text-decoration-color: #5f5f5f;
+    --highlight-mark-color: #8296cb3b;
+
+    --callout-note-color: #6f8fd1;
+    --callout-tip-color: #47976f;
+    --callout-important-color: #9776cd;
+    --callout-warning-color: #ad7a52;
+    --callout-caution-color: #d06161;
+  }
+
+  /* typography */
+  body {
+    --main-font: ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+    --code-font: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+    --homepage-max-width: 768px;
+    --main-max-width: 768px;
+    --avatar-size: 60px;
+    --font-size: 16px;
+    --line-height: 1.75;
+    --img-border-radius: 0px;
+    --detail-border-radius: 0px;
+    --dark-mode-img-brightness: 0.75;
+    --dark-mode-chart-brightness: 0.75;
+    --inline-code-border-radius: 2px;
+    --inline-code-bg-color: var(--primary-decoration-color);
+    --block-code-border-radius: 0px;
+    --block-code-border-color: var(--primary-color);
+    --detail-border-color: var(--primary-color);
+  }
+
+</style>
+
+  <link rel="stylesheet" href="https://jms55.github.io/main.css">
+  
+
+
+
+  
+</head>
+
+<body class="post">
+  
+  
+<div id="wrapper">
+  <div id="blank"></div>
+  <aside>
+    
+    
+    <nav>
+      <ul>
+        
+        <li>
+          <a class="h2" href="#introduction">Introduction</a>
+          
+          <ul>
+            
+            <li>
+              <a class="h3" href="#why-virtual-geometry">Why Virtual Geometry?</a>
+            </li>
+            
+            <li>
+              <a class="h3" href="#what-is-virtual-geometry">What is Virtual Geometry?</a>
+            </li>
+            
+            <li>
+              <a class="h3" href="#virtual-geometry-in-bevy">Virtual Geometry in Bevy</a>
+            </li>
+            
+          </ul>
+          
+        </li>
+        
+        <li>
+          <a class="h2" href="#mesh-conversion">Mesh Conversion</a>
+          
+          <ul>
+            
+            <li>
+              <a class="h3" href="#build-lod-0-meshlets">Build LOD 0 Meshlets</a>
+            </li>
+            
+            <li>
+              <a class="h3" href="#find-meshlet-edges">Find Meshlet Edges</a>
+            </li>
+            
+            <li>
+              <a class="h3" href="#find-connected-meshlets">Find Connected Meshlets</a>
+            </li>
+            
+            <li>
+              <a class="h3" href="#partition-meshlets-into-groups">Partition Meshlets Into Groups</a>
+            </li>
+            
+            <li>
+              <a class="h3" href="#simplify-groups">Simplify Groups</a>
+            </li>
+            
+            <li>
+              <a class="h3" href="#split-groups">Split Groups</a>
+            </li>
+            
+          </ul>
+          
+        </li>
+        
+        <li>
+          <a class="h2" href="#frame-breakdown">Frame Breakdown</a>
+          
+          <ul>
+            
+            <li>
+              <a class="h3" href="#terminology">Terminology</a>
+            </li>
+            
+            <li>
+              <a class="h3" href="#fill-cluster-buffers">Fill Cluster Buffers</a>
+            </li>
+            
+            <li>
+              <a class="h3" href="#culling-first-pass">Culling (First Pass)</a>
+            </li>
+            
+            <li>
+              <a class="h3" href="#raster-first-pass">Raster (First Pass)</a>
+            </li>
+            
+            <li>
+              <a class="h3" href="#downsample-depth">Downsample Depth</a>
+            </li>
+            
+            <li>
+              <a class="h3" href="#culling-second-pass">Culling (Second Pass)</a>
+            </li>
+            
+            <li>
+              <a class="h3" href="#raster-second-pass">Raster (Second Pass)</a>
+            </li>
+            
+            <li>
+              <a class="h3" href="#copy-material-depth">Copy Material Depth</a>
+            </li>
+            
+            <li>
+              <a class="h3" href="#material-shading">Material Shading</a>
+            </li>
+            
+            <li>
+              <a class="h3" href="#downsample-depth-again">Downsample Depth (Again)</a>
+            </li>
+            
+          </ul>
+          
+        </li>
+        
+        <li>
+          <a class="h2" href="#future-work">Future Work</a>
+          
+        </li>
+        
+      </ul>
+    </nav>
+    
+    
+    <button id="back-to-top" aria-label="back to top">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-up"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>
+
+    </button>
+    
+  </aside>
+  <main>
+    
+<header>
+  <nav>
+    <a id="back-link" href="https:&#x2F;&#x2F;jms55.github.io&#x2F;posts">← Back</a>
+  </nav>
+</header>
+
+
+    <div>
+      
+      
+      
+      
+      <div id="copy-cfg" style="display: none;" data-copy-icon="&lt;svg xmlns=&quot;http:&#x2F;&#x2F;www.w3.org&#x2F;2000&#x2F;svg&quot; viewBox=&quot;0 0 24 24&quot; width=&quot;18&quot; height=&quot;18&quot;&gt;&lt;path d=&quot;M6.9998 6V3C6.9998 2.44772 7.44752 2 7.9998 2H19.9998C20.5521 2 20.9998 2.44772 20.9998 3V17C20.9998 17.5523 20.5521 18 19.9998 18H16.9998V20.9991C16.9998 21.5519 16.5499 22 15.993 22H4.00666C3.45059 22 3 21.5554 3 20.9991L3.0026 7.00087C3.0027 6.44811 3.45264 6 4.00942 6H6.9998ZM5.00242 8L5.00019 20H14.9998V8H5.00242ZM8.9998 6H16.9998V16H18.9998V4H8.9998V6Z&quot; fill=&quot;currentColor&quot;&gt;&lt;&#x2F;path&gt;&lt;&#x2F;svg&gt;
+" data-check-icon="&lt;svg xmlns=&quot;http:&#x2F;&#x2F;www.w3.org&#x2F;2000&#x2F;svg&quot; viewBox=&quot;0 0 24 24&quot; width=&quot;18&quot; height=&quot;18&quot;&gt;&lt;path d=&quot;M10.0007 15.1709L19.1931 5.97852L20.6073 7.39273L10.0007 17.9993L3.63672 11.6354L5.05093 10.2212L10.0007 15.1709Z&quot; fill=&quot;currentColor&quot;&gt;&lt;&#x2F;path&gt;&lt;&#x2F;svg&gt;
+"></div>
+      
+      <article class="prose">
+        <h1>Virtual Geometry in Bevy 0.14</h1>
+        <div id="post-info">
+          <div id="date">
+            <span id="publish">Jun 9, 2024</span>
+            </div>
+
+          
+          <div id="tags">
+            <a class="instant" href="https://jms55.github.io/tags/bevy"><span>#</span>bevy</a><a class="instant" href="https://jms55.github.io/tags/virtual-geometry"><span>#</span>virtual geometry</a>
+          </div>
+          
+        </div>
+
+        
+        
+
+        
+
+        <h1 id="introduction">Introduction<a class="zola-anchor" href="#introduction" aria-label="Anchor link for: introduction" style="visibility: hidden;"></a>
+</h1>
+<p>The 0.14 release of the open source <a rel="nofollow noreferrer" href="https://bevyengine.org">Bevy</a> game engine is coming up, and with it, the release of an experimental virtual geometry feature that I've been working on for several months.</p>
+<p>In this blog post, I'm going to give a technical deep dive into Bevy's new "meshlet" feature, what improvements it brings, techniques I tried that did or did not work out, and what I'm looking to improve on in the future. There's a lot that I've learned (and a <em>lot</em> of code I've written and rewritten multiple times), and I'd like to share what I learned in the hope that it will help others.</p>
+<p><img src="https://jms55.github.io/posts/2024-06-09-virtual-geometry-bevy-0-14/showcase.png" alt="Example scene for the meshlet renderer" /></p>
+<p>This post is going to be <em>very</em> long, so I suggest reading over it (and the Nanite slides) a couple of times to get a general overview of the pieces involved, before spending any time analyzing individual steps. At the time of this writing, my blog theme dosen't have a table of contents sidebar that follows you as you scroll the page. I apologize for that. If you want to go back and reference previous sections as you read this post, I suggest using multiple browser tabs.</p>
+<p>I'd also like to take a moment to thank <a rel="nofollow noreferrer" href="https://github.com/LVSTRI">LVSTRI</a> and <a rel="nofollow noreferrer" href="https://jglrxavpok.github.io">jglrxavpok</a> for sharing their experiences with virtual geometry, <a rel="nofollow noreferrer" href="https://github.com/atlv24">atlv24</a> for their help in several areas, especially for their work adding some missing features I needed to wgpu/naga, other Bevy developers for testing and reviewing my PRs, Unreal Engine (Brian Karis, Rune Stubbe, Graham Wihlidal) for their <em>excellent</em> and highly detailed <a rel="nofollow noreferrer" href="https://advances.realtimerendering.com/s2021/Karis_Nanite_SIGGRAPH_Advances_2021_final.pdf">SIGGRAPH presentation</a>, and many more people than I can name who provided advice on this project.</p>
+<p>Code for this feature can be found <a rel="nofollow noreferrer" href="https://github.com/JMS55/bevy/tree/ca2c8e63b9562f88c8cd7e1d88a17a4eea20aaf4/crates/bevy_pbr/src/meshlet">on github</a>.</p>
+<p>If you're already familiar with Nanite, feel free to skip the next few sections of background info until you get to the Bevy-specific parts.</p>
+<h2 id="why-virtual-geometry">Why Virtual Geometry?<a class="zola-anchor" href="#why-virtual-geometry" aria-label="Anchor link for: why-virtual-geometry" style="visibility: hidden;"></a>
+</h2>
+<p>Before talking about what virtual geometry <em>is</em>, I think it's worth looking at what problems it is trying to <em>solve</em>.</p>
+<p>Lets go over the high level steps your typical <a rel="nofollow noreferrer" href="https://www.advances.realtimerendering.com/s2015/aaltonenhaar_siggraph2015_combined_final_footer_220dpi.pdf">pre-2015 renderer</a> would perform to render some basic geometry. I've omitted some steps that aren't relevant to this post such as uploading mesh and texture data, shadow map rendering, lighting, and other shading details.</p>
+<p>First, on the CPU:</p>
+<ul>
+<li>Frustum culling of instances outside of the camera's view</li>
+<li>Choosing the appropriate level of detail (LOD) for each instance</li>
+<li>Sorting and batching instances into multiple draw lists</li>
+<li>Recording draw calls into command buffers for each draw list</li>
+</ul>
+<p>Then, on the GPU:</p>
+<ul>
+<li>Setting up GPU state according to the command buffers</li>
+<li>Transforming vertices and rasterizing triangles</li>
+<li>Depth testing triangle fragments</li>
+<li>Shading visible fragments</li>
+</ul>
+<p>Now lets try taking this renderer, and feeding it a dense cityscape made of 500 million triangles, and 150 thousand instances of different meshes.</p>
+<p>It's going to be slow. Why? Lets look at some of the problems:</p>
+<ul>
+<li>Frustum culling lets us skip preparing or drawing instances that are outside the camera's frustum, but what if you have an instance that's only partially visible? The GPU still needs to transform, clip, and process all vertices in the mesh. Or, what if the entire scene is in the camera's frustum?</li>
+<li>If one instance is in front of another, it's a complete waste to draw an instance to the screen that will later be completely drawn over by another (overdraw).</li>
+<li>Sorting, batching, and encoding the command buffers for all those instances are going to be slow. Each instance likely has a different vertex and index buffer, different set of textures to bind, different shader (pipeline) for vertex and fragment processing, etc.</li>
+<li>The GPU will spend time spinning down and spinning back up as it switches state between each draw call.</li>
+</ul>
+<p>Now, it's no longer 2015, there are a variety of techniques (some from before 2015, that I purposefully left out) to alleviate a lot of these issues. Deferred shading or a depth-only prepass means overdraw is less costly, bindless techniques and ubershaders reduce state switching, multi-draw can reduce draw count, etc.</p>
+<p>However, there are some more subtle issues that come up:</p>
+<ul>
+<li>Storing all that mesh data in memory takes too much VRAM. Modern mid-tier desktop GPUs tend to have 8-12 GB of VRAM, which means all your mesh data and 4k textures need to be able to fit in that amount of storage.</li>
+<li>LODs were one of the steps that were meant to help reduce the amount of geometry you were feeding a GPU. However, they come with some downsides: 1) The transition between LODs tends to be noticable, even with a crossfade effect, 2) Artists need to spend time producing and tweaking LODs from their initial high-poly meshes, and 3) Like frustum culling, they don't help with the worst case of simply being close to a lot of high-poly geometry, unless you're willing to cap out at a lower resolution than the artist's original mesh.</li>
+</ul>
+<p>There's also another issue I've saved for last. Despite all the culling and batching and LODs, we still have <em>too much</em> geometry to draw every frame. We need a better way to deal with it than simple LODs.</p>
+<h2 id="what-is-virtual-geometry">What is Virtual Geometry?<a class="zola-anchor" href="#what-is-virtual-geometry" aria-label="Anchor link for: what-is-virtual-geometry" style="visibility: hidden;"></a>
+</h2>
+<p>With the introduction of Unreal Engine 5 in 2021 came the introduction of a new technique called <a rel="nofollow noreferrer" href="https://dev.epicgames.com/documentation/en-us/unreal-engine/nanite-virtualized-geometry-in-unreal-engine">Nanite</a>. Nanite is a system where you can preprocess your non-deforming opaque meshes, and at runtime be able to very efficiently render them, largely solving the above problems with draw counts, memory limits, high-poly mesh rasterization, and the deficiencies of traditional LODs.</p>
+<p>Nanite works by first splitting your base mesh into a series of meshlets - small, independent clusters of triangles. Nanite then takes those clusters, groups clusters together, and simplifies the groups into a smaller set of <em>new</em> clusters. By repeating this process, you get a tree of clusters where the leaves of the tree form the base mesh, and the root of the tree forms a simplified approximation of the base mesh.</p>
+<p>Now at runtime, we don't just have to render one level (LOD) of the tree. We can choose specific clusters from different levels of the tree so that if you're close to one part of the mesh, it'll render many high resolution clusters. If you're far from a different part of the mesh, however, then that part will use a couple low resolution clusters that are cheaper to render. Unlike traditional LODs, which are all or nothing, part of the mesh can be low resolution, part of the mesh can be high resolution, and a third part can be somewhere in between - all at the time same time, all on a very granular level.</p>
+<p>Additionally, the transitions between LODs can be virtually imperceptible and extremely smooth, without extra rendering work. Traditional LODs typically have to hide transitions with crossfaded opacity between two levels.</p>
+<p>Combine this LOD technique with some per-cluster culling, a visibility buffer, streaming in and out of individual cluster data to prevent high memory usage, a custom rasterizer, and a whole bunch of others parts, and you end up with a renderer that <em>can</em> deal with a scene made of 500 million triangles.</p>
+<p>I mentioned before that meshes have to be opaque, and can't deform or animate (for the initial release of Nanite in Unreal Engine 5.0 this is true, but it's an area Unreal is working to improve). Nanite isn't perfect - there are still limitations. But the ceiling of what's feasible is a lot higher.</p>
+<h2 id="virtual-geometry-in-bevy">Virtual Geometry in Bevy<a class="zola-anchor" href="#virtual-geometry-in-bevy" aria-label="Anchor link for: virtual-geometry-in-bevy" style="visibility: hidden;"></a>
+</h2>
+<p>Now that the background is out of the way, lets talk about Bevy. For Bevy 0.14, I've written an initial implementation that largely copies the basic ideas of how Nanite works, without implementing every single optimization and technique. Currently, the feature is called meshlets (likely to change to virtual_geometry or something else in the future). In a minute, I'll get into the actual frame breakdown and code for meshlets, but first lets start with the user-facing API.</p>
+<p>Users wanting to use meshlets should compile with the <code>meshlet</code> cargo feature at runtime, and <code>meshlet_processor</code> cargo feature for preprocessing meshes (again, more on how that works later) into the special meshlet-specific format the meshlet renderer uses.</p>
+<p>Enabling the <code>meshlet</code> feature unlocks a new module: <code>bevy::pbr::experimental::meshlet</code>.</p>
+<p>First step, add <code>MeshletPlugin</code> to your app:</p>
+<pre data-lang="rust" style="background-color:#002b36;color:#839496;" class="language-rust "><code class="language-rust" data-lang="rust"><span>app.</span><span style="color:#859900;">add_plugins</span><span style="color:#657b83;">(</span><span>MeshletPlugin</span><span style="color:#657b83;">)</span><span>;
+</span></code></pre>
+<p>Next, preprocess your <code>Mesh</code> into a <code>MeshletMesh</code>. Currently, this needs to be done manually via  <code>MeshletMesh::from_mesh()</code> (again, you need the <code>meshlet_processor</code> feature enabled). This step is <em>very</em> slow, and should be done once ahead of time, and then saved to an asset file. Note that there are limitations on the types of meshes and materials supported, make sure to read the docs.</p>
+<p>I'm in the <a rel="nofollow noreferrer" href="https://github.com/bevyengine/bevy/pull/13431">middle of working on</a> an asset processor system to automatically convert entire glTF scenes, but it's not quite ready yet. For now, you'll have to come up with your own asset processing and management system.</p>
+<p>Now, spawn your entities. In the same vein as <code>MeshMaterialBundle</code>, there's a <code>MeshletMeshMaterialBundle</code>, which uses a <code>MeshletMesh</code> instead of the typical <code>Mesh</code>.</p>
+<pre data-lang="rust" style="background-color:#002b36;color:#839496;" class="language-rust "><code class="language-rust" data-lang="rust"><span>commands.</span><span style="color:#859900;">spawn</span><span style="color:#657b83;">(</span><span>MaterialMeshletMeshBundle </span><span style="color:#657b83;">{
+</span><span>    meshlet_mesh: meshlet_mesh_handle.</span><span style="color:#859900;">clone</span><span style="color:#657b83;">()</span><span>,
+</span><span>    material: material_handle.</span><span style="color:#859900;">clone</span><span style="color:#657b83;">()</span><span>,
+</span><span>    transform: Transform::default</span><span style="color:#657b83;">()</span><span>.</span><span style="color:#859900;">with_translation</span><span style="color:#657b83;">(</span><span>Vec3::new</span><span style="color:#657b83;">(</span><span>x </span><span style="color:#859900;">as </span><span style="color:#268bd2;">f32 </span><span style="color:#657b83;">/ </span><span style="color:#6c71c4;">2.0</span><span>, </span><span style="color:#6c71c4;">0.0</span><span>, </span><span style="color:#6c71c4;">0.3</span><span style="color:#657b83;">))</span><span>,
+</span><span>    </span><span style="color:#859900;">..default</span><span style="color:#657b83;">()
+</span><span style="color:#657b83;">})</span><span>;
+</span></code></pre>
+<p>Lastly, a note on materials. Meshlet entities use the same <code>Material</code> trait as regular mesh entities. There are 3 new methods that meshlet entities use however: <code>meshlet_mesh_fragment_shader</code>, <code>meshlet_mesh_prepass_fragment_shader</code>, and <code>meshlet_mesh_deferred_fragment_shader</code>.</p>
+<p>Notice that there is no access to vertex shaders. Meshlet rendering uses a hardcoded vertex shader that cannot be changed.</p>
+<p>Fragment shaders for meshlets are mostly the same as fragment shaders for regular mesh entities. The key difference is that instead of this:</p>
+<pre data-lang="rust" style="background-color:#002b36;color:#839496;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#859900;">@</span><span>fragment
+</span><span style="color:#268bd2;">fn </span><span style="color:#b58900;">fragment</span><span style="color:#657b83;">(</span><span style="color:#268bd2;">vertex_output</span><span>: VertexOutput</span><span style="color:#657b83;">) </span><span>-&gt; </span><span style="color:#859900;">@location</span><span style="color:#657b83;">(</span><span style="color:#6c71c4;">0</span><span style="color:#657b83;">) </span><span>vec4&lt;</span><span style="color:#268bd2;">f32</span><span>&gt; </span><span style="color:#657b83;">{
+</span><span>    </span><span style="color:#586e75;">// ...
+</span><span style="color:#657b83;">}
+</span></code></pre>
+<p>You should use this:</p>
+<pre data-lang="rust" style="background-color:#002b36;color:#839496;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#859900;">#</span><span>import bevy_pbr::meshlet_visibility_buffer_resolve::resolve_vertex_output
+</span><span>
+</span><span style="color:#859900;">@</span><span>fragment
+</span><span style="color:#268bd2;">fn </span><span style="color:#b58900;">fragment</span><span style="color:#657b83;">(</span><span>@builtin</span><span style="color:#657b83;">(</span><span style="color:#268bd2;">position</span><span style="color:#657b83;">) </span><span style="color:#268bd2;">frag_coord</span><span>: vec4&lt;</span><span style="color:#268bd2;">f32</span><span>&gt;</span><span style="color:#657b83;">) </span><span>-&gt; </span><span style="color:#859900;">@location</span><span style="color:#657b83;">(</span><span style="color:#6c71c4;">0</span><span style="color:#657b83;">) </span><span>vec4&lt;</span><span style="color:#268bd2;">f32</span><span>&gt; </span><span style="color:#657b83;">{
+</span><span>    </span><span style="color:#268bd2;">let</span><span> vertex_output </span><span style="color:#657b83;">= </span><span style="color:#859900;">resolve_vertex_output</span><span style="color:#657b83;">(</span><span>frag_coord</span><span style="color:#657b83;">)</span><span>;
+</span><span>    </span><span style="color:#586e75;">// ...
+</span><span style="color:#657b83;">}
+</span></code></pre>
+<h1 id="mesh-conversion">Mesh Conversion<a class="zola-anchor" href="#mesh-conversion" aria-label="Anchor link for: mesh-conversion" style="visibility: hidden;"></a>
+</h1>
+<p>We're now going to start the portion of this blog post going into how everything is implemented.</p>
+<p>The first step, before we can render anything, is to convert all meshes to meshlet meshes. I talked about the user-facing API earlier on, but in this section we'll dive into what <code>MeshletMesh::from_mesh()</code> is doing under the hood in <code>from_mesh.rs</code>.</p>
+<p>This section will be a bit dry, lacking commentary on why I did things, in favor of just describing the algorithm itself. The reason is that I don't have many unique insights into the conversion process. The steps taken are pretty much just copied from Nanite (except Nanite does it better). If you're interested in understanding this section in greater detail, definitely check out the original Nanite presentation.</p>
+<p>Feel free to skip ahead to the frame breakdown section if you are more interested in the runtime portion of the renderer.</p>
+<p>The high level steps for converting a mesh are as follows:</p>
+<ol>
+<li>Build LOD 0 meshlets</li>
+<li>For each meshlet, find the set of all edges making up the triangles within the meshlet</li>
+<li>For each meshlet, find the set of connected meshlets (sharing an edge)</li>
+<li>Divide meshlets into groups of roughly 4</li>
+<li>For each group of meshlets, build a new list of triangles approximating the original group</li>
+<li>For each simplified group, break them apart into new meshlets</li>
+<li>Repeat steps 3-7 using the set of new meshlets, until we run out of meshlets to simplify</li>
+</ol>
+<p><img src="https://jms55.github.io/posts/2024-06-09-virtual-geometry-bevy-0-14/build_steps.png" alt="Nanite LOD build steps" /></p>
+<h2 id="build-lod-0-meshlets">Build LOD 0 Meshlets<a class="zola-anchor" href="#build-lod-0-meshlets" aria-label="Anchor link for: build-lod-0-meshlets" style="visibility: hidden;"></a>
+</h2>
+<p>We're starting with a generic triangle mesh, so the first step is to group its triangles into an initial set of meshlets. No simplification or modification of the mesh is involved - we're simply splitting up the original mesh into a set meshlets that would render exactly the same.</p>
+<p>The crate <code>meshopt-rs</code> provides Rust bindings to the excellent <code>meshoptimizer</code> library, which provides a nice <code>build_meshlets()</code> function for us that I've wrapped into <code>compute_meshlets()</code>.</p>
+<pre data-lang="rust" style="background-color:#002b36;color:#839496;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#586e75;">// Split the mesh into an initial list of meshlets (LOD 0)
+</span><span style="color:#268bd2;">let</span><span> vertex_buffer </span><span style="color:#657b83;">=</span><span> mesh.</span><span style="color:#859900;">get_vertex_buffer_data</span><span style="color:#657b83;">()</span><span>;
+</span><span style="color:#268bd2;">let</span><span> vertex_stride </span><span style="color:#657b83;">=</span><span> mesh.</span><span style="color:#859900;">get_vertex_size</span><span style="color:#657b83;">() </span><span style="color:#859900;">as </span><span style="color:#268bd2;">usize</span><span>;
+</span><span style="color:#268bd2;">let</span><span> vertices </span><span style="color:#657b83;">= </span><span>VertexDataAdapter::new</span><span style="color:#657b83;">(</span><span style="color:#859900;">&amp;</span><span>vertex_buffer, vertex_stride, </span><span style="color:#6c71c4;">0</span><span style="color:#657b83;">)</span><span>.</span><span style="color:#859900;">unwrap</span><span style="color:#657b83;">()</span><span>;
+</span><span style="color:#268bd2;">let </span><span style="color:#93a1a1;">mut</span><span> meshlets </span><span style="color:#657b83;">= </span><span style="color:#859900;">compute_meshlets</span><span style="color:#657b83;">(</span><span style="color:#859900;">&amp;</span><span>indices, </span><span style="color:#859900;">&amp;</span><span>vertices</span><span style="color:#657b83;">)</span><span>;
+</span></code></pre>
+<p>We also need some bounding spheres for each meshlet. The culling bounding sphere is straightforward - <code>compute_meshlet_bounds()</code>, again from <code>meshopt-rs</code>, will give us a bounding sphere encompassing the meshlet that we can use for frustum and occlusion culling later on.</p>
+<p>The <code>self_lod</code> and <code>parent_lod</code> bounding spheres need a lot more explanation.</p>
+<p>As we simplify each group of meshlets into new meshlets, we will deform the mesh slightly. That deformity adds up over time, eventually giving a very visibly different mesh from the original. However, when viewing the very simplified mesh from far away, due to perspective the difference will be much less noticable. While we would want to view the original (or close to the original) mesh close-up, at longer distances we can get away with rendering a much simpler version of the mesh without noticeable differences.</p>
+<p>So, how to choose the right LOD level, or in our case, the right LOD tree cut? The LOD cut will be based on the simplification error of each meshlet along the cut, with the goal being to select a cut that is imperceptibly different from the original mesh at the distance we're viewing the mesh at.</p>
+<p>For reasons I'll get into later during the runtime section, we're going to treat the error as a bounding sphere around the meshlet, with the radius being the error. We're also going to want two of these: one for the current meshlet itself, and one for the less-simplified group of meshlets that we simplified into the current meshlet (the current meshlet's parents in the LOD tree).</p>
+<p>LOD 0 meshlets, being the original representation of the mesh, have no error (0.0). They also have no set of parent meshlets, which we will represent with an infinite amount of error (f32::MAX), again for reasons I will get into later.</p>
+<pre data-lang="rust" style="background-color:#002b36;color:#839496;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#268bd2;">let </span><span style="color:#93a1a1;">mut</span><span> bounding_spheres </span><span style="color:#657b83;">=</span><span> meshlets
+</span><span>    .</span><span style="color:#859900;">iter</span><span style="color:#657b83;">()
+</span><span>    .</span><span style="color:#859900;">map</span><span style="color:#657b83;">(|</span><span style="color:#268bd2;">meshlet</span><span style="color:#657b83;">| </span><span style="color:#859900;">compute_meshlet_bounds</span><span style="color:#657b83;">(</span><span>meshlet, </span><span style="color:#859900;">&amp;</span><span>vertices</span><span style="color:#657b83;">))
+</span><span>    .</span><span style="color:#859900;">map</span><span style="color:#657b83;">(</span><span>convert_meshlet_bounds</span><span style="color:#657b83;">)
+</span><span>    .</span><span style="color:#859900;">map</span><span style="color:#657b83;">(|</span><span style="color:#268bd2;">bounding_sphere</span><span style="color:#657b83;">| </span><span>MeshletBoundingSpheres </span><span style="color:#657b83;">{
+</span><span>        self_culling: bounding_sphere,
+</span><span>        self_lod: MeshletBoundingSphere </span><span style="color:#657b83;">{
+</span><span>            center: bounding_sphere.center,
+</span><span>            radius: </span><span style="color:#6c71c4;">0.0</span><span>,
+</span><span>        </span><span style="color:#657b83;">}</span><span>,
+</span><span>        parent_lod: MeshletBoundingSphere </span><span style="color:#657b83;">{
+</span><span>            center: bounding_sphere.center,
+</span><span>            radius: </span><span style="color:#268bd2;">f32</span><span>::</span><span style="color:#cb4b16;">MAX</span><span>,
+</span><span>        </span><span style="color:#657b83;">}</span><span>,
+</span><span>    </span><span style="color:#657b83;">})
+</span><span>    .collect::&lt;</span><span style="color:#859900;">Vec</span><span>&lt;</span><span style="color:#859900;">_</span><span>&gt;&gt;</span><span style="color:#657b83;">()</span><span>;
+</span></code></pre>
+<h2 id="find-meshlet-edges">Find Meshlet Edges<a class="zola-anchor" href="#find-meshlet-edges" aria-label="Anchor link for: find-meshlet-edges" style="visibility: hidden;"></a>
+</h2>
+<p>Now that we have our initial set of meshlets, we can start simplifying.</p>
+<p>The first step is to find the set of triangle edges that make up each meshlet. This can be done with a simple loop over triangles, building a hashset of edges where each edge is ordered such that the smaller numbered vertex comes before the larger number vertex. This ensures that we don't accidentally add both (v1, v2) and (v2, v1), which conceptually are the same edge. Each triangle has 3 vertices and 3 edges.</p>
+<pre data-lang="rust" style="background-color:#002b36;color:#839496;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#268bd2;">let </span><span style="color:#93a1a1;">mut</span><span> meshlet_triangle_edges </span><span style="color:#657b83;">= </span><span>HashMap::new</span><span style="color:#657b83;">()</span><span>;
+</span><span style="color:#859900;">for</span><span> i </span><span style="color:#859900;">in</span><span> meshlet.triangles.</span><span style="color:#859900;">chunks</span><span style="color:#657b83;">(</span><span style="color:#6c71c4;">3</span><span style="color:#657b83;">) {
+</span><span>    </span><span style="color:#268bd2;">let</span><span> v0 </span><span style="color:#657b83;">=</span><span> meshlet.vertices</span><span style="color:#657b83;">[</span><span>i</span><span style="color:#657b83;">[</span><span style="color:#6c71c4;">0</span><span style="color:#657b83;">] </span><span style="color:#859900;">as </span><span style="color:#268bd2;">usize</span><span style="color:#657b83;">]</span><span>;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> v1 </span><span style="color:#657b83;">=</span><span> meshlet.vertices</span><span style="color:#657b83;">[</span><span>i</span><span style="color:#657b83;">[</span><span style="color:#6c71c4;">1</span><span style="color:#657b83;">] </span><span style="color:#859900;">as </span><span style="color:#268bd2;">usize</span><span style="color:#657b83;">]</span><span>;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> v2 </span><span style="color:#657b83;">=</span><span> meshlet.vertices</span><span style="color:#657b83;">[</span><span>i</span><span style="color:#657b83;">[</span><span style="color:#6c71c4;">2</span><span style="color:#657b83;">] </span><span style="color:#859900;">as </span><span style="color:#268bd2;">usize</span><span style="color:#657b83;">]</span><span>;
+</span><span>
+</span><span>    meshlet_triangle_edges.</span><span style="color:#859900;">insert</span><span style="color:#657b83;">((</span><span>v0.</span><span style="color:#859900;">min</span><span style="color:#657b83;">(</span><span>v1</span><span style="color:#657b83;">)</span><span>, v0.</span><span style="color:#859900;">max</span><span style="color:#657b83;">(</span><span>v1</span><span style="color:#657b83;">)))</span><span>;
+</span><span>    meshlet_triangle_edges.</span><span style="color:#859900;">insert</span><span style="color:#657b83;">((</span><span>v0.</span><span style="color:#859900;">min</span><span style="color:#657b83;">(</span><span>v2</span><span style="color:#657b83;">)</span><span>, v0.</span><span style="color:#859900;">max</span><span style="color:#657b83;">(</span><span>v2</span><span style="color:#657b83;">)))</span><span>;
+</span><span>    meshlet_triangle_edges.</span><span style="color:#859900;">insert</span><span style="color:#657b83;">((</span><span>v1.</span><span style="color:#859900;">min</span><span style="color:#657b83;">(</span><span>v2</span><span style="color:#657b83;">)</span><span>, v1.</span><span style="color:#859900;">max</span><span style="color:#657b83;">(</span><span>v2</span><span style="color:#657b83;">)))</span><span>;
+</span><span style="color:#657b83;">}
+</span></code></pre>
+<h2 id="find-connected-meshlets">Find Connected Meshlets<a class="zola-anchor" href="#find-connected-meshlets" aria-label="Anchor link for: find-connected-meshlets" style="visibility: hidden;"></a>
+</h2>
+<p>Next, we need to find the meshlets that connect to each other.</p>
+<p>A meshlet will be considered as connected to another meshlet if both meshlets share at least one edge.</p>
+<p>In the previous step, we built a set of edges for each meshlet. Finding if two meshlets share any edges can be done by simply taking the intersection of their two edge sets, and checking if the resulting set is not empty.</p>
+<p>We will also store the <em>amount</em> of shared edges between two meshlets, giving a heuristic for how "connected" each meshlet is to another. This is simply the size of the intersection set.</p>
+<p>Overally, we will build a list per meshlet, containing tuples of (meshlet_id, shared_edge_count) for each meshlet connected to the current meshlet.</p>
+<pre data-lang="rust" style="background-color:#002b36;color:#839496;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#859900;">for </span><span style="color:#657b83;">(</span><span>meshlet_id1, meshlet_id2</span><span style="color:#657b83;">) </span><span style="color:#859900;">in</span><span> simplification_queue.</span><span style="color:#859900;">tuple_combinations</span><span style="color:#657b83;">() {
+</span><span>    </span><span style="color:#268bd2;">let</span><span> shared_edge_count </span><span style="color:#657b83;">=</span><span> triangle_edges_per_meshlet</span><span style="color:#657b83;">[</span><span style="color:#859900;">&amp;</span><span>meshlet_id1</span><span style="color:#657b83;">]
+</span><span>        .</span><span style="color:#859900;">intersection</span><span style="color:#657b83;">(</span><span style="color:#859900;">&amp;</span><span>triangle_edges_per_meshlet</span><span style="color:#657b83;">[</span><span style="color:#859900;">&amp;</span><span>meshlet_id2</span><span style="color:#657b83;">])
+</span><span>        .</span><span style="color:#859900;">count</span><span style="color:#657b83;">()</span><span>;
+</span><span>
+</span><span>    </span><span style="color:#859900;">if</span><span> shared_edge_count </span><span style="color:#657b83;">!= </span><span style="color:#6c71c4;">0 </span><span style="color:#657b83;">{
+</span><span>        connected_meshlets_per_meshlet
+</span><span>            .</span><span style="color:#859900;">get_mut</span><span style="color:#657b83;">(</span><span style="color:#859900;">&amp;</span><span>meshlet_id1</span><span style="color:#657b83;">)
+</span><span>            .</span><span style="color:#859900;">unwrap</span><span style="color:#657b83;">()
+</span><span>            .</span><span style="color:#859900;">push</span><span style="color:#657b83;">((</span><span>meshlet_id2, shared_edge_count</span><span style="color:#657b83;">))</span><span>;
+</span><span>        connected_meshlets_per_meshlet
+</span><span>            .</span><span style="color:#859900;">get_mut</span><span style="color:#657b83;">(</span><span style="color:#859900;">&amp;</span><span>meshlet_id2</span><span style="color:#657b83;">)
+</span><span>            .</span><span style="color:#859900;">unwrap</span><span style="color:#657b83;">()
+</span><span>            .</span><span style="color:#859900;">push</span><span style="color:#657b83;">((</span><span>meshlet_id1, shared_edge_count</span><span style="color:#657b83;">))</span><span>;
+</span><span>    </span><span style="color:#657b83;">}
+</span><span style="color:#657b83;">}
+</span></code></pre>
+<h2 id="partition-meshlets-into-groups">Partition Meshlets Into Groups<a class="zola-anchor" href="#partition-meshlets-into-groups" aria-label="Anchor link for: partition-meshlets-into-groups" style="visibility: hidden;"></a>
+</h2>
+<p>Now that we know which meshlets are connected, the next step is to group them together. We're going to aim for 4 meshlets per group, although there's no way of guaranteeing that.</p>
+<p>How should we determine which meshlets go in which group?</p>
+<p>You can view the connected meshlet sets as a graph. Each meshlet is a node, and bidirectional edges connect one meshlet to another in the graph if we determined that they were connected earlier. The weight of each edge is the amount of shared edges between the two meshlet nodes.</p>
+<p>Partitioning the meshlets into groups is now a matter of partitioning the graph. I use the <code>metis-rs</code> crate which provides Rust bindings to the <code>METIS</code> library. The edge weights will be used so that meshlets with a high shared edge count are more likely to be group together.</p>
+<p>The code to format this data for metis is a bit complicated, but in the end we have a list of groups, where each group is a list of meshlets.</p>
+<h2 id="simplify-groups">Simplify Groups<a class="zola-anchor" href="#simplify-groups" aria-label="Anchor link for: simplify-groups" style="visibility: hidden;"></a>
+</h2>
+<p>Now for an important step, and the most tricky.</p>
+<p>We take each group, and merge the triangle lists of the underlying meshlets together into one large list of triangles, forming a new mesh.</p>
+<p>Now, we can simplify this new mesh into a lower-resolution (faster to render) version. Meshopt again provides a helpful <code>simplify()</code> function for us. Finally, less triangles to render!</p>
+<p>In addition to the new mesh, we get an "error" value, describing how much the mesh deformed by when simplifying.</p>
+<p>The quadratic error metric (QEM) returned from simplifying is a somewhat meaningless value, but we can use <code>simplify_scale()</code> to get an object-space value. This value is <em>still</em> fairly meaningless, but we can treat it as the maximum amount of object-space distance a vertex was displaced by during simplification.</p>
+<p>The error represents displacement from the meshlets we simplified, but we want the displacement from the original (LOD 0) meshlets. We can add the max error of the meshlets that went into building the current meshlet group (child nodes of the parent node that we're currently building in the LOD tree) to make the error relative to LOD 0.</p>
+<p>If this all feels handwavy to you, that's because it is. And this is vertex positions only; we haven't even considered UV error during simplification, or how the mesh's eventual material influences perceptual differences between LOD levels. Perceptual simplification is very much an unsolved problem in computer graphics, and for now Bevy only uses positions for simplification.</p>
+<p>You'll have to take my word for it that using the error like this works. You'll see how it gets used to pick the LOD level during runtime in a later section. For now, we'll take the group error and build a bounding sphere out of it, and assign it as the parent LOD bounding sphere for the group's (parent node, higher LOD) underlying meshlets (child nodes, lower LOD).</p>
+<pre data-lang="rust" style="background-color:#002b36;color:#839496;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#586e75;">// Simplify the group to ~50% triangle count
+</span><span style="color:#268bd2;">let </span><span style="color:#859900;">Some</span><span style="color:#657b83;">((</span><span>simplified_group_indices, </span><span style="color:#93a1a1;">mut</span><span> group_error</span><span style="color:#657b83;">)) =
+</span><span>    </span><span style="color:#859900;">simplify_meshlet_groups</span><span style="color:#657b83;">(</span><span>group_meshlets, </span><span style="color:#859900;">&amp;</span><span>meshlets, </span><span style="color:#859900;">&amp;</span><span>vertices, lod_level</span><span style="color:#657b83;">)
+</span><span style="color:#859900;">else </span><span style="color:#657b83;">{
+</span><span>    </span><span style="color:#859900;">continue</span><span>;
+</span><span style="color:#657b83;">}</span><span>;
+</span><span>
+</span><span style="color:#586e75;">// Add the maximum child error to the parent error to make parent error cumulative from LOD 0
+</span><span style="color:#586e75;">// (we&#39;re currently building the parent from its children)
+</span><span>group_error </span><span style="color:#657b83;">+=</span><span> group_meshlets.</span><span style="color:#859900;">iter</span><span style="color:#657b83;">()</span><span>.</span><span style="color:#859900;">fold</span><span style="color:#657b83;">(</span><span>group_error, </span><span style="color:#657b83;">|</span><span style="color:#268bd2;">acc</span><span>, </span><span style="color:#268bd2;">meshlet_id</span><span style="color:#657b83;">| {
+</span><span>    acc.</span><span style="color:#859900;">max</span><span style="color:#657b83;">(</span><span>bounding_spheres</span><span style="color:#657b83;">[*</span><span>meshlet_id</span><span style="color:#657b83;">]</span><span>.self_lod.radius</span><span style="color:#657b83;">)
+</span><span style="color:#657b83;">})</span><span>;
+</span><span>
+</span><span style="color:#586e75;">// Build a new LOD bounding sphere for the simplified group as a whole
+</span><span style="color:#268bd2;">let </span><span style="color:#93a1a1;">mut</span><span> group_bounding_sphere </span><span style="color:#657b83;">= </span><span style="color:#859900;">convert_meshlet_bounds</span><span style="color:#657b83;">(</span><span style="color:#859900;">compute_cluster_bounds</span><span style="color:#657b83;">(
+</span><span>    </span><span style="color:#859900;">&amp;</span><span>simplified_group_indices,
+</span><span>    </span><span style="color:#859900;">&amp;</span><span>vertices,
+</span><span style="color:#657b83;">))</span><span>;
+</span><span>group_bounding_sphere.radius </span><span style="color:#657b83;">=</span><span> group_error;
+</span><span>
+</span><span style="color:#586e75;">// For each meshlet in the group set their parent LOD bounding sphere to that of the simplified group
+</span><span style="color:#859900;">for</span><span> meshlet_id </span><span style="color:#859900;">in</span><span> group_meshlets </span><span style="color:#657b83;">{
+</span><span>    bounding_spheres</span><span style="color:#657b83;">[*</span><span>meshlet_id</span><span style="color:#657b83;">]</span><span>.parent_lod </span><span style="color:#657b83;">=</span><span> group_bounding_sphere;
+</span><span style="color:#657b83;">}
+</span></code></pre>
+<h2 id="split-groups">Split Groups<a class="zola-anchor" href="#split-groups" aria-label="Anchor link for: split-groups" style="visibility: hidden;"></a>
+</h2>
+<p>Finally, the last step is to take the large mesh formed from simplifying the entire meshlet group, and split it into a set of brand new meshlets.</p>
+<p>This is in fact the same process as splitting the original mesh into meshlets.</p>
+<p>If everything went optimally, we should have gone from the original 4 meshlets per group, to 2 new meshlets per group with 50% less triangles overall.</p>
+<p>For each new meshlet, we'll calculate a bounding sphere for culling, assign the self_lod bounding sphere as that of the group, and the parent_lod bounding sphere again as uninitialized.</p>
+<pre data-lang="rust" style="background-color:#002b36;color:#839496;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#586e75;">// Build new meshlets using the simplified group
+</span><span style="color:#268bd2;">let</span><span> new_meshlets_count </span><span style="color:#657b83;">= </span><span style="color:#859900;">split_simplified_groups_into_new_meshlets</span><span style="color:#657b83;">(
+</span><span>    </span><span style="color:#859900;">&amp;</span><span>simplified_group_indices,
+</span><span>    </span><span style="color:#859900;">&amp;</span><span>vertices,
+</span><span>    </span><span style="color:#859900;">&amp;</span><span style="color:#93a1a1;">mut</span><span> meshlets,
+</span><span style="color:#657b83;">)</span><span>;
+</span><span>
+</span><span style="color:#586e75;">// Calculate the culling bounding sphere for the new meshlets and set their LOD bounding spheres
+</span><span style="color:#268bd2;">let</span><span> new_meshlet_ids </span><span style="color:#657b83;">= (</span><span>meshlets.</span><span style="color:#859900;">len</span><span style="color:#657b83;">() -</span><span> new_meshlets_count</span><span style="color:#657b83;">)</span><span style="color:#859900;">..</span><span>meshlets.</span><span style="color:#859900;">len</span><span style="color:#657b83;">()</span><span>;
+</span><span>bounding_spheres.</span><span style="color:#859900;">extend</span><span style="color:#657b83;">(
+</span><span>    new_meshlet_ids
+</span><span>        .</span><span style="color:#859900;">map</span><span style="color:#657b83;">(|</span><span style="color:#268bd2;">meshlet_id</span><span style="color:#657b83;">| {
+</span><span>            </span><span style="color:#859900;">compute_meshlet_bounds</span><span style="color:#657b83;">(</span><span>meshlets.</span><span style="color:#859900;">get</span><span style="color:#657b83;">(</span><span>meshlet_id</span><span style="color:#657b83;">)</span><span>, </span><span style="color:#859900;">&amp;</span><span>vertices</span><span style="color:#657b83;">)
+</span><span>        </span><span style="color:#657b83;">})
+</span><span>        .</span><span style="color:#859900;">map</span><span style="color:#657b83;">(</span><span>convert_meshlet_bounds</span><span style="color:#657b83;">)
+</span><span>        .</span><span style="color:#859900;">map</span><span style="color:#657b83;">(|</span><span style="color:#268bd2;">bounding_sphere</span><span style="color:#657b83;">| </span><span>MeshletBoundingSpheres </span><span style="color:#657b83;">{
+</span><span>            self_culling: bounding_sphere,
+</span><span>            self_lod: group_bounding_sphere,
+</span><span>            parent_lod: MeshletBoundingSphere </span><span style="color:#657b83;">{
+</span><span>                center: group_bounding_sphere.center,
+</span><span>                radius: </span><span style="color:#268bd2;">f32</span><span>::</span><span style="color:#cb4b16;">MAX</span><span>,
+</span><span>            </span><span style="color:#657b83;">}</span><span>,
+</span><span>        </span><span style="color:#657b83;">})</span><span>,
+</span><span style="color:#657b83;">)</span><span>;
+</span></code></pre>
+<p>We can repeat this whole process several times, ideally getting down to a single meshlet forming the root of the LOD tree. In practice, my current code can't get to that point for most meshes.</p>
+<h1 id="frame-breakdown">Frame Breakdown<a class="zola-anchor" href="#frame-breakdown" aria-label="Anchor link for: frame-breakdown" style="visibility: hidden;"></a>
+</h1>
+<p>With the asset processing part out of the way, we can finally move onto the more interesting runtime code section.</p>
+<p>The frame capture we'll be looking at is this scene with 3092 copies of the Stanford Bunny. Five of the bunnies are using unique PBR materials (they're hiding in the top middle), while the rest use the same debug material that visualizes the clusters/triangles of the mesh. Each bunny is made of 144,042 triangles at LOD 0, with 4936 meshlets total in the LOD tree.</p>
+<p>GPU timings were measured on a RTX 3080 locked to base clock speeds (so not as fast as you would actually get in practice), rendering at 2240x1260, averaged over 10 frames.</p>
+<blockquote>
+<p>Clusters visualization
+<img src="https://jms55.github.io/posts/2024-06-09-virtual-geometry-bevy-0-14/clusters.png" alt="Clusters visualization" />
+Triangles visualization
+<img src="https://jms55.github.io/posts/2024-06-09-virtual-geometry-bevy-0-14/triangles.png" alt="Triangles visualization" /></p>
+</blockquote>
+<blockquote>
+<p>NSight profile
+<img src="https://jms55.github.io/posts/2024-06-09-virtual-geometry-bevy-0-14/nsight.png" alt="NSight profile" /></p>
+</blockquote>
+<p>The frame can be broken down into the following passes:</p>
+<ol>
+<li>Fill cluster buffers (0.22ms)</li>
+<li>Cluster culling first pass (0.49ms)</li>
+<li>Raster visbuffer first pass (1.85ms +/- 0.33ms)</li>
+<li>Build depth pyramid for second pass (0.03ms)</li>
+<li>Cluster culling second pass (0.11ms)</li>
+<li>Raster visbuffer second pass (&lt; 0.01ms)</li>
+<li>Copy material depth (0.04ms)</li>
+<li>Material shading (timings omitted as this is a poor test for materials)</li>
+<li>Build depth pyramid for next frame (0.03ms)</li>
+</ol>
+<p>Total GPU time is ~2.78ms +/- 0.33ms.</p>
+<p>There's a lot to cover, so I'm going to try and keep it fairly brief in each section. The high level concepts of all of these passes (besides the first pass) are copied from Nanite, so check out their presentation for further details. I'll be trying to focus more on the lower level code and reasons why I implemented things the way I did. My first attempt at a lot of these passes had bugs, and was way slower. The details and data flow is what takes the concept from a neat tech demo, to an actually usable and scalable renderer.</p>
+<h2 id="terminology">Terminology<a class="zola-anchor" href="#terminology" aria-label="Anchor link for: terminology" style="visibility: hidden;"></a>
+</h2>
+<p>First, some terminology:</p>
+<ul>
+<li><code>asset buffers</code> - When a new MeshletMesh asset is loaded, we copy the buffers it's made of into large suballocated buffers. All the vertex data, meshlet data, bounding spheres, etc for multiple MeshletMesh assets are packed together into one large buffer per data type.</li>
+<li><code>instance</code> - A single Bevy entity with a MeshletMesh and Material.</li>
+<li><code>instance uniform</code> - A transform matrix and mesh flags for an instance.</li>
+<li><code>material</code> - A combination of pipeline and bind group used for shading fragments.</li>
+<li><code>meshlet</code> - A single meshlet from within a MeshletMesh asset, pointing to data within the asset buffers (more or less).</li>
+<li><code>cluster</code> - A single renderable piece of an entity. Each cluster is associated with an instance and a meshlet.
+<ul>
+<li>All of our shaders will operate on clusters, and <em>not</em> on meshlets. You can think of these like an instance of a meshlet for a specific entity, in the same way you can have an instance of a class in object-oriented programming languages.</li>
+<li>Up to this point I've been using meshlet and cluster interchangeably. From now on, they have seperate, defined meanings.</li>
+</ul>
+</li>
+<li><code>view</code> - A perspective or orthographic camera with an associated depth buffer and optional color output. The main camera is a view, and additional views can be dynamically generated for e.g. rendering shadowmaps.</li>
+<li><code>id</code> - A u32 index into a buffer.</li>
+</ul>
+<h2 id="fill-cluster-buffers">Fill Cluster Buffers<a class="zola-anchor" href="#fill-cluster-buffers" aria-label="Anchor link for: fill-cluster-buffers" style="visibility: hidden;"></a>
+</h2>
+<p>Now the first pass we're going to look at might be surprising.</p>
+<p>Over the course of the frame, for each cluster we will need its instance (giving us a transform and material), along with its meshlet (giving us vertex data and bounding spheres).</p>
+<p>While the cluster itself is implicit (each thread or workgroup of a shader will handle one cluster, with the global thread/workgroup ID being the cluster ID), we need some method of telling the GPU what the instance and meshlet for each cluster is.</p>
+<p>I.e., we need an array of instance IDs and meshlet IDs such that we can do <code>let cluster_instance = instances[cluster_instance_ids[cluster_id]]</code> and <code>let cluster_meshlet = meshlets[cluster_meshlet_ids[cluster_id]]</code>.</p>
+<p>The naive method would be to simply write out these two buffers from the CPU and transfer them to the GPU. This was how I implemented it initially, and it worked fine for my simple initial test scene with a single bunny, but I very quickly ran into performance problems when trying to scale up to rendering 3000 bunnies.</p>
+<p>Each ID is a 4-byte u32, and it's two IDs per cluster. That's 8 bytes per cluster.</p>
+<p>With 3092 bunnies in the scene, and 4936 meshlets per bunny, that's 8 * 3092 * 4936 bytes total = ~122.10 MBs total.</p>
+<p>For dedicated GPUs, uploading data from the system's RAM to the GPU's VRAM is done over PCIe. PCIe x16 Gen3 max bandwidth is 16 GB/s.</p>
+<p>Ignoring data copying costs and other overhead, and assuming max PCIe bandwidth, that would mean it would take ~7.63ms to upload cluster data. That's 7.63 / 16.6 = ~46% of our frame budget gone at 60fps, before we've even rendered anything! Obviously, we need a better method.</p>
+<hr />
+<p>Instead of uploading per-cluster data, we're going to stick to uploading only per-instance data. Specifically, two buffers called <code>instance_meshlet_counts_prefix_sum</code> and <code>instance_meshlet_slice_starts</code>. Each buffer will be an array of integers, with an entry per instance.</p>
+<p>The former will contain a prefix sum (calculated on the CPU while writing out the buffer) of how many meshlets each instance is made of. The latter will contain the index of where in the meshlet asset buffer each instance's list of meshlets begin.</p>
+<p>Now we're uploading only 8 bytes per <em>instance</em>, and not per <em>cluster</em>, which is much, much cheaper. Looking back at our scene, we're uploading 3092 * 8 bytes total = ~0.025 MBs total. This is a <em>huge</em> improvement over the ~122.10 MBs from before.</p>
+<p>Once the GPU has this data, we can have the GPU write out the <code>cluster_instance_ids</code> and <code>cluster_meshlet_ids</code> buffers from a compute shader. Max VRAM bandwidth on my RTX 3080 is a whopping 760.3 GB/s; ~47.5x faster than the 16 GB/s of bandwidth we had over PCIe.</p>
+<p>Each thread of the compute shader will handle one cluster, and do a binary search over the prefix sum array to find to what instance it belongs to.</p>
+<p>Binary search might seem surprising - it's multiple dependent divergent memory accesses within a thread, and one of the biggest performance metrics for GPU code is cache efficiency. However, it's very coherent <em>across</em> threads within the subgroup, and scales extremely well (O log n) with the number of instances in the scene. In practice, while it could be improved, the performance of this pass has not been a bottleneck.</p>
+<p>Now that we know what instance the cluster belongs to, it's trivial to calculate the meshlet index of the cluster within the instance's meshlet mesh asset. Adding that to the instance's meshlet_slice_start using the other buffer we uploaded gives us the global meshlet index within the overall meshlet asset buffer. The thread can then write out the two calculated IDs for the cluster.</p>
+<p>This is the only pass that runs once per-frame. The rest of the passes all run once per-view.</p>
+<pre data-lang="rust" style="background-color:#002b36;color:#839496;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#586e75;">/// Writes out instance_id and meshlet_id to the global buffers for each cluster in the scene.
+</span><span>
+</span><span style="color:#859900;">@</span><span>compute
+</span><span style="color:#859900;">@workgroup_size</span><span style="color:#657b83;">(</span><span style="color:#6c71c4;">128</span><span>, </span><span style="color:#6c71c4;">1</span><span>, </span><span style="color:#6c71c4;">1</span><span style="color:#657b83;">) </span><span style="color:#586e75;">// 128 threads per workgroup, 1 cluster per thread
+</span><span style="color:#268bd2;">fn </span><span style="color:#b58900;">fill_cluster_buffers</span><span style="color:#657b83;">(
+</span><span>    @builtin</span><span style="color:#657b83;">(</span><span style="color:#268bd2;">workgroup_id</span><span style="color:#657b83;">) </span><span style="color:#268bd2;">workgroup_id</span><span>: vec3&lt;</span><span style="color:#268bd2;">u32</span><span>&gt;,
+</span><span>    @builtin</span><span style="color:#657b83;">(</span><span style="color:#268bd2;">num_workgroups</span><span style="color:#657b83;">) </span><span style="color:#268bd2;">num_workgroups</span><span>: vec3&lt;</span><span style="color:#268bd2;">u32</span><span>&gt;,
+</span><span>    @builtin</span><span style="color:#657b83;">(</span><span style="color:#268bd2;">local_invocation_id</span><span style="color:#657b83;">) </span><span style="color:#268bd2;">local_invocation_id</span><span>: vec3&lt;</span><span style="color:#268bd2;">u32</span><span>&gt;
+</span><span style="color:#657b83;">) {
+</span><span>    </span><span style="color:#586e75;">// Calculate the cluster ID for this thread
+</span><span>    </span><span style="color:#268bd2;">let</span><span> cluster_id </span><span style="color:#657b83;">=</span><span> local_invocation_id.x </span><span style="color:#657b83;">+</span><span> 128u </span><span style="color:#657b83;">* </span><span style="color:#859900;">dot</span><span style="color:#657b83;">(</span><span>workgroup_id, </span><span style="color:#859900;">vec3</span><span style="color:#657b83;">(</span><span>num_workgroups.x </span><span style="color:#657b83;">*</span><span> num_workgroups.x, num_workgroups.x, 1u</span><span style="color:#657b83;">))</span><span>;
+</span><span>    </span><span style="color:#859900;">if</span><span> cluster_id </span><span style="color:#657b83;">&gt;=</span><span> cluster_count </span><span style="color:#657b83;">{ </span><span style="color:#859900;">return</span><span>; </span><span style="color:#657b83;">}
+</span><span>
+</span><span>    </span><span style="color:#586e75;">// Binary search to find the instance this cluster belongs to
+</span><span>    var left </span><span style="color:#657b83;">=</span><span> 0u;
+</span><span>    var right </span><span style="color:#657b83;">=</span><span> arrayLength</span><span style="color:#657b83;">(</span><span style="color:#859900;">&amp;</span><span>meshlet_instance_meshlet_counts_prefix_sum</span><span style="color:#657b83;">) -</span><span> 1u;
+</span><span>    </span><span style="color:#859900;">while</span><span> left </span><span style="color:#657b83;">&lt;=</span><span> right </span><span style="color:#657b83;">{
+</span><span>        </span><span style="color:#268bd2;">let</span><span> mid </span><span style="color:#657b83;">= (</span><span>left </span><span style="color:#657b83;">+</span><span> right</span><span style="color:#657b83;">) /</span><span> 2u;
+</span><span>        </span><span style="color:#859900;">if</span><span> meshlet_instance_meshlet_counts_prefix_sum</span><span style="color:#657b83;">[</span><span>mid</span><span style="color:#657b83;">] &lt;=</span><span> cluster_id </span><span style="color:#657b83;">{
+</span><span>            left </span><span style="color:#657b83;">=</span><span> mid </span><span style="color:#657b83;">+</span><span> 1u;
+</span><span>        </span><span style="color:#657b83;">} </span><span style="color:#859900;">else </span><span style="color:#657b83;">{
+</span><span>            right </span><span style="color:#657b83;">=</span><span> mid </span><span style="color:#657b83;">-</span><span> 1u;
+</span><span>        </span><span style="color:#657b83;">}
+</span><span>    </span><span style="color:#657b83;">}
+</span><span>    </span><span style="color:#268bd2;">let</span><span> instance_id </span><span style="color:#657b83;">=</span><span> right;
+</span><span>
+</span><span>    </span><span style="color:#586e75;">// Find the meshlet ID for this cluster within the instance&#39;s MeshletMesh
+</span><span>    </span><span style="color:#268bd2;">let</span><span> meshlet_id_local </span><span style="color:#657b83;">=</span><span> cluster_id </span><span style="color:#657b83;">-</span><span> meshlet_instance_meshlet_counts_prefix_sum</span><span style="color:#657b83;">[</span><span>instance_id</span><span style="color:#657b83;">]</span><span>;
+</span><span>
+</span><span>    </span><span style="color:#586e75;">// Find the overall meshlet ID in the global meshlet buffer
+</span><span>    </span><span style="color:#268bd2;">let</span><span> meshlet_id </span><span style="color:#657b83;">=</span><span> meshlet_id_local </span><span style="color:#657b83;">+</span><span> meshlet_instance_meshlet_slice_starts</span><span style="color:#657b83;">[</span><span>instance_id</span><span style="color:#657b83;">]</span><span>;
+</span><span>
+</span><span>    </span><span style="color:#586e75;">// Write results to buffers
+</span><span>    meshlet_cluster_instance_ids</span><span style="color:#657b83;">[</span><span>cluster_id</span><span style="color:#657b83;">] =</span><span> instance_id;
+</span><span>    meshlet_cluster_meshlet_ids</span><span style="color:#657b83;">[</span><span>cluster_id</span><span style="color:#657b83;">] =</span><span> meshlet_id;
+</span><span style="color:#657b83;">}
+</span></code></pre>
+<h2 id="culling-first-pass">Culling (First Pass)<a class="zola-anchor" href="#culling-first-pass" aria-label="Anchor link for: culling-first-pass" style="visibility: hidden;"></a>
+</h2>
+<p>I mentioned earlier that frustum culling is not sufficent for complex scenes. With meshlets, we're going to have a <em>lot</em> of geometry in view at once. Rendering all of that is way too expensive, and unnecessary. It's a complete waste to spend time rendering a bunch of detailed rocks and trees, only to draw a wall in front of it later on (overdraw).</p>
+<p>Two pass occlusion culling is the method that we're going to use to reduce overdraw. We're going to start by drawing all the clusters that actually contributed to the rendered image last frame, under the assumption that those are a good approximation of what will contribute to the rendered image <em>this</em> frame. That's the first pass. Then, we can build a depth pyramid, and use that to cull all the clusters that we didn't look at in the first pass, i.e. that didn't render last frame. The clusters that survive the culling get drawn. That's the second pass.</p>
+<p>In the example with the wall with the rocks and trees behind it, we could see that last frame the wall clusters contributed pixels to the final image, but none of the rock or tree clusters did. Therefore in the first pass, we would draw only the wall, and then build a depth pyramid from the resulting depth. In the second pass, we would test the remaining clusters (all the trees and rocks) against the depth pyramid, and see that they would still be occluded by the wall, and therefore we can skip drawing them. If there were some new rocks that came into view as we peeked around the corner, they'd be drawn here. The second pass functions as a cleanup pass, for rendering the objects that we missed in the first pass.</p>
+<p>Done correctly, two pass occlusion culling reduces the amount of clusters we draw in an average frame, saving rendering time without any visible artifacts.</p>
+<h3 id="initial-cluster-processing">Initial Cluster Processing<a class="zola-anchor" href="#initial-cluster-processing" aria-label="Anchor link for: initial-cluster-processing" style="visibility: hidden;"></a>
+</h3>
+<p>Before we start looking at the algorithm steps and code, I'd like to note that this shader is very performance and bug sensitive. I've written and rewritten it several times. While the concepts are simple, it's easy to break the culling, and the choices in data management that we make here affect the rest of the rendering pipeline quite significantly.</p>
+<p>This is going to be a long and complicated shader, so let's dive into it.</p>
+<p>The first pass of occlusion culling is another compute shader dispatch with one thread per cluster. A minor detail that I didn't mention last time we saw this pattern, is that with millions of clusters in a scene, you would quickly hit the limit of the maximum number of workgroups you can spawn per dispatch dimension if you did a 1d dispatch over all clusters. To work around this, we instead we do a 3d dispatch with each dimension of size <code>ceil(cbrt(workgroup_count))</code>. We can then swizzle the workgroup and thread indices back to 1d in the shader.</p>
+<pre data-lang="rust" style="background-color:#002b36;color:#839496;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#859900;">@</span><span>compute
+</span><span style="color:#859900;">@workgroup_size</span><span style="color:#657b83;">(</span><span style="color:#6c71c4;">128</span><span>, </span><span style="color:#6c71c4;">1</span><span>, </span><span style="color:#6c71c4;">1</span><span style="color:#657b83;">) </span><span style="color:#586e75;">// 128 threads per workgroup, 1 cluster per thread
+</span><span style="color:#268bd2;">fn </span><span style="color:#b58900;">cull_meshlets</span><span style="color:#657b83;">(
+</span><span>    @builtin</span><span style="color:#657b83;">(</span><span style="color:#268bd2;">workgroup_id</span><span style="color:#657b83;">) </span><span style="color:#268bd2;">workgroup_id</span><span>: vec3&lt;</span><span style="color:#268bd2;">u32</span><span>&gt;,
+</span><span>    @builtin</span><span style="color:#657b83;">(</span><span style="color:#268bd2;">num_workgroups</span><span style="color:#657b83;">) </span><span style="color:#268bd2;">num_workgroups</span><span>: vec3&lt;</span><span style="color:#268bd2;">u32</span><span>&gt;,
+</span><span>    @builtin</span><span style="color:#657b83;">(</span><span style="color:#268bd2;">local_invocation_id</span><span style="color:#657b83;">) </span><span style="color:#268bd2;">local_invocation_id</span><span>: vec3&lt;</span><span style="color:#268bd2;">u32</span><span>&gt;,
+</span><span style="color:#657b83;">) {
+</span><span style="color:#586e75;">// Calculate the cluster ID for this thread
+</span><span style="color:#268bd2;">let</span><span> cluster_id </span><span style="color:#657b83;">=</span><span> local_invocation_id.x </span><span style="color:#657b83;">+</span><span> 128u </span><span style="color:#657b83;">* </span><span style="color:#859900;">dot</span><span style="color:#657b83;">(</span><span>workgroup_id, </span><span style="color:#859900;">vec3</span><span style="color:#657b83;">(</span><span>num_workgroups.x </span><span style="color:#657b83;">*</span><span> num_workgroups.x, num_workgroups.x, 1u</span><span style="color:#657b83;">))</span><span>;
+</span><span style="color:#859900;">if</span><span> cluster_id </span><span style="color:#657b83;">&gt;=</span><span> arrayLength</span><span style="color:#657b83;">(</span><span style="color:#859900;">&amp;</span><span>meshlet_cluster_meshlet_ids</span><span style="color:#657b83;">) { </span><span style="color:#859900;">return</span><span>; </span><span style="color:#657b83;">}
+</span></code></pre>
+<p>Once we know what cluster this thread should process, the next step is to check instance culling. Bevy has the concept of render layers, where certain entities only render for certain views. Before rendering, we uploaded a bitmask of whether each instance was visible for the current view or not. In the shader, we'll just check that bitmask, and early-out if the cluster belongs to an instance that should be culled.</p>
+<p>The instance ID can be found via indexing into the per-cluster data buffer that we computed in the previous pass (fill cluster buffers).</p>
+<pre data-lang="rust" style="background-color:#002b36;color:#839496;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#586e75;">// Check for instance culling
+</span><span style="color:#268bd2;">let</span><span> instance_id </span><span style="color:#657b83;">=</span><span> meshlet_cluster_instance_ids</span><span style="color:#657b83;">[</span><span>cluster_id</span><span style="color:#657b83;">]</span><span>;
+</span><span style="color:#268bd2;">let</span><span> bit_offset </span><span style="color:#657b83;">=</span><span> instance_id </span><span style="color:#657b83;">%</span><span> 32u;
+</span><span style="color:#268bd2;">let</span><span> packed_visibility </span><span style="color:#657b83;">=</span><span> meshlet_view_instance_visibility</span><span style="color:#657b83;">[</span><span>instance_id </span><span style="color:#657b83;">/</span><span> 32u</span><span style="color:#657b83;">]</span><span>;
+</span><span style="color:#268bd2;">let</span><span> should_cull_instance </span><span style="color:#657b83;">= </span><span style="color:#268bd2;">bool</span><span style="color:#657b83;">(</span><span>extractBits</span><span style="color:#657b83;">(</span><span>packed_visibility, bit_offset, 1u</span><span style="color:#657b83;">))</span><span>;
+</span><span style="color:#859900;">if</span><span> should_cull_instance </span><span style="color:#657b83;">{ </span><span style="color:#859900;">return</span><span>; </span><span style="color:#657b83;">}
+</span></code></pre>
+<p>Assuming the cluster's instance was not culled, we can now start fetching the rest of the cluster's data for culling. The instance ID we found also gives us access to the instance uniform, and we can fetch the meshlet ID the same way we did the instance ID. With these two indices, we can also fetch the culling bounding sphere for the cluster's meshlet, and convert it from local to world-space.</p>
+<pre data-lang="rust" style="background-color:#002b36;color:#839496;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#586e75;">// Calculate world-space culling bounding sphere for the cluster
+</span><span style="color:#268bd2;">let</span><span> instance_uniform </span><span style="color:#657b83;">=</span><span> meshlet_instance_uniforms</span><span style="color:#657b83;">[</span><span>instance_id</span><span style="color:#657b83;">]</span><span>;
+</span><span style="color:#268bd2;">let</span><span> meshlet_id </span><span style="color:#657b83;">=</span><span> meshlet_cluster_meshlet_ids</span><span style="color:#657b83;">[</span><span>cluster_id</span><span style="color:#657b83;">]</span><span>;
+</span><span style="color:#268bd2;">let</span><span> world_from_local </span><span style="color:#657b83;">= </span><span style="color:#859900;">affine3_to_square</span><span style="color:#657b83;">(</span><span>instance_uniform.world_from_local</span><span style="color:#657b83;">)</span><span>;
+</span><span style="color:#268bd2;">let</span><span> world_scale </span><span style="color:#657b83;">= </span><span style="color:#859900;">max</span><span style="color:#657b83;">(</span><span style="color:#859900;">length</span><span style="color:#657b83;">(</span><span>world_from_local</span><span style="color:#657b83;">[</span><span style="color:#6c71c4;">0</span><span style="color:#657b83;">])</span><span>, </span><span style="color:#859900;">max</span><span style="color:#657b83;">(</span><span style="color:#859900;">length</span><span style="color:#657b83;">(</span><span>world_from_local</span><span style="color:#657b83;">[</span><span style="color:#6c71c4;">1</span><span style="color:#657b83;">])</span><span>, </span><span style="color:#859900;">length</span><span style="color:#657b83;">(</span><span>world_from_local</span><span style="color:#657b83;">[</span><span style="color:#6c71c4;">2</span><span style="color:#657b83;">])))</span><span>;
+</span><span style="color:#268bd2;">let</span><span> bounding_spheres </span><span style="color:#657b83;">=</span><span> meshlet_bounding_spheres</span><span style="color:#657b83;">[</span><span>meshlet_id</span><span style="color:#657b83;">]</span><span>;
+</span><span>var culling_bounding_sphere_center </span><span style="color:#657b83;">=</span><span> world_from_local </span><span style="color:#657b83;">* </span><span style="color:#859900;">vec4</span><span style="color:#657b83;">(</span><span>bounding_spheres.self_culling.center, </span><span style="color:#6c71c4;">1.0</span><span style="color:#657b83;">)</span><span>;
+</span><span>var culling_bounding_sphere_radius </span><span style="color:#657b83;">=</span><span> world_scale </span><span style="color:#657b83;">*</span><span> bounding_spheres.self_culling.radius;
+</span></code></pre>
+<p>A simple frustum test lets us cull out of view clusters (an early return means the cluster is culled).</p>
+<pre data-lang="rust" style="background-color:#002b36;color:#839496;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#586e75;">// Frustum culling
+</span><span style="color:#859900;">for </span><span style="color:#657b83;">(</span><span>var i </span><span style="color:#657b83;">=</span><span> 0u; i </span><span style="color:#657b83;">&lt;</span><span> 6u; i</span><span style="color:#657b83;">++) {
+</span><span>    </span><span style="color:#859900;">if dot</span><span style="color:#657b83;">(</span><span>view.frustum</span><span style="color:#657b83;">[</span><span>i</span><span style="color:#657b83;">]</span><span>, culling_bounding_sphere_center</span><span style="color:#657b83;">) +</span><span> culling_bounding_sphere_radius </span><span style="color:#657b83;">&lt;= </span><span style="color:#6c71c4;">0.0 </span><span style="color:#657b83;">{
+</span><span>        </span><span style="color:#859900;">return</span><span>;
+</span><span>    </span><span style="color:#657b83;">}
+</span><span style="color:#657b83;">}
+</span></code></pre>
+<h3 id="lod-selection">LOD Selection<a class="zola-anchor" href="#lod-selection" aria-label="Anchor link for: lod-selection" style="visibility: hidden;"></a>
+</h3>
+<p>Now that we know if a cluster is in view, the next question we need to ask is "Is this cluster's meshlet part of the right cut of the LOD tree?"</p>
+<p>The goal is to select the set of simplified meshlets such that at the distance we're viewing them from, they have less than 1 pixel of geometric difference from the original set of meshlets at LOD 0 (the base mesh). Note that we're accounting <em>only</em> for geometric differences, and not taking into account material or lighting differences. Doing so is a <em>much</em> harder problem.</p>
+<p>So, the question is then "how do we determine if the group this meshlet belongs to has less than 1 pixel of geometric error?"</p>
+<p>When building the meshlet groups during asset preprocessing, we stored the group error relative to the base mesh as the radius of the bounding sphere. We can convert this bounding sphere from local to world-space, project it to view-space, and then check how many pixels on the screen it takes up. If it's less than 1 pixel, then the cluster is imperceptibly different. We're essentially answering the question "if the mesh deformed by X meters, how many pixels of change is that when viewed from the current camera"?</p>
+<pre data-lang="rust" style="background-color:#002b36;color:#839496;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#586e75;">// https://stackoverflow.com/questions/21648630/radius-of-projected-sphere-in-screen-space/21649403#21649403
+</span><span style="color:#268bd2;">fn </span><span style="color:#b58900;">lod_error_is_imperceptible</span><span style="color:#657b83;">(</span><span style="color:#268bd2;">sphere_center</span><span>: vec3&lt;</span><span style="color:#268bd2;">f32</span><span>&gt;, </span><span style="color:#268bd2;">sphere_radius</span><span>: </span><span style="color:#268bd2;">f32</span><span style="color:#657b83;">) </span><span>-&gt; </span><span style="color:#268bd2;">bool </span><span style="color:#657b83;">{
+</span><span>    </span><span style="color:#268bd2;">let</span><span> d2 </span><span style="color:#657b83;">= </span><span style="color:#859900;">dot</span><span style="color:#657b83;">(</span><span>sphere_center, sphere_center</span><span style="color:#657b83;">)</span><span>;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> r2 </span><span style="color:#657b83;">=</span><span> sphere_radius </span><span style="color:#657b83;">*</span><span> sphere_radius;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> sphere_diameter_uv </span><span style="color:#657b83;">=</span><span> view.clip_from_view</span><span style="color:#657b83;">[</span><span style="color:#6c71c4;">0</span><span style="color:#657b83;">][</span><span style="color:#6c71c4;">0</span><span style="color:#657b83;">] *</span><span> sphere_radius </span><span style="color:#657b83;">/ </span><span style="color:#859900;">sqrt</span><span style="color:#657b83;">(</span><span>d2 </span><span style="color:#657b83;">-</span><span> r2</span><span style="color:#657b83;">)</span><span>;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> view_size </span><span style="color:#657b83;">= </span><span style="color:#268bd2;">f32</span><span style="color:#657b83;">(</span><span style="color:#859900;">max</span><span style="color:#657b83;">(</span><span>view.width, view.height</span><span style="color:#657b83;">))</span><span>;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> sphere_diameter_pixels </span><span style="color:#657b83;">=</span><span> sphere_diameter_uv </span><span style="color:#657b83;">*</span><span> view_size;
+</span><span>    </span><span style="color:#859900;">return</span><span> sphere_diameter_pixels </span><span style="color:#657b83;">&lt; </span><span style="color:#6c71c4;">1.0</span><span>;
+</span><span style="color:#657b83;">}
+</span></code></pre>
+<p>Knowing if the cluster has imperceptible error is not sufficent by itself. Say you have 4 sets of meshlets - the original one (group 0), and 3 progressively simplified versions (groups 1-3). If group 2 has imperceptible error for the current view, then so would groups 1 and 0. In fact, group 0 will <em>always</em> have imperceptible error, given that it <em>is</em> the base mesh.</p>
+<p>Given multiple sets of imperceptibly different meshlets, the best set to select is the one made of the fewest triangles (most simplified), which is the highest LOD.</p>
+<p>Since we're processing each cluster in parallel, we can't communicate between them to choose the correct LOD cut. Instead, we can use a neat trick. We can design a procedure where each cluster evaluates some data, and decides independently whether it's at the correct LOD, in a way that's consistent across all the clusters.</p>
+<p>The Nanite slides go into the theory more, but it boils down to checking if error is imperceptible for the current cluster, <em>and</em> that its <em>parent's</em> error is <em>not</em> imperceptible. I.e. this is the most simple cluster we can choose with imperceptible error, and going up to it's even more simple parent would cause visible error.</p>
+<p>We can take the two LOD bounding spheres (the ones containing simplification error) for each meshlet, transform them to view-space, check if the error for each one is imperceptible or not, and then early-out if this cluster is not part of the correct LOD cut.</p>
+<pre data-lang="rust" style="background-color:#002b36;color:#839496;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#586e75;">// Calculate view-space LOD bounding sphere for the meshlet
+</span><span style="color:#268bd2;">let</span><span> lod_bounding_sphere_center </span><span style="color:#657b83;">=</span><span> world_from_local </span><span style="color:#657b83;">* </span><span style="color:#859900;">vec4</span><span style="color:#657b83;">(</span><span>bounding_spheres.self_lod.center, </span><span style="color:#6c71c4;">1.0</span><span style="color:#657b83;">)</span><span>;
+</span><span style="color:#268bd2;">let</span><span> lod_bounding_sphere_radius </span><span style="color:#657b83;">=</span><span> world_scale </span><span style="color:#657b83;">*</span><span> bounding_spheres.self_lod.radius;
+</span><span style="color:#268bd2;">let</span><span> lod_bounding_sphere_center_view_space </span><span style="color:#657b83;">= (</span><span>view.view_from_world </span><span style="color:#657b83;">* </span><span style="color:#859900;">vec4</span><span style="color:#657b83;">(</span><span>lod_bounding_sphere_center.xyz, </span><span style="color:#6c71c4;">1.0</span><span style="color:#657b83;">))</span><span>.xyz;
+</span><span>
+</span><span style="color:#586e75;">// Calculate view-space LOD bounding sphere for the meshlet&#39;s parent
+</span><span style="color:#268bd2;">let</span><span> parent_lod_bounding_sphere_center </span><span style="color:#657b83;">=</span><span> world_from_local </span><span style="color:#657b83;">* </span><span style="color:#859900;">vec4</span><span style="color:#657b83;">(</span><span>bounding_spheres.parent_lod.center, </span><span style="color:#6c71c4;">1.0</span><span style="color:#657b83;">)</span><span>;
+</span><span style="color:#268bd2;">let</span><span> parent_lod_bounding_sphere_radius </span><span style="color:#657b83;">=</span><span> world_scale </span><span style="color:#657b83;">*</span><span> bounding_spheres.parent_lod.radius;
+</span><span style="color:#268bd2;">let</span><span> parent_lod_bounding_sphere_center_view_space </span><span style="color:#657b83;">= (</span><span>view.view_from_world </span><span style="color:#657b83;">* </span><span style="color:#859900;">vec4</span><span style="color:#657b83;">(</span><span>parent_lod_bounding_sphere_center.xyz, </span><span style="color:#6c71c4;">1.0</span><span style="color:#657b83;">))</span><span>.xyz;
+</span><span>
+</span><span style="color:#586e75;">// Check LOD cut (meshlet error imperceptible, and parent error not imperceptible)
+</span><span style="color:#268bd2;">let</span><span> lod_is_ok </span><span style="color:#657b83;">= </span><span style="color:#859900;">lod_error_is_imperceptible</span><span style="color:#657b83;">(</span><span>lod_bounding_sphere_center_view_space, lod_bounding_sphere_radius</span><span style="color:#657b83;">)</span><span>;
+</span><span style="color:#268bd2;">let</span><span> parent_lod_is_ok </span><span style="color:#657b83;">= </span><span style="color:#859900;">lod_error_is_imperceptible</span><span style="color:#657b83;">(</span><span>parent_lod_bounding_sphere_center_view_space, parent_lod_bounding_sphere_radius</span><span style="color:#657b83;">)</span><span>;
+</span><span style="color:#859900;">if !</span><span>lod_is_ok </span><span style="color:#859900;">||</span><span> parent_lod_is_ok </span><span style="color:#657b83;">{ </span><span style="color:#859900;">return</span><span>; </span><span style="color:#657b83;">}
+</span></code></pre>
+<h3 id="occlusion-culling-test">Occlusion Culling Test<a class="zola-anchor" href="#occlusion-culling-test" aria-label="Anchor link for: occlusion-culling-test" style="visibility: hidden;"></a>
+</h3>
+<p>We've checked if the cluster is in view (frustum and render layer culling), as well as if it's part of the correct LOD cut. It's now time for the actual occlusion culling part of the first of the two passes for two pass occlusion culling.</p>
+<p>Our goal in the first pass is to render only clusters that were visible last frame. One possible method would be to store another bitmask of whether each cluster was visible in the current frame, and read from it in the next frame. The problem with this is that it uses a good chunk of memory, and more importantly, does not play well with LODs. Before I implemented LODs I used this method, but with LODs, a cluster that was visible last frame might not be part of the LOD cut in this frame and therefore incorrect to render.</p>
+<p>Instead of explicitly storing whether a cluster is visible, we're instead going to occlusion cull the clusters against the depth pyramid from the <em>previous</em> frame. We can take the culling bounding sphere of the cluster, project it to view-space using the previous frame's set of transforms, and then project it to a screen-space axis-aligned bounding box (AABB). We can then compare the view-space depth of the bounding sphere's extents with every pixel of the depth buffer that the AABB we calculated covers. If all depth pixels show that there is geometry in front of the bounding sphere, then the mesh was not visible last frame, and therefore should not be rendered in the first occlusion culling pass.</p>
+<p>Of course sampling every pixel an AABB covers would be extremely expensive, and cache inefficient. Instead we'll use a depth <em>pyramid</em>, which is a mipmapped version of the depth buffer. Each pixel in MIP 1 corresponds to the min of 4 pixels from MIP 0, each pixel in MIP 2 corresponds to the min of 4 pixels from MIP 1, etc down to a 1x1 layer. Now we only have to sample 4 pixels for each AABB, choosing the mip level that best fits the AABB onto a 2x2 quad. Don't worry about how we generate the depth pyramid for now, we'll talk about that more later.</p>
+<p>If any of that was confusing, read up on occlusion culling and depth pyramids. The important takeaway is that we're using the previous frame's depth pyramid in the first occlusion culling pass to find which clusters would have been visible last frame.</p>
+<pre data-lang="rust" style="background-color:#002b36;color:#839496;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#586e75;">// Project the culling bounding sphere to view-space for occlusion culling
+</span><span style="color:#268bd2;">let</span><span> previous_world_from_local </span><span style="color:#657b83;">= </span><span style="color:#859900;">affine3_to_square</span><span style="color:#657b83;">(</span><span>instance_uniform.previous_world_from_local</span><span style="color:#657b83;">)</span><span>;
+</span><span style="color:#268bd2;">let</span><span> previous_world_from_local_scale </span><span style="color:#657b83;">= </span><span style="color:#859900;">max</span><span style="color:#657b83;">(</span><span style="color:#859900;">length</span><span style="color:#657b83;">(</span><span>previous_world_from_local</span><span style="color:#657b83;">[</span><span style="color:#6c71c4;">0</span><span style="color:#657b83;">])</span><span>, </span><span style="color:#859900;">max</span><span style="color:#657b83;">(</span><span style="color:#859900;">length</span><span style="color:#657b83;">(</span><span>previous_world_from_local</span><span style="color:#657b83;">[</span><span style="color:#6c71c4;">1</span><span style="color:#657b83;">])</span><span>, </span><span style="color:#859900;">length</span><span style="color:#657b83;">(</span><span>previous_world_from_local</span><span style="color:#657b83;">[</span><span style="color:#6c71c4;">2</span><span style="color:#657b83;">])))</span><span>;
+</span><span>culling_bounding_sphere_center </span><span style="color:#657b83;">=</span><span> previous_world_from_local </span><span style="color:#657b83;">* </span><span style="color:#859900;">vec4</span><span style="color:#657b83;">(</span><span>bounding_spheres.self_culling.center, </span><span style="color:#6c71c4;">1.0</span><span style="color:#657b83;">)</span><span>;
+</span><span>culling_bounding_sphere_radius </span><span style="color:#657b83;">=</span><span> previous_world_from_local_scale </span><span style="color:#657b83;">*</span><span> bounding_spheres.self_culling.radius;
+</span><span style="color:#268bd2;">let</span><span> culling_bounding_sphere_center_view_space </span><span style="color:#657b83;">= (</span><span>view.view_from_world </span><span style="color:#657b83;">* </span><span style="color:#859900;">vec4</span><span style="color:#657b83;">(</span><span>culling_bounding_sphere_center.xyz, </span><span style="color:#6c71c4;">1.0</span><span style="color:#657b83;">))</span><span>.xyz;
+</span><span>
+</span><span style="color:#268bd2;">let</span><span> aabb </span><span style="color:#657b83;">= </span><span style="color:#859900;">project_view_space_sphere_to_screen_space_aabb</span><span style="color:#657b83;">(</span><span>culling_bounding_sphere_center_view_space, culling_bounding_sphere_radius</span><span style="color:#657b83;">)</span><span>;
+</span><span style="color:#586e75;">// Halve the view-space AABB size as the depth pyramid is half the view size
+</span><span style="color:#268bd2;">let</span><span> depth_pyramid_size_mip_0 </span><span style="color:#657b83;">= </span><span>vec2&lt;</span><span style="color:#268bd2;">f32</span><span>&gt;</span><span style="color:#657b83;">(</span><span>textureDimensions</span><span style="color:#657b83;">(</span><span>depth_pyramid, </span><span style="color:#6c71c4;">0</span><span style="color:#657b83;">)) * </span><span style="color:#6c71c4;">0.5</span><span>;
+</span><span style="color:#268bd2;">let</span><span> width </span><span style="color:#657b83;">= (</span><span>aabb.z </span><span style="color:#657b83;">-</span><span> aabb.x</span><span style="color:#657b83;">) *</span><span> depth_pyramid_size_mip_0.x;
+</span><span style="color:#268bd2;">let</span><span> height </span><span style="color:#657b83;">= (</span><span>aabb.w </span><span style="color:#657b83;">-</span><span> aabb.y</span><span style="color:#657b83;">) *</span><span> depth_pyramid_size_mip_0.y;
+</span><span style="color:#586e75;">// Note: I&#39;ve seen people use floor instead of ceil here, but it seems to result in culling bugs.
+</span><span style="color:#586e75;">//       The max(0, x) is also important to prevent out of bounds accesses.
+</span><span style="color:#268bd2;">let</span><span> depth_level </span><span style="color:#657b83;">= </span><span style="color:#859900;">max</span><span style="color:#657b83;">(</span><span style="color:#6c71c4;">0</span><span>, </span><span style="color:#268bd2;">u32</span><span style="color:#657b83;">(</span><span style="color:#859900;">ceil</span><span style="color:#657b83;">(</span><span style="color:#859900;">log2</span><span style="color:#657b83;">(</span><span style="color:#859900;">max</span><span style="color:#657b83;">(</span><span>width, height</span><span style="color:#657b83;">)))))</span><span>;
+</span><span style="color:#268bd2;">let</span><span> depth_pyramid_size </span><span style="color:#657b83;">= </span><span>vec2&lt;</span><span style="color:#268bd2;">f32</span><span>&gt;</span><span style="color:#657b83;">(</span><span>textureDimensions</span><span style="color:#657b83;">(</span><span>depth_pyramid, depth_level</span><span style="color:#657b83;">))</span><span>;
+</span><span style="color:#268bd2;">let</span><span> aabb_top_left </span><span style="color:#657b83;">= </span><span>vec2&lt;</span><span style="color:#268bd2;">u32</span><span>&gt;</span><span style="color:#657b83;">(</span><span>aabb.xy </span><span style="color:#657b83;">*</span><span> depth_pyramid_size</span><span style="color:#657b83;">)</span><span>;
+</span><span>
+</span><span style="color:#586e75;">// Note: I&#39;d use a min sampler reduction here if it were available in wgpu.
+</span><span style="color:#586e75;">//       textureGather() can&#39;t be used either, as it dosen&#39;t let you specify a mip level.
+</span><span style="color:#268bd2;">let</span><span> depth_quad_a </span><span style="color:#657b83;">=</span><span> textureLoad</span><span style="color:#657b83;">(</span><span>depth_pyramid, aabb_top_left, depth_level</span><span style="color:#657b83;">)</span><span>.x;
+</span><span style="color:#268bd2;">let</span><span> depth_quad_b </span><span style="color:#657b83;">=</span><span> textureLoad</span><span style="color:#657b83;">(</span><span>depth_pyramid, aabb_top_left </span><span style="color:#657b83;">+ </span><span style="color:#859900;">vec2</span><span style="color:#657b83;">(</span><span>1u, 0u</span><span style="color:#657b83;">)</span><span>, depth_level</span><span style="color:#657b83;">)</span><span>.x;
+</span><span style="color:#268bd2;">let</span><span> depth_quad_c </span><span style="color:#657b83;">=</span><span> textureLoad</span><span style="color:#657b83;">(</span><span>depth_pyramid, aabb_top_left </span><span style="color:#657b83;">+ </span><span style="color:#859900;">vec2</span><span style="color:#657b83;">(</span><span>0u, 1u</span><span style="color:#657b83;">)</span><span>, depth_level</span><span style="color:#657b83;">)</span><span>.x;
+</span><span style="color:#268bd2;">let</span><span> depth_quad_d </span><span style="color:#657b83;">=</span><span> textureLoad</span><span style="color:#657b83;">(</span><span>depth_pyramid, aabb_top_left </span><span style="color:#657b83;">+ </span><span style="color:#859900;">vec2</span><span style="color:#657b83;">(</span><span>1u, 1u</span><span style="color:#657b83;">)</span><span>, depth_level</span><span style="color:#657b83;">)</span><span>.x;
+</span><span style="color:#268bd2;">let</span><span> occluder_depth </span><span style="color:#657b83;">= </span><span style="color:#859900;">min</span><span style="color:#657b83;">(</span><span style="color:#859900;">min</span><span style="color:#657b83;">(</span><span>depth_quad_a, depth_quad_b</span><span style="color:#657b83;">)</span><span>, </span><span style="color:#859900;">min</span><span style="color:#657b83;">(</span><span>depth_quad_c, depth_quad_d</span><span style="color:#657b83;">))</span><span>;
+</span><span>
+</span><span style="color:#586e75;">// Check whether or not the cluster would be occluded if drawn
+</span><span>var cluster_visible: </span><span style="color:#268bd2;">bool</span><span>;
+</span><span style="color:#859900;">if</span><span> view.clip_from_view</span><span style="color:#657b83;">[</span><span style="color:#6c71c4;">3</span><span style="color:#657b83;">][</span><span style="color:#6c71c4;">3</span><span style="color:#657b83;">] == </span><span style="color:#6c71c4;">1.0 </span><span style="color:#657b83;">{
+</span><span>    </span><span style="color:#586e75;">// Orthographic
+</span><span>    </span><span style="color:#268bd2;">let</span><span> sphere_depth </span><span style="color:#657b83;">=</span><span> view.clip_from_view</span><span style="color:#657b83;">[</span><span style="color:#6c71c4;">3</span><span style="color:#657b83;">][</span><span style="color:#6c71c4;">2</span><span style="color:#657b83;">] + (</span><span>culling_bounding_sphere_center_view_space.z </span><span style="color:#657b83;">+</span><span> culling_bounding_sphere_radius</span><span style="color:#657b83;">) *</span><span> view.clip_from_view</span><span style="color:#657b83;">[</span><span style="color:#6c71c4;">2</span><span style="color:#657b83;">][</span><span style="color:#6c71c4;">2</span><span style="color:#657b83;">]</span><span>;
+</span><span>    cluster_visible </span><span style="color:#657b83;">=</span><span> sphere_depth </span><span style="color:#657b83;">&gt;=</span><span> occluder_depth;
+</span><span style="color:#657b83;">} </span><span style="color:#859900;">else </span><span style="color:#657b83;">{
+</span><span>    </span><span style="color:#586e75;">// Perspective
+</span><span>    </span><span style="color:#268bd2;">let</span><span> sphere_depth </span><span style="color:#657b83;">= -</span><span>view.clip_from_view</span><span style="color:#657b83;">[</span><span style="color:#6c71c4;">3</span><span style="color:#657b83;">][</span><span style="color:#6c71c4;">2</span><span style="color:#657b83;">] / (</span><span>culling_bounding_sphere_center_view_space.z </span><span style="color:#657b83;">+</span><span> culling_bounding_sphere_radius</span><span style="color:#657b83;">)</span><span>;
+</span><span>    cluster_visible </span><span style="color:#657b83;">=</span><span> sphere_depth </span><span style="color:#657b83;">&gt;=</span><span> occluder_depth;
+</span><span style="color:#657b83;">}
+</span></code></pre>
+<h3 id="result-writeout">Result Writeout<a class="zola-anchor" href="#result-writeout" aria-label="Anchor link for: result-writeout" style="visibility: hidden;"></a>
+</h3>
+<p>We're finally at the last step of the first occlusion culling pass/dispatch. As a reminder, everything from after the fill cluster buffers step until the end of this section has all been one shader. I warned you it would be long!</p>
+<p>The last step for this pass is to write out the results of what clusters should render. This pass is just a compute shader - it dosen't actually render anything. We're just going to fill out the arguments for a single indirect draw command (more on this in the next pass).</p>
+<p>First, before we get to the indirect draw, we need to write out another piece of data. The second occlusion culling pass later will want to operate only on clusters in view, that passed the LOD test, and that were <em>not</em> drawn in the first pass. That means we didn't early return during the frustum culling or LOD test, and that cluster_visible was false from the occlusion culling test.</p>
+<p>In order for the second occlusion pass to know which clusters satisfy these conditions, we'll write out another bitmask of 1 bit per cluster, with clusters that the second occlusion pass should operate on having their bit set to 1. An atomicOr takes care of setting each cluster's bit in parallel amongst all threads.</p>
+<pre data-lang="rust" style="background-color:#002b36;color:#839496;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#586e75;">// Write if the cluster should be occlusion tested in the second pass
+</span><span style="color:#859900;">if !</span><span>cluster_visible </span><span style="color:#657b83;">{
+</span><span>    </span><span style="color:#268bd2;">let</span><span> bit </span><span style="color:#657b83;">=</span><span> 1u </span><span style="color:#657b83;">&lt;&lt;</span><span> cluster_id </span><span style="color:#657b83;">%</span><span> 32u;
+</span><span>    atomicOr</span><span style="color:#657b83;">(</span><span style="color:#859900;">&amp;</span><span>meshlet_second_pass_candidates</span><span style="color:#657b83;">[</span><span>cluster_id </span><span style="color:#657b83;">/</span><span> 32u</span><span style="color:#657b83;">]</span><span>, bit</span><span style="color:#657b83;">)</span><span>;
+</span><span style="color:#657b83;">}
+</span></code></pre>
+<p>Now we have the final step of filling out the indirect draw data for the clusters that we <em>do</em> want to draw in the first pass.</p>
+<p>We can do an atomicAdd on the DrawIndirectArgs::vertex_count with the meshlet's vertex count (triangle count * 3). This does two things:</p>
+<ol>
+<li>Adds more vertex invocations to the indirect draw for this cluster's triangles</li>
+<li>Reserves space in a large buffer for all of this cluster's triangles to write out a per-triangle number</li>
+</ol>
+<p>With the draw_triangle_buffer space reserved, we can then fill it with an encoded u32 integer: 26 bits for the cluster ID, and 6 bits for the triangle ID within the cluster's meshlet. 6 bits gives us 2^6 = 64 possible values, which is perfect as when we were building meshlets during asset preprocessing, we limited each meshlet to max 64 vertices and 64 triangles.</p>
+<p>During vertex shading in the next pass, each vertex invocation will be able to use this buffer to know what triangle and cluster it belongs to.</p>
+<pre data-lang="rust" style="background-color:#002b36;color:#839496;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#586e75;">// Append a list of this cluster&#39;s triangles to draw if not culled
+</span><span style="color:#859900;">if</span><span> cluster_visible </span><span style="color:#657b83;">{
+</span><span>    </span><span style="color:#268bd2;">let</span><span> meshlet_triangle_count </span><span style="color:#657b83;">=</span><span> meshlets</span><span style="color:#657b83;">[</span><span>meshlet_id</span><span style="color:#657b83;">]</span><span>.triangle_count;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> buffer_start </span><span style="color:#657b83;">=</span><span> atomicAdd</span><span style="color:#657b83;">(</span><span style="color:#859900;">&amp;</span><span>draw_indirect_args.vertex_count, meshlet_triangle_count </span><span style="color:#657b83;">*</span><span> 3u</span><span style="color:#657b83;">) /</span><span> 3u;
+</span><span>
+</span><span>    </span><span style="color:#268bd2;">let</span><span> cluster_id_packed </span><span style="color:#657b83;">=</span><span> cluster_id </span><span style="color:#657b83;">&lt;&lt;</span><span> 6u;
+</span><span>    </span><span style="color:#859900;">for </span><span style="color:#657b83;">(</span><span>var triangle_id </span><span style="color:#657b83;">=</span><span> 0u; triangle_id </span><span style="color:#657b83;">&lt;</span><span> meshlet_triangle_count; triangle_id</span><span style="color:#657b83;">++) {
+</span><span>        draw_triangle_buffer</span><span style="color:#657b83;">[</span><span>buffer_start </span><span style="color:#657b83;">+</span><span> triangle_id</span><span style="color:#657b83;">] =</span><span> cluster_id_packed </span><span style="color:#859900;">|</span><span> triangle_id;
+</span><span>    </span><span style="color:#657b83;">}
+</span><span style="color:#657b83;">}
+</span></code></pre>
+<h2 id="raster-first-pass">Raster (First Pass)<a class="zola-anchor" href="#raster-first-pass" aria-label="Anchor link for: raster-first-pass" style="visibility: hidden;"></a>
+</h2>
+<p>We've now determined what to draw, so it's time to draw it.</p>
+<p>As I mentioned in the previous section, we're doing a single draw_indirect() call to rasterize every single cluster at once, using the DrawIndirectArgs buffer we filled out in the previous pass.</p>
+<p>We're going to render to a few different render targets:</p>
+<ul>
+<li>Depth buffer</li>
+<li>Visibility buffer (optional, not rendered for shadow map views)</li>
+<li>Material depth (optional, not rendered for shadow map views)</li>
+</ul>
+<p>The depth buffer is straightforward. The visibility buffer is a R32Uint texture storing the cluster ID + triangle ID packed together in the same way as during the culling pass. Material depth is a R16Uint texture storing the material ID. The visibility buffer and material depth textures will be used in a later pass for shading.</p>
+<p>Note that it would be better to skip writing material depth here, and write it out as part of the later copy material depth pass. This pass is going to change in the near future when I add software rasterization however (more on this in a second), so for now I've left it as-is.</p>
+<p>I won't show the entire shader, but getting the triangle data to render for each vertex is fairly straightforward. The vertex invocation index can be used to index into the draw_triangle_buffer that we wrote out during the culling pass, giving us a packed cluster ID and triangle ID. The vertex invocation index % 3 gives us which vertex within the triangle this is, and then we can lookup the cluster's meshlet and instance data as normal. Vertex data can be obtained by following the tree of indices using the index ID and meshlet info.</p>
+<pre data-lang="rust" style="background-color:#002b36;color:#839496;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#859900;">@</span><span>vertex
+</span><span style="color:#268bd2;">fn </span><span style="color:#b58900;">vertex</span><span style="color:#657b83;">(</span><span>@builtin</span><span style="color:#657b83;">(</span><span style="color:#268bd2;">vertex_index</span><span style="color:#657b83;">) </span><span style="color:#268bd2;">vertex_index</span><span>: </span><span style="color:#268bd2;">u32</span><span style="color:#657b83;">) </span><span>-&gt; VertexOutput </span><span style="color:#657b83;">{
+</span><span>    </span><span style="color:#268bd2;">let</span><span> packed_ids </span><span style="color:#657b83;">=</span><span> draw_triangle_buffer</span><span style="color:#657b83;">[</span><span>vertex_index </span><span style="color:#657b83;">/</span><span> 3u</span><span style="color:#657b83;">]</span><span>;
+</span><span>
+</span><span>    </span><span style="color:#268bd2;">let</span><span> cluster_id </span><span style="color:#657b83;">=</span><span> packed_ids </span><span style="color:#657b83;">&gt;&gt;</span><span> 6u;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> meshlet_id </span><span style="color:#657b83;">=</span><span> meshlet_cluster_meshlet_ids</span><span style="color:#657b83;">[</span><span>cluster_id</span><span style="color:#657b83;">]</span><span>;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> meshlet </span><span style="color:#657b83;">=</span><span> meshlets</span><span style="color:#657b83;">[</span><span>meshlet_id</span><span style="color:#657b83;">]</span><span>;
+</span><span>
+</span><span>    </span><span style="color:#268bd2;">let</span><span> triangle_id </span><span style="color:#657b83;">=</span><span> extractBits</span><span style="color:#657b83;">(</span><span>packed_ids, 0u, 6u</span><span style="color:#657b83;">)</span><span>;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> index_id </span><span style="color:#657b83;">= (</span><span>triangle_id </span><span style="color:#657b83;">*</span><span> 3u</span><span style="color:#657b83;">) + (</span><span>vertex_index </span><span style="color:#657b83;">%</span><span> 3u</span><span style="color:#657b83;">)</span><span>;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> index </span><span style="color:#657b83;">= </span><span style="color:#859900;">get_meshlet_index</span><span style="color:#657b83;">(</span><span>meshlet.start_index_id </span><span style="color:#657b83;">+</span><span> index_id</span><span style="color:#657b83;">)</span><span>;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> vertex_id </span><span style="color:#657b83;">=</span><span> meshlet_vertex_ids</span><span style="color:#657b83;">[</span><span>meshlet.start_vertex_id </span><span style="color:#657b83;">+</span><span> index</span><span style="color:#657b83;">]</span><span>;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> vertex </span><span style="color:#657b83;">= </span><span style="color:#859900;">unpack_meshlet_vertex</span><span style="color:#657b83;">(</span><span>meshlet_vertex_data</span><span style="color:#657b83;">[</span><span>vertex_id</span><span style="color:#657b83;">])</span><span>;
+</span><span>
+</span><span>    </span><span style="color:#268bd2;">let</span><span> instance_id </span><span style="color:#657b83;">=</span><span> meshlet_cluster_instance_ids</span><span style="color:#657b83;">[</span><span>cluster_id</span><span style="color:#657b83;">]</span><span>;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> instance_uniform </span><span style="color:#657b83;">=</span><span> meshlet_instance_uniforms</span><span style="color:#657b83;">[</span><span>instance_id</span><span style="color:#657b83;">]</span><span>;
+</span><span>
+</span><span>    </span><span style="color:#586e75;">// ...
+</span><span style="color:#657b83;">}
+</span></code></pre>
+<p><img src="https://jms55.github.io/posts/2024-06-09-virtual-geometry-bevy-0-14/depth_buffer.png" alt="Depth buffer" />
+<img src="https://jms55.github.io/posts/2024-06-09-virtual-geometry-bevy-0-14/visbuffer.png" alt="Visibility buffer" />
+<img src="https://jms55.github.io/posts/2024-06-09-virtual-geometry-bevy-0-14/material_depth.png" alt="Material depth" /></p>
+<blockquote>
+<p>Quad overdraw from Renderdoc
+<img src="https://jms55.github.io/posts/2024-06-09-virtual-geometry-bevy-0-14/quad_overdraw.png" alt="Quad overdraw from Renderdoc" />
+Triangle size from Renderdoc
+<img src="https://jms55.github.io/posts/2024-06-09-virtual-geometry-bevy-0-14/triangle_size.png" alt="Triangle size from Renderdoc" /></p>
+</blockquote>
+<hr />
+<p>With the overview out of the way, the real topic to discuss for this pass is "why a single draw indirect?" There are several other possibilities I could have gone with:</p>
+<ul>
+<li>Mesh shaders</li>
+<li>Single draw indexed indirect after writing out an index buffer during the culling pass</li>
+<li>Single draw indirect, with a cluster ID buffer, snapping extra vertex invocations to NaN</li>
+<li>Multi draw indirect with a sub-draw per cluster</li>
+<li>Multi draw indirect with a sub-draw per meshlet triangle count bin</li>
+<li>Software rasterization</li>
+</ul>
+<p>Mesh shaders are sadly not supported by wgpu, so that's out. They would be the best option for taking advantage of GPU hardware.</p>
+<p>Single draw indexed indirect was what I originally used. It's about 10-20% faster (if I remember correctly, it's been a while) than the non-indexed variant I use now. However, that means we would need to allocate an index buffer for our worst case usage at 12 bytes/triangle. That's extremely expensive for the amount of geometry we want to deal with, and you'd quickly run into buffer size limits (~2gb on most platforms). You could dynamically allocate a new buffer size based on amount of rendered triangles after culling with some CPU readback and some heuristics, but that's more complicated and still very memory hungry. Single draw indirect with the 4 bytes/triangle draw_triangle_buffer that I ended up using is still expensive, but good enough to scrape by for now.</p>
+<p>Single draw indirect with a buffer of cluster IDs is also an option. Each meshlet has max 64 triangles, so we could spawn cluster_count * 64 * 3 vertex invocations. Vertex invocation index / (64 * 3) would give you an index into the cluster ID buffer, and triangle ID is easy to recover via some simple arithmetic. At 4 bytes/cluster, this option is <em>much</em> cheaper in memory than any of the previous methods. The problem is how to handle excess vertex invocations. Not all meshlets will have a full 64 triangles. It's easy enough to have each vertex invocation check the meshlet's triangle count, and if it's not needed, write out a NaN position, causing the GPU to ignore the triangle. The problem is that this performed very poorly when I tested it. All those dummy NaN triangles took up valuable fixed-function time that the GPU could have spent processing other triangles. Maybe performance would be better if I were able to get meshlets much closer to the max triangle count, or halving the max triangle count to 32 per meshlet to spawn less dummy triangles, but I ended up not pursuing this method.</p>
+<p>Multi draw is also an option. We could write out a buffer with 1 DrawIndirectArgs per cluster, giving 16 bytes/cluster. Each sub-draw would contain exactly the right amount of vertex invocations per cluster. Each vertex invocation would be able to recover their cluster ID via the instance_id builtin, as we would set DrawIndirectArgs::first_instance to the cluster ID. On the CPU, this would still be a single draw call. In practice, I found this still performed poorly. While we are no longer bottlenecked by the GPU having to process dummy triangles, now the GPU's command processor has to process all these sub-commands. At 1 sub-command per cluster, that's a <em>lot</em> of commands. Like the fixed 64 vertex invocations per cluster path, we're again bottlenecked on something that isn't actual rasterization work.</p>
+<p>An additional idea I thought of while writing this section is to bin each cluster by its meshlet triangle count. All clusters whose meshlets have 10 triangles would go in one bin, 12 triangles in a second bin, 46 triangles in a third bin, etc, for 63 bins total (we would never have a meshlet with 0 triangles). We could then write out a DrawIndirectArgs and list of cluster IDs per bin, and do a single multi_draw_indirect() call on the CPU, similiar to the last section. I haven't tested it out, but this seems like a decent option in theory. I believe Nanite does something similiar in recent versions of Unreal Engine 5 in order to support different types of vertex shaders.</p>
+<p>Finally, we could use software rasterization. We could write out a list of cluster IDs, spawn 1 workgroup per cluster, and have each workgroup manually rasterize the cluster via some linear algebra, bypassing fixed-function GPU hardware entirely. This is what Nanite does for over 90% of their clusters. Only large clusters and clusters needing depth clipping are rendered via hardware draws. Not only is this one of the most memory efficent options, it's faster than hardware draws for the majority of clusters (hence why Nanite uses it so heavily). Unfortunately, wgpu once again lacks support for a needed feature, this time 64bit texture atomics. The good news is that @atlv24 is working on adding support for this feature, and I'm looking forward to implementing software rendering in a future release of Bevy.</p>
+<h2 id="downsample-depth">Downsample Depth<a class="zola-anchor" href="#downsample-depth" aria-label="Anchor link for: downsample-depth" style="visibility: hidden;"></a>
+</h2>
+<p>With the first of the two passes of two pass occlusion culling rendered, it's time to prepare for the second pass. Namely, we need to generate a new depth pyramid based on the depth buffer we just rendered.</p>
+<p>For generating the depth pyramid, I ported the FidelityFX Single Pass Downsampler (SPD) to Bevy. SPD lets us perform the downsampling very efficiently, entirely in a single compute dispatch. You could use multiple raster passes, but that's extremely expensive in both CPU time (command recording and wgpu resource tracking), and GPU time (bandwidth reading/writing between passes, pipeline bubbles as the GPU spins up and down between passes).</p>
+<p>For now, we're actually using two compute dispatches, not one. Wgpu lacks support for globallycoherent buffers, so we have to split the dispatch in two to ensure writes made by the first are visible to the second. I also did not implement the subgroup version of SPD, as wgpu lacked support at the time (it has it now, minus quad operations, which SPD does need). Still very fast despite these small deficiencies.</p>
+<p>One important note is that we need to ensure that the depth pyramid is conservative. For non-power-of-two depth textures, for instance, we might need special handling of the downsampling. Same for when we sample the depth pyramid during occlusion culling. I haven't done anything special to handle this, but it seems to work well enough. I'm not entirely confident in the edge cases here though.</p>
+<p><img src="https://jms55.github.io/posts/2024-06-09-virtual-geometry-bevy-0-14/depth_pyramid.png" alt="Depth pyramid" /></p>
+<h2 id="culling-second-pass">Culling (Second Pass)<a class="zola-anchor" href="#culling-second-pass" aria-label="Anchor link for: culling-second-pass" style="visibility: hidden;"></a>
+</h2>
+<p>The second culling pass is where we decide whether to render the rest of the clusters - the ones that we didn't think were a good set of occluders for the scene, and decided to hold off on rendering.</p>
+<p>This culling pass is much the same as the first, with a few key differences:</p>
+<ul>
+<li>We skip frustum and LOD culling, as we did it the first time</li>
+<li>We operate only on the clusters that we explicitly marked as second pass candidates during the first culling pass
+<ul>
+<li>We're still doing a large 3d dispatch over all clusters in the scene, but we can early-out for the clusters that are not second pass candidates</li>
+</ul>
+</li>
+<li>We use the current transforms for occlusion culling, instead of last frame's</li>
+<li>We occlusion cull using the depth pyramid generated from the previous pass</li>
+</ul>
+<p>By doing this, we can skip drawing any clusters that would be occluded by the existing geometry that we rendered in the first pass.</p>
+<p>As a result of this pass, we have another DrawIndirectArgs we can use to draw the remaining clusters.</p>
+<h2 id="raster-second-pass">Raster (Second Pass)<a class="zola-anchor" href="#raster-second-pass" aria-label="Anchor link for: raster-second-pass" style="visibility: hidden;"></a>
+</h2>
+<p>This pass is identical to the first raster pass, just with the new set of clusters from the second culling pass.</p>
+<p>Given that the camera and scene is static in the example frame that we're looking at, the first pass perfectly calculated occlusion, and there is nothing to actually render in this pass.</p>
+<h2 id="copy-material-depth">Copy Material Depth<a class="zola-anchor" href="#copy-material-depth" aria-label="Anchor link for: copy-material-depth" style="visibility: hidden;"></a>
+</h2>
+<p>For reasons we'll get to in the material shading pass, we need to copy the R16Uint material depth texture we rasterized earlier to an actual Depth16Unorm depth texture. A simple fullscreen triangle pass with a sample and a divide performs the copy.</p>
+<p>I mentioned earlier that ideally we wouldn't write out the material depth during the rasterization pass. It would be better to instead write it out during this pass, by sampling the visibility buffer, looking up the material ID from the cluster ID, and then writing it out to the depth texture directly. I intend to switch to this method in the near future.</p>
+<pre data-lang="rust" style="background-color:#002b36;color:#839496;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#859900;">#</span><span>import bevy_core_pipeline::fullscreen_vertex_shader::FullscreenVertexOutput
+</span><span>
+</span><span style="color:#859900;">@group</span><span style="color:#657b83;">(</span><span style="color:#6c71c4;">0</span><span style="color:#657b83;">) </span><span style="color:#859900;">@binding</span><span style="color:#657b83;">(</span><span style="color:#6c71c4;">0</span><span style="color:#657b83;">)</span><span> var material_depth: texture_2d&lt;</span><span style="color:#268bd2;">u32</span><span>&gt;;
+</span><span>
+</span><span style="color:#586e75;">/// This pass copies the R16Uint material depth texture to an actual Depth16Unorm depth texture.
+</span><span>
+</span><span style="color:#859900;">@</span><span>fragment
+</span><span style="color:#268bd2;">fn </span><span style="color:#b58900;">copy_material_depth</span><span style="color:#657b83;">(</span><span style="color:#268bd2;">in</span><span>: FullscreenVertexOutput</span><span style="color:#657b83;">) </span><span>-&gt; </span><span style="color:#859900;">@builtin</span><span style="color:#657b83;">(</span><span>frag_depth</span><span style="color:#657b83;">) </span><span style="color:#268bd2;">f32 </span><span style="color:#657b83;">{
+</span><span>    </span><span style="color:#859900;">return </span><span style="color:#268bd2;">f32</span><span style="color:#657b83;">(</span><span>textureLoad</span><span style="color:#657b83;">(</span><span>material_depth, vec2&lt;</span><span style="color:#268bd2;">i32</span><span>&gt;</span><span style="color:#657b83;">(</span><span style="color:#859900;">in</span><span>.position.xy</span><span style="color:#657b83;">)</span><span>, </span><span style="color:#6c71c4;">0</span><span style="color:#657b83;">)</span><span>.r</span><span style="color:#657b83;">) / </span><span style="color:#6c71c4;">65535.0</span><span>;
+</span><span style="color:#657b83;">}
+</span></code></pre>
+<h2 id="material-shading">Material Shading<a class="zola-anchor" href="#material-shading" aria-label="Anchor link for: material-shading" style="visibility: hidden;"></a>
+</h2>
+<p>At this point we have the visibility buffer texture containing packed cluster and triangle IDs per pixel, and the material depth texture containing the material ID as a floating point depth value.</p>
+<p>Now, it's time to apply materials to the frame in a set of "material shading" draws. Note that we're not necessarily rendering a lit and shaded scene. The meshlet feature works with all of Bevy's existing rendering modes (forward, forward + prepass, and deferred). For instance, we could be rendering a GBuffer here, or a normal and motion vector prepass.</p>
+<h3 id="vertex-shader">Vertex Shader<a class="zola-anchor" href="#vertex-shader" aria-label="Anchor link for: vertex-shader" style="visibility: hidden;"></a>
+</h3>
+<p>For each material, we will perform one draw call of a fullscreen triangle.</p>
+<pre data-lang="rust" style="background-color:#002b36;color:#839496;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#586e75;">// 1 fullscreen triangle draw per material
+</span><span style="color:#859900;">for </span><span style="color:#657b83;">(</span><span>material_id, material_pipeline_id, material_bind_group</span><span style="color:#657b83;">) </span><span style="color:#859900;">in</span><span> meshlet_view_materials.</span><span style="color:#859900;">iter</span><span style="color:#657b83;">() {
+</span><span>    </span><span style="color:#859900;">if</span><span> meshlet_gpu_scene.</span><span style="color:#859900;">material_present_in_scene</span><span style="color:#657b83;">(</span><span>material_id</span><span style="color:#657b83;">) {
+</span><span>        </span><span style="color:#859900;">if </span><span style="color:#268bd2;">let </span><span style="color:#859900;">Some</span><span style="color:#657b83;">(</span><span>material_pipeline</span><span style="color:#657b83;">) =</span><span> pipeline_cache.</span><span style="color:#859900;">get_render_pipeline</span><span style="color:#657b83;">(*</span><span>material_pipeline_id</span><span style="color:#657b83;">) {
+</span><span>            </span><span style="color:#268bd2;">let</span><span> x </span><span style="color:#657b83;">= *</span><span>material_id </span><span style="color:#657b83;">* </span><span style="color:#6c71c4;">3</span><span>;
+</span><span>            render_pass.</span><span style="color:#859900;">set_render_pipeline</span><span style="color:#657b83;">(</span><span>material_pipeline</span><span style="color:#657b83;">)</span><span>;
+</span><span>            render_pass.</span><span style="color:#859900;">set_bind_group</span><span style="color:#657b83;">(</span><span style="color:#6c71c4;">2</span><span>, material_bind_group, </span><span style="color:#859900;">&amp;</span><span style="color:#657b83;">[])</span><span>;
+</span><span>            render_pass.</span><span style="color:#859900;">draw</span><span style="color:#657b83;">(</span><span>x</span><span style="color:#859900;">..</span><span style="color:#657b83;">(</span><span>x </span><span style="color:#657b83;">+ </span><span style="color:#6c71c4;">3</span><span style="color:#657b83;">)</span><span>, </span><span style="color:#6c71c4;">0</span><span style="color:#859900;">..</span><span style="color:#6c71c4;">1</span><span style="color:#657b83;">)</span><span>;
+</span><span>        </span><span style="color:#657b83;">}
+</span><span>    </span><span style="color:#657b83;">}
+</span><span style="color:#657b83;">}
+</span></code></pre>
+<p>Note that we're not drawing the typical 0..3 vertices for a fullscreen triangle. Instead, we're drawing 0..3 for the first material, 3..6 for the second material, 6..9 for the third material, etc.</p>
+<p>In the vertex shader (which is hardcoded for all materials), we can derive the material_id of the draw from the vertex index, and then use that to set the depth of the triangle.</p>
+<pre data-lang="rust" style="background-color:#002b36;color:#839496;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#859900;">@</span><span>vertex
+</span><span style="color:#268bd2;">fn </span><span style="color:#b58900;">vertex</span><span style="color:#657b83;">(</span><span>@builtin</span><span style="color:#657b83;">(</span><span style="color:#268bd2;">vertex_index</span><span style="color:#657b83;">) </span><span style="color:#268bd2;">vertex_input</span><span>: </span><span style="color:#268bd2;">u32</span><span style="color:#657b83;">) </span><span>-&gt; </span><span style="color:#859900;">@builtin</span><span style="color:#657b83;">(</span><span>position</span><span style="color:#657b83;">) </span><span>vec4&lt;</span><span style="color:#268bd2;">f32</span><span>&gt; </span><span style="color:#657b83;">{
+</span><span>    </span><span style="color:#268bd2;">let</span><span> vertex_index </span><span style="color:#657b83;">=</span><span> vertex_input </span><span style="color:#657b83;">%</span><span> 3u;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> material_id </span><span style="color:#657b83;">=</span><span> vertex_input </span><span style="color:#657b83;">/</span><span> 3u;
+</span><span>
+</span><span>    </span><span style="color:#268bd2;">let</span><span> material_depth </span><span style="color:#657b83;">= </span><span style="color:#268bd2;">f32</span><span style="color:#657b83;">(</span><span>material_id</span><span style="color:#657b83;">) / </span><span style="color:#6c71c4;">65535.0</span><span>;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> uv </span><span style="color:#657b83;">= </span><span>vec2&lt;</span><span style="color:#268bd2;">f32</span><span>&gt;</span><span style="color:#657b83;">(</span><span style="color:#859900;">vec2</span><span style="color:#657b83;">(</span><span>vertex_index </span><span style="color:#657b83;">&gt;&gt;</span><span> 1u, vertex_index </span><span style="color:#859900;">&amp;</span><span> 1u</span><span style="color:#657b83;">)) * </span><span style="color:#6c71c4;">2.0</span><span>;
+</span><span>
+</span><span>    </span><span style="color:#859900;">return vec4</span><span style="color:#657b83;">(</span><span style="color:#859900;">uv_to_ndc</span><span style="color:#657b83;">(</span><span>uv</span><span style="color:#657b83;">)</span><span>, material_depth, </span><span style="color:#6c71c4;">1.0</span><span style="color:#657b83;">)</span><span>;
+</span><span style="color:#657b83;">}
+</span></code></pre>
+<p>The material's pipeline depth comparison function will be set to equals, so we only shade fragments for which the depth of the triangle is equal to the depth in the depth buffer. The depth buffer attached here is the material depth texture we rendered earlier. Thus, each fullscreen triangle draw per material will only shade the fragments for that material.</p>
+<p>Note that this is pretty inefficent if you have many materials. Each fullscreen triangle will cost an entire screen's worth of depth comparisons. In the future I'd like to switch to compute-shader based material shading.</p>
+<h3 id="fragment-shader">Fragment Shader<a class="zola-anchor" href="#fragment-shader" aria-label="Anchor link for: fragment-shader" style="visibility: hidden;"></a>
+</h3>
+<p>Now that we've determined what fragments to shade, it's time to apply the material's shader code to those fragments. Each fragment can sample the visibility buffer, recovering the cluster ID and triangle ID. Like before, this provides us access to the rest of the instance and mesh data.</p>
+<p>The remaining tricky bit is that since we're not actually rendering a mesh in the draw call, and are using a single triangle just to cover some fragments to shade, we don't have automatic interpolation of vertex attributes within a mesh triangle or screen-space derivatives for mipmapped texture sampling.</p>
+<p>To compute this data ourselves, each fragment can load all 3 vertices of its mesh triangle, and compute the barycentrics and derivatives manually. Big thanks to The Forge for this code.</p>
+<p>In Bevy, all the visibility buffer loading, data loading and unpacking, vertex interpolation calculations, etc is wrapped up in the <code>resolve_vertex_output()</code> function for ease of use.</p>
+<pre data-lang="rust" style="background-color:#002b36;color:#839496;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#586e75;">/// Load the visibility buffer texture and resolve it into a VertexOutput.
+</span><span style="color:#268bd2;">fn </span><span style="color:#b58900;">resolve_vertex_output</span><span style="color:#657b83;">(</span><span style="color:#268bd2;">frag_coord</span><span>: vec4&lt;</span><span style="color:#268bd2;">f32</span><span>&gt;</span><span style="color:#657b83;">) </span><span>-&gt; VertexOutput </span><span style="color:#657b83;">{
+</span><span>    </span><span style="color:#268bd2;">let</span><span> packed_ids </span><span style="color:#657b83;">=</span><span> textureLoad</span><span style="color:#657b83;">(</span><span>meshlet_visibility_buffer, vec2&lt;</span><span style="color:#268bd2;">i32</span><span>&gt;</span><span style="color:#657b83;">(</span><span>frag_coord.xy</span><span style="color:#657b83;">)</span><span>, </span><span style="color:#6c71c4;">0</span><span style="color:#657b83;">)</span><span>.r;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> cluster_id </span><span style="color:#657b83;">=</span><span> packed_ids </span><span style="color:#657b83;">&gt;&gt;</span><span> 6u;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> meshlet_id </span><span style="color:#657b83;">=</span><span> meshlet_cluster_meshlet_ids</span><span style="color:#657b83;">[</span><span>cluster_id</span><span style="color:#657b83;">]</span><span>;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> meshlet </span><span style="color:#657b83;">=</span><span> meshlets</span><span style="color:#657b83;">[</span><span>meshlet_id</span><span style="color:#657b83;">]</span><span>;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> triangle_id </span><span style="color:#657b83;">=</span><span> extractBits</span><span style="color:#657b83;">(</span><span>packed_ids, 0u, 6u</span><span style="color:#657b83;">)</span><span>;
+</span><span>
+</span><span>    </span><span style="color:#586e75;">// ...
+</span><span>
+</span><span>    </span><span style="color:#586e75;">// https://github.com/ConfettiFX/The-Forge/blob/2d453f376ef278f66f97cbaf36c0d12e4361e275/Examples_3/Visibility_Buffer/src/Shaders/FSL/visibilityBuffer_shade.frag.fsl#L83-L139
+</span><span>    </span><span style="color:#268bd2;">let</span><span> partial_derivatives </span><span style="color:#657b83;">= </span><span style="color:#859900;">compute_partial_derivatives</span><span style="color:#657b83;">(
+</span><span>        </span><span style="color:#859900;">array</span><span style="color:#657b83;">(</span><span>clip_position_1, clip_position_2, clip_position_3</span><span style="color:#657b83;">)</span><span>,
+</span><span>        frag_coord_ndc,
+</span><span>        view.viewport.zw,
+</span><span>    </span><span style="color:#657b83;">)</span><span>;
+</span><span>
+</span><span>    </span><span style="color:#586e75;">// ...
+</span><span>
+</span><span>    </span><span style="color:#268bd2;">let</span><span> world_position </span><span style="color:#657b83;">= </span><span style="color:#859900;">mat3x4</span><span style="color:#657b83;">(</span><span>world_position_1, world_position_2, world_position_3</span><span style="color:#657b83;">) *</span><span> partial_derivatives.barycentrics;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> uv </span><span style="color:#657b83;">= </span><span style="color:#859900;">mat3x2</span><span style="color:#657b83;">(</span><span>vertex_1.uv, vertex_2.uv, vertex_3.uv</span><span style="color:#657b83;">) *</span><span> partial_derivatives.barycentrics;
+</span><span>
+</span><span>    </span><span style="color:#268bd2;">let</span><span> ddx_uv </span><span style="color:#657b83;">= </span><span style="color:#859900;">mat3x2</span><span style="color:#657b83;">(</span><span>vertex_1.uv, vertex_2.uv, vertex_3.uv</span><span style="color:#657b83;">) *</span><span> partial_derivatives.ddx;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> ddy_uv </span><span style="color:#657b83;">= </span><span style="color:#859900;">mat3x2</span><span style="color:#657b83;">(</span><span>vertex_1.uv, vertex_2.uv, vertex_3.uv</span><span style="color:#657b83;">) *</span><span> partial_derivatives.ddy;
+</span><span>
+</span><span>    </span><span style="color:#586e75;">// ...
+</span><span style="color:#657b83;">}
+</span></code></pre>
+<h2 id="downsample-depth-again">Downsample Depth (Again)<a class="zola-anchor" href="#downsample-depth-again" aria-label="Anchor link for: downsample-depth-again" style="visibility: hidden;"></a>
+</h2>
+<p>Lastly, for next frame's first culling pass, we're going to need the previous frame's depth pyramid. This is where we'll generate it. We'll use the same exact process that we used for the first depth downsample, but this time we'll use the depth buffer generated as a result of the second raster pass, instead of the first.</p>
+<h1 id="future-work">Future Work<a class="zola-anchor" href="#future-work" aria-label="Anchor link for: future-work" style="visibility: hidden;"></a>
+</h1>
+<p>And with that we're done with the frame breakdown. I've covered all the major steps and shaders of how virtual geometry will work in Bevy 0.14. I did skip some of the CPU-side data management, but it's fairly boring and subject to a rewrite soon anyways.</p>
+<p>However, Bevy 0.14 is just the start. There's tons of improvements I'm hoping to implement in a future version, such as:</p>
+<ul>
+<li>Major improvements to the rasterization passes via software rasterization, and trying out my multi draw with bins idea for hardware raster</li>
+<li>Copying Nanite's idea of culling and LOD selection via persistent threads. This should let us eliminate the separate fill_cluster_buffers step, speedup culling, and remove the need for large 3d dispatches over all clusters in the scene</li>
+<li>Compressing asset vertex data by using screen-derived tangents and octahedral-encoded normals, and possibly position/UV quantization</li>
+<li>Performance, quality, reliability, and workflow improvements for the mesh to meshlet mesh asset preprocessing</li>
+<li>Compute-based material shading passes instead of the fullscreen triangle method, and possibly software variable rate shading, inspired by Unreal Engine 5.4's <a rel="nofollow noreferrer" href="https://www.unrealengine.com/en-US/blog/take-a-deep-dive-into-nanite-gpu-driven-materials">GPU-driven Nanite materials</a> and <a rel="nofollow noreferrer" href="http://filmicworlds.com/blog/visibility-buffer-rendering-with-material-graphs">this set of blog posts</a> from John Hable</li>
+<li>Streaming in and out asset data from/to disk instead of keeping all of it in memory all the time</li>
+</ul>
+<p>With any luck, and a lot of hard work, I'll be back for another blog post about all these changes in the future. Until then, enjoy Bevy 0.14!</p>
+
+      </article>
+
+      
+      
+
+      
+      
+      <div class="giscus"></div>
+      <script src="https://giscus.app/client.js"
+        data-repo="JMS55/jms55.github.io"
+        data-repo-id="R_kgDOKFxX0Q"
+        data-category="Announcements"
+        data-category-id="DIC_kwDOKFxX0c4Cvqkk"
+        data-mapping="url"
+        data-strict="0"
+        data-reactions-enabled="0"
+        data-emit-metadata="0"
+        data-input-position="top"
+        data-theme="https://jms55.github.io/giscus_light.css"
+        data-lang="en"
+        crossorigin="anonymous"
+        async>
+</script>
+
+      
+    </div>
+
+    
+
+
+<footer>
+  <div class="left">
+    <div class="copyright">
+      © 2025 JMS55
+      
+      <span>|</span>
+      Built with <a href="https://www.getzola.org" rel="noreferrer" target="_blank">zola</a> and <a href="https://github.com/isunjn/serene" rel="noreferrer" target="_blank">serene</a>
+      
+    </div>
+  </div>
+
+  <div class="right">
+    
+    
+      
+    
+    
+    <a id="rss-btn" href="https://jms55.github.io/atom.xml">RSS</a>
+    
+    
+
+    
+  </div>
+</footer>
+
+
+
+
+<dialog id="rss-mask">
+  <div>
+    <a href="https:&#x2F;&#x2F;jms55.github.io&#x2F;atom.xml">https:&#x2F;&#x2F;jms55.github.io&#x2F;atom.xml</a>
+    
+    
+    <button autofocus aria-label="copy" data-link="https:&#x2F;&#x2F;jms55.github.io&#x2F;atom.xml" data-copy-icon="&lt;svg xmlns=&quot;http:&#x2F;&#x2F;www.w3.org&#x2F;2000&#x2F;svg&quot; viewBox=&quot;0 0 24 24&quot; width=&quot;18&quot; height=&quot;18&quot;&gt;&lt;path d=&quot;M6.9998 6V3C6.9998 2.44772 7.44752 2 7.9998 2H19.9998C20.5521 2 20.9998 2.44772 20.9998 3V17C20.9998 17.5523 20.5521 18 19.9998 18H16.9998V20.9991C16.9998 21.5519 16.5499 22 15.993 22H4.00666C3.45059 22 3 21.5554 3 20.9991L3.0026 7.00087C3.0027 6.44811 3.45264 6 4.00942 6H6.9998ZM5.00242 8L5.00019 20H14.9998V8H5.00242ZM8.9998 6H16.9998V16H18.9998V4H8.9998V6Z&quot; fill=&quot;currentColor&quot;&gt;&lt;&#x2F;path&gt;&lt;&#x2F;svg&gt;
+" data-check-icon="&lt;svg xmlns=&quot;http:&#x2F;&#x2F;www.w3.org&#x2F;2000&#x2F;svg&quot; viewBox=&quot;0 0 24 24&quot; width=&quot;18&quot; height=&quot;18&quot;&gt;&lt;path d=&quot;M10.0007 15.1709L19.1931 5.97852L20.6073 7.39273L10.0007 17.9993L3.63672 11.6354L5.05093 10.2212L10.0007 15.1709Z&quot; fill=&quot;currentColor&quot;&gt;&lt;&#x2F;path&gt;&lt;&#x2F;svg&gt;
+" >
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18"><path d="M6.9998 6V3C6.9998 2.44772 7.44752 2 7.9998 2H19.9998C20.5521 2 20.9998 2.44772 20.9998 3V17C20.9998 17.5523 20.5521 18 19.9998 18H16.9998V20.9991C16.9998 21.5519 16.5499 22 15.993 22H4.00666C3.45059 22 3 21.5554 3 20.9991L3.0026 7.00087C3.0027 6.44811 3.45264 6 4.00942 6H6.9998ZM5.00242 8L5.00019 20H14.9998V8H5.00242ZM8.9998 6H16.9998V16H18.9998V4H8.9998V6Z" fill="currentColor"></path></svg>
+
+    </button>
+  </div>
+</dialog>
+
+
+
+  </main>
+</div>
+
+  
+<script src="/js/lightense.min.js"></script>
+
+
+  <script src="https://jms55.github.io/js/main.js"></script>
+</body>
+
+</html>

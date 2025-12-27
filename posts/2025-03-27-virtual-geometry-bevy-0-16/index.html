@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light dark">
+  
+  
+    
+  
+  <meta name="description" content="Bevy, Rust, Graphics, etc">
+
+  <title>Virtual Geometry in Bevy 0.16</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="https://jms55.github.io/img/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="https://jms55.github.io/img/favicon-16x16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="https://jms55.github.io/img/apple-touch-icon.png">
+  
+  <style>
+
+  /* light mode colors */
+  body {
+    --primary-color: #5871a2;
+    --primary-pale-color: #5871a233;
+    --primary-decoration-color: #5871a210;
+    --bg-color: #ffffff;
+    --text-color: #2f3030;
+    --text-pale-color: #767676;
+    --text-decoration-color: #a9a9a9;
+    --highlight-mark-color: #5f75b020;
+
+    --callout-note-color: #5871a2;
+    --callout-tip-color: #268556;
+    --callout-important-color: #885fc9;
+    --callout-warning-color: #ab6632;
+    --callout-caution-color: #c64e4e;
+  }
+
+  /* dark mode colors */
+  body.dark {
+    --primary-color: #6f8fd1;
+    --primary-pale-color: #6f8fd166;
+    --primary-decoration-color: #6f8fd112;
+    --bg-color: #1c1c1c;
+    --text-color: #c1c1c1;
+    --text-pale-color: #848484;
+    --text-decoration-color: #5f5f5f;
+    --highlight-mark-color: #8296cb3b;
+
+    --callout-note-color: #6f8fd1;
+    --callout-tip-color: #47976f;
+    --callout-important-color: #9776cd;
+    --callout-warning-color: #ad7a52;
+    --callout-caution-color: #d06161;
+  }
+
+  /* typography */
+  body {
+    --main-font: ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+    --code-font: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+    --homepage-max-width: 768px;
+    --main-max-width: 768px;
+    --avatar-size: 60px;
+    --font-size: 16px;
+    --line-height: 1.75;
+    --img-border-radius: 0px;
+    --detail-border-radius: 0px;
+    --dark-mode-img-brightness: 0.75;
+    --dark-mode-chart-brightness: 0.75;
+    --inline-code-border-radius: 2px;
+    --inline-code-bg-color: var(--primary-decoration-color);
+    --block-code-border-radius: 0px;
+    --block-code-border-color: var(--primary-color);
+    --detail-border-color: var(--primary-color);
+  }
+
+</style>
+
+  <link rel="stylesheet" href="https://jms55.github.io/main.css">
+  
+
+
+
+  
+</head>
+
+<body class="post">
+  
+  
+<div id="wrapper">
+  <div id="blank"></div>
+  <aside>
+    
+    
+    <nav>
+      <ul>
+        
+        <li>
+          <a class="h2" href="#introduction">Introduction</a>
+          
+        </li>
+        
+        <li>
+          <a class="h2" href="#metis-based-triangle-clustering">METIS-based Triangle Clustering</a>
+          
+        </li>
+        
+        <li>
+          <a class="h2" href="#texture-atomics">Texture Atomics</a>
+          
+          <ul>
+            
+            <li>
+              <a class="h3" href="#faster-depth-resolve">Faster Depth Resolve</a>
+            </li>
+            
+            <li>
+              <a class="h3" href="#issues-with-clearing">Issues With Clearing</a>
+            </li>
+            
+            <li>
+              <a class="h3" href="#texture-atomic-results">Texture Atomic Results</a>
+            </li>
+            
+          </ul>
+          
+        </li>
+        
+        <li>
+          <a class="h2" href="#upcoming">Upcoming</a>
+          
+        </li>
+        
+      </ul>
+    </nav>
+    
+    
+    <button id="back-to-top" aria-label="back to top">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-up"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>
+
+    </button>
+    
+  </aside>
+  <main>
+    
+<header>
+  <nav>
+    <a id="back-link" href="https:&#x2F;&#x2F;jms55.github.io&#x2F;posts">← Back</a>
+  </nav>
+</header>
+
+
+    <div>
+      
+      
+      
+      
+      <div id="copy-cfg" style="display: none;" data-copy-icon="&lt;svg xmlns=&quot;http:&#x2F;&#x2F;www.w3.org&#x2F;2000&#x2F;svg&quot; viewBox=&quot;0 0 24 24&quot; width=&quot;18&quot; height=&quot;18&quot;&gt;&lt;path d=&quot;M6.9998 6V3C6.9998 2.44772 7.44752 2 7.9998 2H19.9998C20.5521 2 20.9998 2.44772 20.9998 3V17C20.9998 17.5523 20.5521 18 19.9998 18H16.9998V20.9991C16.9998 21.5519 16.5499 22 15.993 22H4.00666C3.45059 22 3 21.5554 3 20.9991L3.0026 7.00087C3.0027 6.44811 3.45264 6 4.00942 6H6.9998ZM5.00242 8L5.00019 20H14.9998V8H5.00242ZM8.9998 6H16.9998V16H18.9998V4H8.9998V6Z&quot; fill=&quot;currentColor&quot;&gt;&lt;&#x2F;path&gt;&lt;&#x2F;svg&gt;
+" data-check-icon="&lt;svg xmlns=&quot;http:&#x2F;&#x2F;www.w3.org&#x2F;2000&#x2F;svg&quot; viewBox=&quot;0 0 24 24&quot; width=&quot;18&quot; height=&quot;18&quot;&gt;&lt;path d=&quot;M10.0007 15.1709L19.1931 5.97852L20.6073 7.39273L10.0007 17.9993L3.63672 11.6354L5.05093 10.2212L10.0007 15.1709Z&quot; fill=&quot;currentColor&quot;&gt;&lt;&#x2F;path&gt;&lt;&#x2F;svg&gt;
+"></div>
+      
+      <article class="prose">
+        <h1>Virtual Geometry in Bevy 0.16</h1>
+        <div id="post-info">
+          <div id="date">
+            <span id="publish">Mar 27, 2025</span>
+            </div>
+
+          
+          <div id="tags">
+            <a class="instant" href="https://jms55.github.io/tags/bevy"><span>#</span>bevy</a><a class="instant" href="https://jms55.github.io/tags/virtual-geometry"><span>#</span>virtual geometry</a>
+          </div>
+          
+        </div>
+
+        
+        
+
+        
+
+        <h2 id="introduction">Introduction<a class="zola-anchor" href="#introduction" aria-label="Anchor link for: introduction" style="visibility: hidden;"></a>
+</h2>
+<p>Bevy 0.16 is releasing soon, and as usual it's time for me to write about the progress I've made on virtual geometry over the last couple of months.</p>
+<p>Due to a combination of life being busy, and taking an ongoing break from the project to work on other stuff (due to burnout), I haven't gotten as much done as the last two releases. This will be a much shorter blog post than usual.</p>
+<h2 id="metis-based-triangle-clustering">METIS-based Triangle Clustering<a class="zola-anchor" href="#metis-based-triangle-clustering" aria-label="Anchor link for: metis-based-triangle-clustering" style="visibility: hidden;"></a>
+</h2>
+<p>PR <a rel="nofollow noreferrer" href="https://github.com/bevyengine/bevy/pull/16947">#16947</a> improves the DAG quality.</p>
+<p>I've said it before, and I'll say it again - DAG quality is the most important part of virtual geometry (and the hardest to get right).</p>
+<p>Before, in order to group triangles into meshlets, I was simply relying on meshoptimizer's <code>meshopt_buildMeshlets()</code> function. It works pretty good for the general use case of splitting meshes into meshlets, but for virtual geometry, it's not ideal.</p>
+<p>Meshoptimizer prioritizes generating nice clusters for culling and vertex reuse, but for virtual geometry, we want to ensure that meshlets share as few vertices as possible. Less shared vertices between meshlets means less locked vertices when simplifying, which leads to better DAG quality.</p>
+<p>Minimizing shared vertices between meshlets when clustering triangles is the same problem as minimizing shared vertices between meshlet groups when grouping meshlets. We will once again use METIS to partition a graph, where nodes are triangles, edges connect adjacent triangles, and edge weights are the count of shared vertices between the triangles.</p>
+<p>From there it was just a lot of experimentation and tweaking parameters in order to get METIS to generate good meshlets. The secret ingredients I discovered for good clustering are:</p>
+<ol>
+<li>Set UFactor to 1 in METIS's options (did you know METIS has an options struct?), to ensure as little imbalance between partitions as possible.</li>
+<li>Undershoot the partition count a little. Otherwise METIS will tend to overshoot and give you too many triangles per meshlet. For 128 max triangles per cluster, I set <code>partition_count = number_of_triangles.div_ceil(126)</code>.</li>
+</ol>
+<p>With this, we get a nicer quality DAG. Up until now, I've been plagued by tiny &lt;10 triangles meshlets that tend to get "stuck" and not simplify into higher LOD levels. Now we get nice and even meshlets that simplify well as we build the higher LOD levels.</p>
+<center>
+<p><img src="https://jms55.github.io/posts/2025-03-27-virtual-geometry-bevy-0-16/old_dag.png" alt="Old DAG" />
+<em>Old DAG</em></p>
+<p><img src="https://jms55.github.io/posts/2025-03-27-virtual-geometry-bevy-0-16/new_dag.png" alt="New DAG" />
+<em>New DAG</em></p>
+</center>
+<p>I'm still not done working on DAG quality - I haven't considered spatial positions of triangles/meshlets for grouping things yet - but this was a great step forwards.</p>
+<h2 id="texture-atomics">Texture Atomics<a class="zola-anchor" href="#texture-atomics" aria-label="Anchor link for: texture-atomics" style="visibility: hidden;"></a>
+</h2>
+<p>PR <a rel="nofollow noreferrer" href="https://github.com/bevyengine/bevy/pull/17765">#17765</a> improves the runtime performance.</p>
+<p>Thanks once again to @atlv24's work on wgpu/naga, we now have access to atomic operations on u64/u32 storage textures!</p>
+<p>Instead of using a plain GPU buffer to store our visbuffer, and buffer atomics to rasterize, we'll now use a R64Uint/R32Uint storage texture, and use texture atomics for rasterization.</p>
+<p>Things get a little bit faster, mostly due to cache behaviors for texture-like access patterns being better with actual textures instead of buffers.</p>
+<h3 id="faster-depth-resolve">Faster Depth Resolve<a class="zola-anchor" href="#faster-depth-resolve" aria-label="Anchor link for: faster-depth-resolve" style="visibility: hidden;"></a>
+</h3>
+<p>The real win however, was actually an entirely unrelated change I made in the same PR.</p>
+<p>After rasterizing to the visbuffer texture (packed depth + cluster ID + triangle ID), there are two fullscreen triangle render passes to read from the visbuffer and write depth to both an actual depth texture, and the "material depth" texture discussed in previous posts.</p>
+<p>Lets look at the material depth resolve shader:</p>
+<pre data-lang="rust" style="background-color:#002b36;color:#839496;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#859900;">@</span><span>fragment
+</span><span style="color:#268bd2;">fn </span><span style="color:#b58900;">resolve_material_depth</span><span style="color:#657b83;">(</span><span style="color:#268bd2;">in</span><span>: FullscreenVertexOutput</span><span style="color:#657b83;">) </span><span>-&gt; </span><span style="color:#859900;">@builtin</span><span style="color:#657b83;">(</span><span>frag_depth</span><span style="color:#657b83;">) </span><span style="color:#268bd2;">f32 </span><span style="color:#657b83;">{
+</span><span>    </span><span style="color:#268bd2;">let</span><span> visibility </span><span style="color:#657b83;">=</span><span> textureLoad</span><span style="color:#657b83;">(</span><span>meshlet_visibility_buffer, vec2&lt;</span><span style="color:#268bd2;">u32</span><span>&gt;</span><span style="color:#657b83;">(</span><span style="color:#859900;">in</span><span>.position.xy</span><span style="color:#657b83;">))</span><span>.r;
+</span><span>
+</span><span>    </span><span style="color:#268bd2;">let</span><span> depth </span><span style="color:#657b83;">=</span><span> visibility </span><span style="color:#657b83;">&gt;&gt;</span><span> 32u;
+</span><span>    </span><span style="color:#859900;">if</span><span> depth </span><span style="color:#657b83;">==</span><span> 0lu </span><span style="color:#657b83;">{</span><span> discard; </span><span style="color:#657b83;">} </span><span style="color:#586e75;">// This line is new
+</span><span>
+</span><span>    </span><span style="color:#268bd2;">let</span><span> cluster_id </span><span style="color:#657b83;">= </span><span style="color:#268bd2;">u32</span><span style="color:#657b83;">(</span><span>visibility</span><span style="color:#657b83;">) &gt;&gt;</span><span> 7u;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> instance_id </span><span style="color:#657b83;">=</span><span> meshlet_cluster_instance_ids</span><span style="color:#657b83;">[</span><span>cluster_id</span><span style="color:#657b83;">]</span><span>;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> material_id </span><span style="color:#657b83;">=</span><span> meshlet_instance_material_ids</span><span style="color:#657b83;">[</span><span>instance_id</span><span style="color:#657b83;">]</span><span>;
+</span><span>    </span><span style="color:#859900;">return </span><span style="color:#268bd2;">f32</span><span style="color:#657b83;">(</span><span>material_id</span><span style="color:#657b83;">) / </span><span style="color:#6c71c4;">65535.0</span><span>;
+</span><span style="color:#657b83;">}
+</span></code></pre>
+<p>For pixels where depth is 0 (i.e. the background, i.e. no meshes covering that pixel), we don't need to write depth out. The textures are already cleared to zero by the render pass setup.</p>
+<p>Adding this single line to discard the background fragments doubled the performance of the resolve depth/material depth passes in the demo scene.</p>
+<h3 id="issues-with-clearing">Issues With Clearing<a class="zola-anchor" href="#issues-with-clearing" aria-label="Anchor link for: issues-with-clearing" style="visibility: hidden;"></a>
+</h3>
+<p>In Bevy we cache resource between frames, and so at the start of the frame, we need to clear the visbuffer texture back to zero to prepare it for use during the frame.</p>
+<p>Wgpu has some simple <code>CommandEncoder::clear_buffer()</code> and <code>CommandEncoder::clear_texture()</code> commands. But their behavior under the hood might be a little unintuitive if you've never used Vulkan before.</p>
+<p>When I initially switched the visbuffer from a buffer to a storage texture, and switched the clear from <code>CommandEncoder::clear_buffer()</code> to <code>CommandEncoder::clear_texture()</code>, I profiled and was shocked to see this:</p>
+<center>
+<p><img src="https://jms55.github.io/posts/2025-03-27-virtual-geometry-bevy-0-16/slow_clear.png" alt="Slow frame trace" /></p>
+</center>
+<p>0.68ms spent on a single vkCmdCopyBufferToImage, just to clear the texture. Before, using buffers, it was a simple vkCmdFillBuffer that took 0.01ms. What's going on?</p>
+<p>Well, under the hood, <code>CommandEncoder::clear_texture()</code> maps to one of the following operations:</p>
+<ol>
+<li>If the texture was created with the <code>TextureUsages::RENDER_ATTACHMENT</code> bit set, create a render pass with no draws and fragment load op = clear in order to clear the texture.</li>
+<li>Otherwise allocate a big buffer filled with zeros, and then use vkCmdCopyBufferToImage to copy zeros to fill the texture.</li>
+</ol>
+<p>Option #1 is out since R64Uint/R32Uint textures don't support the <code>TextureUsages::RENDER_ATTACHMENT</code> bit, and of course as we've found out, option #2 is horribly slow.</p>
+<p>The <em>best</em> option would be to use vkClearColorImage to clear the texture, which should be a similar fast path in the driver to using vkCmdFillBuffer with zeros, but wgpu neither uses vkClearColorImage internally, nor exposes it to users.</p>
+<p>So instead I wrote a custom compute pass (and all the CPU-side boilerplate that that entails) to manually zero the texture, like so:</p>
+<pre data-lang="rust" style="background-color:#002b36;color:#839496;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#859900;">#</span><span>ifdef </span><span style="color:#cb4b16;">MESHLET_VISIBILITY_BUFFER_RASTER_PASS_OUTPUT
+</span><span style="color:#859900;">@group</span><span style="color:#657b83;">(</span><span style="color:#6c71c4;">0</span><span style="color:#657b83;">) </span><span style="color:#859900;">@binding</span><span style="color:#657b83;">(</span><span style="color:#6c71c4;">0</span><span style="color:#657b83;">)</span><span> var meshlet_visibility_buffer: texture_storage_2d&lt;r64uint, write&gt;;
+</span><span style="color:#859900;">#else
+</span><span style="color:#859900;">@group</span><span style="color:#657b83;">(</span><span style="color:#6c71c4;">0</span><span style="color:#657b83;">) </span><span style="color:#859900;">@binding</span><span style="color:#657b83;">(</span><span style="color:#6c71c4;">0</span><span style="color:#657b83;">)</span><span> var meshlet_visibility_buffer: texture_storage_2d&lt;r32uint, write&gt;;
+</span><span style="color:#859900;">#</span><span>endif
+</span><span>var&lt;push_constant&gt; view_size: vec2&lt;</span><span style="color:#268bd2;">u32</span><span>&gt;;
+</span><span>
+</span><span style="color:#859900;">@</span><span>compute
+</span><span style="color:#859900;">@workgroup_size</span><span style="color:#657b83;">(</span><span style="color:#6c71c4;">16</span><span>, </span><span style="color:#6c71c4;">16</span><span>, </span><span style="color:#6c71c4;">1</span><span style="color:#657b83;">)
+</span><span style="color:#268bd2;">fn </span><span style="color:#b58900;">clear_visibility_buffer</span><span style="color:#657b83;">(</span><span>@builtin</span><span style="color:#657b83;">(</span><span style="color:#268bd2;">global_invocation_id</span><span style="color:#657b83;">) </span><span style="color:#268bd2;">global_id</span><span>: vec3&lt;</span><span style="color:#268bd2;">u32</span><span>&gt;</span><span style="color:#657b83;">) {
+</span><span>    </span><span style="color:#859900;">if any</span><span style="color:#657b83;">(</span><span>global_id.xy </span><span style="color:#657b83;">&gt;=</span><span> view_size</span><span style="color:#657b83;">) { </span><span style="color:#859900;">return</span><span>; </span><span style="color:#657b83;">}
+</span><span>
+</span><span style="color:#859900;">#</span><span>ifdef </span><span style="color:#cb4b16;">MESHLET_VISIBILITY_BUFFER_RASTER_PASS_OUTPUT
+</span><span>    textureStore</span><span style="color:#657b83;">(</span><span>meshlet_visibility_buffer, global_id.xy, </span><span style="color:#859900;">vec4</span><span style="color:#657b83;">(</span><span>0lu</span><span style="color:#657b83;">))</span><span>;
+</span><span style="color:#859900;">#else
+</span><span>    textureStore</span><span style="color:#657b83;">(</span><span>meshlet_visibility_buffer, global_id.xy, </span><span style="color:#859900;">vec4</span><span style="color:#657b83;">(</span><span>0u</span><span style="color:#657b83;">))</span><span>;
+</span><span style="color:#859900;">#</span><span>endif
+</span><span style="color:#657b83;">}
+</span></code></pre>
+<p>Still not as fast as vkClearColorImage likely is, but much faster than 0.68ms.</p>
+<h3 id="texture-atomic-results">Texture Atomic Results<a class="zola-anchor" href="#texture-atomic-results" aria-label="Anchor link for: texture-atomic-results" style="visibility: hidden;"></a>
+</h3>
+<p>Overall perf improvement is about 0.42ms faster in a very simple demo scene.</p>
+<center>
+<p><img src="https://jms55.github.io/posts/2025-03-27-virtual-geometry-bevy-0-16/buffer_trace.png" alt="Old frame trace" />
+<em>Old frame trace</em></p>
+<p><img src="https://jms55.github.io/posts/2025-03-27-virtual-geometry-bevy-0-16/texture_trace.png" alt="New frame trace" />
+<em>New frame trace</em></p>
+</center>
+<h2 id="upcoming">Upcoming<a class="zola-anchor" href="#upcoming" aria-label="Anchor link for: upcoming" style="visibility: hidden;"></a>
+</h2>
+<p>And that's it for virtual geometry stuff I worked on during Bevy 0.16.</p>
+<p>In related but non-Bevy news, Nvidia revealed their blackwell RTX 50 series GPUs, with some exciting <a rel="nofollow noreferrer" href="https://github.com/nvpro-samples/build_all?tab=readme-ov-file#mega-geometry">new meshlet/virtual geometry stuff</a>!</p>
+<ul>
+<li>New raytracing APIs (not rasterization!) for meshlet-based acceleration structures (CLAS) that are cheaper to build
+<ul>
+<li>And on blackwell, CLAS's use a compressed (but sadly opaque) memory format</li>
+</ul>
+</li>
+<li>New demos using CLAS's for animated geometry, dynamic tesselation, and even full Nanite-style virtual geometry!</li>
+<li>New libraries for generating raytracing-friendly meshlets (i.e. optimized for bounding-box size), and virtual geometry oriented DAGs of meshlets</li>
+</ul>
+<p>One of the biggest issues with Nanite (besides aggregate geometry like foilage) is that it came about right when realtime raytracing was starting to pick up. Until now, it hasn't been clear how to integrate virtual geometry with raytracing (beyond rasterizing the geometry to a gbuffer, so at least you get more primary visibility detail). These new APIs resolve that issue.</p>
+<p>Meshoptimizer v0.23 also released recently, with some new APIs (<code>meshopt_buildMeshletsFlex</code>, <code>meshopt_partitionClusters</code>, <code>meshopt_computeSphereBounds</code>) that I need to try out for DAG building at some point.</p>
+<p>Finally of course, I need to work on BVH-based culling for Bevy's virtual geometry. As I went over in my last post, culling is the biggest bottleneck at the moment. I did start working on it during the 0.16 dev cycle, but burned out before the end. We'll see what happens this cycle.</p>
+<p>Enjoy Bevy 0.16!</p>
+
+      </article>
+
+      
+      
+
+      
+      
+      <div class="giscus"></div>
+      <script src="https://giscus.app/client.js"
+        data-repo="JMS55/jms55.github.io"
+        data-repo-id="R_kgDOKFxX0Q"
+        data-category="Announcements"
+        data-category-id="DIC_kwDOKFxX0c4Cvqkk"
+        data-mapping="url"
+        data-strict="0"
+        data-reactions-enabled="0"
+        data-emit-metadata="0"
+        data-input-position="top"
+        data-theme="https://jms55.github.io/giscus_light.css"
+        data-lang="en"
+        crossorigin="anonymous"
+        async>
+</script>
+
+      
+    </div>
+
+    
+
+
+<footer>
+  <div class="left">
+    <div class="copyright">
+      © 2025 JMS55
+      
+      <span>|</span>
+      Built with <a href="https://www.getzola.org" rel="noreferrer" target="_blank">zola</a> and <a href="https://github.com/isunjn/serene" rel="noreferrer" target="_blank">serene</a>
+      
+    </div>
+  </div>
+
+  <div class="right">
+    
+    
+      
+    
+    
+    <a id="rss-btn" href="https://jms55.github.io/atom.xml">RSS</a>
+    
+    
+
+    
+  </div>
+</footer>
+
+
+
+
+<dialog id="rss-mask">
+  <div>
+    <a href="https:&#x2F;&#x2F;jms55.github.io&#x2F;atom.xml">https:&#x2F;&#x2F;jms55.github.io&#x2F;atom.xml</a>
+    
+    
+    <button autofocus aria-label="copy" data-link="https:&#x2F;&#x2F;jms55.github.io&#x2F;atom.xml" data-copy-icon="&lt;svg xmlns=&quot;http:&#x2F;&#x2F;www.w3.org&#x2F;2000&#x2F;svg&quot; viewBox=&quot;0 0 24 24&quot; width=&quot;18&quot; height=&quot;18&quot;&gt;&lt;path d=&quot;M6.9998 6V3C6.9998 2.44772 7.44752 2 7.9998 2H19.9998C20.5521 2 20.9998 2.44772 20.9998 3V17C20.9998 17.5523 20.5521 18 19.9998 18H16.9998V20.9991C16.9998 21.5519 16.5499 22 15.993 22H4.00666C3.45059 22 3 21.5554 3 20.9991L3.0026 7.00087C3.0027 6.44811 3.45264 6 4.00942 6H6.9998ZM5.00242 8L5.00019 20H14.9998V8H5.00242ZM8.9998 6H16.9998V16H18.9998V4H8.9998V6Z&quot; fill=&quot;currentColor&quot;&gt;&lt;&#x2F;path&gt;&lt;&#x2F;svg&gt;
+" data-check-icon="&lt;svg xmlns=&quot;http:&#x2F;&#x2F;www.w3.org&#x2F;2000&#x2F;svg&quot; viewBox=&quot;0 0 24 24&quot; width=&quot;18&quot; height=&quot;18&quot;&gt;&lt;path d=&quot;M10.0007 15.1709L19.1931 5.97852L20.6073 7.39273L10.0007 17.9993L3.63672 11.6354L5.05093 10.2212L10.0007 15.1709Z&quot; fill=&quot;currentColor&quot;&gt;&lt;&#x2F;path&gt;&lt;&#x2F;svg&gt;
+" >
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18"><path d="M6.9998 6V3C6.9998 2.44772 7.44752 2 7.9998 2H19.9998C20.5521 2 20.9998 2.44772 20.9998 3V17C20.9998 17.5523 20.5521 18 19.9998 18H16.9998V20.9991C16.9998 21.5519 16.5499 22 15.993 22H4.00666C3.45059 22 3 21.5554 3 20.9991L3.0026 7.00087C3.0027 6.44811 3.45264 6 4.00942 6H6.9998ZM5.00242 8L5.00019 20H14.9998V8H5.00242ZM8.9998 6H16.9998V16H18.9998V4H8.9998V6Z" fill="currentColor"></path></svg>
+
+    </button>
+  </div>
+</dialog>
+
+
+
+  </main>
+</div>
+
+  
+<script src="/js/lightense.min.js"></script>
+
+
+  <script src="https://jms55.github.io/js/main.js"></script>
+</body>
+
+</html>

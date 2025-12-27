@@ -1,0 +1,1319 @@
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light dark">
+  
+  
+    
+  
+  <meta name="description" content="Bevy, Rust, Graphics, etc">
+
+  <title>Realtime Raytracing in Bevy 0.17 (Solari)</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="https://jms55.github.io/img/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="https://jms55.github.io/img/favicon-16x16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="https://jms55.github.io/img/apple-touch-icon.png">
+  
+  <style>
+
+  /* light mode colors */
+  body {
+    --primary-color: #5871a2;
+    --primary-pale-color: #5871a233;
+    --primary-decoration-color: #5871a210;
+    --bg-color: #ffffff;
+    --text-color: #2f3030;
+    --text-pale-color: #767676;
+    --text-decoration-color: #a9a9a9;
+    --highlight-mark-color: #5f75b020;
+
+    --callout-note-color: #5871a2;
+    --callout-tip-color: #268556;
+    --callout-important-color: #885fc9;
+    --callout-warning-color: #ab6632;
+    --callout-caution-color: #c64e4e;
+  }
+
+  /* dark mode colors */
+  body.dark {
+    --primary-color: #6f8fd1;
+    --primary-pale-color: #6f8fd166;
+    --primary-decoration-color: #6f8fd112;
+    --bg-color: #1c1c1c;
+    --text-color: #c1c1c1;
+    --text-pale-color: #848484;
+    --text-decoration-color: #5f5f5f;
+    --highlight-mark-color: #8296cb3b;
+
+    --callout-note-color: #6f8fd1;
+    --callout-tip-color: #47976f;
+    --callout-important-color: #9776cd;
+    --callout-warning-color: #ad7a52;
+    --callout-caution-color: #d06161;
+  }
+
+  /* typography */
+  body {
+    --main-font: ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+    --code-font: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+    --homepage-max-width: 768px;
+    --main-max-width: 768px;
+    --avatar-size: 60px;
+    --font-size: 16px;
+    --line-height: 1.75;
+    --img-border-radius: 0px;
+    --detail-border-radius: 0px;
+    --dark-mode-img-brightness: 0.75;
+    --dark-mode-chart-brightness: 0.75;
+    --inline-code-border-radius: 2px;
+    --inline-code-bg-color: var(--primary-decoration-color);
+    --block-code-border-radius: 0px;
+    --block-code-border-color: var(--primary-color);
+    --detail-border-color: var(--primary-color);
+  }
+
+</style>
+
+  <link rel="stylesheet" href="https://jms55.github.io/main.css">
+  
+
+
+
+  
+</head>
+
+<body class="post">
+  
+  
+<div id="wrapper">
+  <div id="blank"></div>
+  <aside>
+    
+    
+    <nav>
+      <ul>
+        
+        <li>
+          <a class="h2" href="#introduction">Introduction</a>
+          
+        </li>
+        
+        <li>
+          <a class="h2" href="#why-raytracing-for-bevy">Why Raytracing for Bevy?</a>
+          
+        </li>
+        
+        <li>
+          <a class="h2" href="#frame-breakdown">Frame Breakdown</a>
+          
+          <ul>
+            
+            <li>
+              <a class="h3" href="#gbuffer-raster">GBuffer Raster</a>
+            </li>
+            
+            <li>
+              <a class="h3" href="#restir-di">ReSTIR DI</a>
+            </li>
+            
+            <li>
+              <a class="h3" href="#restir-gi">ReSTIR GI</a>
+            </li>
+            
+            <li>
+              <a class="h3" href="#interlude-what-is-restir-doing">Interlude: What is ReSTIR Doing?</a>
+            </li>
+            
+            <li>
+              <a class="h3" href="#light-tile-presampling">Light Tile Presampling</a>
+            </li>
+            
+            <li>
+              <a class="h3" href="#world-cache">World Cache</a>
+            </li>
+            
+            <li>
+              <a class="h3" href="#dlss-ray-reconstruction">DLSS Ray Reconstruction</a>
+            </li>
+            
+          </ul>
+          
+        </li>
+        
+        <li>
+          <a class="h2" href="#performance">Performance</a>
+          
+          <ul>
+            
+            <li>
+              <a class="h3" href="#numbers">Numbers</a>
+            </li>
+            
+            <li>
+              <a class="h3" href="#upscaling-benefits">Upscaling Benefits</a>
+            </li>
+            
+            <li>
+              <a class="h3" href="#nsight-trace">NSight Trace</a>
+            </li>
+            
+          </ul>
+          
+        </li>
+        
+        <li>
+          <a class="h2" href="#future-work">Future Work</a>
+          
+          <ul>
+            
+            <li>
+              <a class="h3" href="#feature-parity">Feature Parity</a>
+            </li>
+            
+            <li>
+              <a class="h3" href="#light-sampling">Light Sampling</a>
+            </li>
+            
+            <li>
+              <a class="h3" href="#chromatic-restir">Chromatic ReSTIR</a>
+            </li>
+            
+            <li>
+              <a class="h3" href="#gi-quality">GI Quality</a>
+            </li>
+            
+            <li>
+              <a class="h3" href="#denoising-options">Denoising Options</a>
+            </li>
+            
+          </ul>
+          
+        </li>
+        
+        <li>
+          <a class="h2" href="#thank-you">Thank You</a>
+          
+        </li>
+        
+        <li>
+          <a class="h2" href="#further-reading">Further Reading</a>
+          
+        </li>
+        
+      </ul>
+    </nav>
+    
+    
+    <button id="back-to-top" aria-label="back to top">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-up"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>
+
+    </button>
+    
+  </aside>
+  <main>
+    
+<header>
+  <nav>
+    <a id="back-link" href="https:&#x2F;&#x2F;jms55.github.io&#x2F;posts">← Back</a>
+  </nav>
+</header>
+
+
+    <div>
+      
+      
+      
+      
+      <div id="copy-cfg" style="display: none;" data-copy-icon="&lt;svg xmlns=&quot;http:&#x2F;&#x2F;www.w3.org&#x2F;2000&#x2F;svg&quot; viewBox=&quot;0 0 24 24&quot; width=&quot;18&quot; height=&quot;18&quot;&gt;&lt;path d=&quot;M6.9998 6V3C6.9998 2.44772 7.44752 2 7.9998 2H19.9998C20.5521 2 20.9998 2.44772 20.9998 3V17C20.9998 17.5523 20.5521 18 19.9998 18H16.9998V20.9991C16.9998 21.5519 16.5499 22 15.993 22H4.00666C3.45059 22 3 21.5554 3 20.9991L3.0026 7.00087C3.0027 6.44811 3.45264 6 4.00942 6H6.9998ZM5.00242 8L5.00019 20H14.9998V8H5.00242ZM8.9998 6H16.9998V16H18.9998V4H8.9998V6Z&quot; fill=&quot;currentColor&quot;&gt;&lt;&#x2F;path&gt;&lt;&#x2F;svg&gt;
+" data-check-icon="&lt;svg xmlns=&quot;http:&#x2F;&#x2F;www.w3.org&#x2F;2000&#x2F;svg&quot; viewBox=&quot;0 0 24 24&quot; width=&quot;18&quot; height=&quot;18&quot;&gt;&lt;path d=&quot;M10.0007 15.1709L19.1931 5.97852L20.6073 7.39273L10.0007 17.9993L3.63672 11.6354L5.05093 10.2212L10.0007 15.1709Z&quot; fill=&quot;currentColor&quot;&gt;&lt;&#x2F;path&gt;&lt;&#x2F;svg&gt;
+"></div>
+      
+      <article class="prose">
+        <h1>Realtime Raytracing in Bevy 0.17 (Solari)</h1>
+        <div id="post-info">
+          <div id="date">
+            <span id="publish">Sep 20, 2025</span>
+            </div>
+
+          
+          <div id="tags">
+            <a class="instant" href="https://jms55.github.io/tags/bevy"><span>#</span>bevy</a><a class="instant" href="https://jms55.github.io/tags/raytracing"><span>#</span>raytracing</a>
+          </div>
+          
+        </div>
+
+        
+        
+
+        
+
+        <p>Lighting a scene is hard! Anyone who's tried to make a 3D scene look good knows the frustration of placing light probes, tweaking shadow cascades, and trying to figure out why their materials don't look quite right.</p>
+<p>Over the past few years, real-time raytracing has gone from a research curiosity to a shipping feature in major game engines, promising to solve many of these problems by simulating how light actually behaves.</p>
+<p>With the release of v0.17, <a rel="nofollow noreferrer" href="https://bevy.org">Bevy</a> now joins the club with experimental support for hardware raytracing!</p>
+<video style="max-width: 100%; margin: var(--gap) var(--gap) 0 var(--gap); border-radius: 6px;" controls>
+  <source src="solari_recording.mp4" type="video/mp4">
+</video>
+<center>
+<p><em><a rel="nofollow noreferrer" href="https://github.com/SEED-EA/pica-pica-assets">PICA PICA scene by SEED</a></em></p>
+</center>
+<p>Try it out yourself:</p>
+<pre data-lang="bash" style="background-color:#002b36;color:#839496;" class="language-bash "><code class="language-bash" data-lang="bash"><span style="color:#b58900;">git</span><span> clone https://github.com/bevyengine/bevy </span><span style="color:#859900;">&amp;&amp; cd</span><span> bevy
+</span><span style="color:#b58900;">git</span><span> checkout release-0.17.0
+</span><span style="color:#b58900;">cargo</span><span> run</span><span style="color:#268bd2;"> --release --example</span><span> solari</span><span style="color:#268bd2;"> --features</span><span> bevy_solari,https
+</span><span style="color:#586e75;"># Optionally setup DLSS support for NVIDIA GPUs following https://github.com/bevyengine/dlss_wgpu?tab=readme-ov-file#downloading-the-dlss-sdk
+</span><span style="color:#b58900;">cargo</span><span> run</span><span style="color:#268bd2;"> --release --example</span><span> solari</span><span style="color:#268bd2;"> --features</span><span> bevy_solari,https,dlss
+</span></code></pre>
+<h2 id="introduction">Introduction<a class="zola-anchor" href="#introduction" aria-label="Anchor link for: introduction" style="visibility: hidden;"></a>
+</h2>
+<p>Back in 2023, I <a rel="nofollow noreferrer" href="https://github.com/bevyengine/bevy/pull/10000">started</a> a project I called Solari to integrate hardware raytracing into Bevy's rendering pipeline. I was experimenting with <a rel="nofollow noreferrer" href="https://youtu.be/2GYXuM10riw">Lumen</a>-style screen space probes for global illumination, and later extended it to use <a rel="nofollow noreferrer" href="https://radiance-cascades.com">radiance cascades</a>.</p>
+<p>These techniques, while theoretically sound, proved challenging to use in practice. Screen space probes were tricky to get good quality out of (reusing and reprojecting the same probe across multiple pixels is hard!), and radiance cascades brought its own set of artifacts and performance costs.</p>
+<p>On top of the algorithmic challenges, the ecosystem simply wasn't ready. Wgpu's raytracing support existed only as a work-in-progress PR that never got merged upstream. Maintaining a fork of wgpu (and by extension, Bevy) was time-consuming and unsustainable. After months of dealing with these challenges, I shelved the project.</p>
+<p>In the 2 years since, I've learned a bunch more, raytracing has been upstreamed into wgpu, and raytracing algorithms have gotten much more developed. I've restarted the project with a new approach (ReSTIR, DLSS-RR), and soon it will be released as an official Bevy plugin!</p>
+<p>In this post, I'll be doing a frame breakdown of how Solari works in Bevy 0.17, why I made certain choices, some of the challenges I faced, and some of the issues I've yet to solve.</p>
+<h2 id="why-raytracing-for-bevy">Why Raytracing for Bevy?<a class="zola-anchor" href="#why-raytracing-for-bevy" aria-label="Anchor link for: why-raytracing-for-bevy" style="visibility: hidden;"></a>
+</h2>
+<p>Before we start, I think it's fair to ask why an "indie" game engine needs high-end raytracing features that requires an expensive graphics card. The answer comes from my own experience learning 3D graphics.</p>
+<p>Back when I was a teenager experimenting with small 3D games in Godot, I had a really hard time figuring out why my lighting looked so bad. Metallic objects didn't look reflective, scenes felt flat, and everything just looked wrong compared to the games I was playing.</p>
+<p>I didn't understand that I was missing indirect light, proper reflections, and accurate shadows - I had no idea I was supposed to bake lighting.</p>
+<p>This is the core problem that raytracing solves for indie developers. Even if not all players have hardware capable of running ray-traced effects, having a reference implementation of what lighting is <em>supposed</em> to look like is incredibly valuable.</p>
+<p>With fully dynamic global illumination, reflections, shadows, and direct lighting, developers can see how their scenes should be lit. Then they can work backwards to replicate those results with baked lighting, screen-space techniques, and other less performance-intensive approximations.</p>
+<p>Without that reference, it's really hard to know what you're missing or how to improve your lighting setup. Raytracing provides the ground truth that other techniques are trying to approximate.</p>
+<p>Additionally, hardware is advancing all the time. Five years ago, raytracing was much less widespread than today. If you start developing a new game today with a 3-4 year lead time, raytracing is probably going to be even more common by the time you're ready to release it. Solari was in large part designed as a foward-looking rendering system.</p>
+<p>There's also the practical consideration that if Bevy ever wants to attract AAA game developers, we need these kinds of systems. Recent AAA games like <a rel="nofollow noreferrer" href="https://advances.realtimerendering.com/s2025/content/SOUSA_SIGGRAPH_2025_Final.pdf">DOOM: The Dark Ages</a> and <a rel="nofollow noreferrer" href="https://intro-to-restir.cwyman.org/presentations/2023ReSTIR_Course_Cyberpunk_2077_Integration.pdf">Cyberpunk 2077</a> rely heavily on raytracing, and artists working on these types of projects expect their tools to support similar techniques.</p>
+<p>And honestly? It's just cool, and something I love working on :)</p>
+<h2 id="frame-breakdown">Frame Breakdown<a class="zola-anchor" href="#frame-breakdown" aria-label="Anchor link for: frame-breakdown" style="visibility: hidden;"></a>
+</h2>
+<p>In its initial release, Solari supports raytraced diffuse direct (DI) and indirect lighting (GI). Light can come from either <a rel="nofollow noreferrer" href="https://docs.rs/bevy/0.16.1/bevy/prelude/struct.StandardMaterial.html#structfield.emissive">emissive</a> triangle meshes, or analytic <a rel="nofollow noreferrer" href="https://docs.rs/bevy/0.16.1/bevy/pbr/struct.DirectionalLight.html">directional lights</a>. Everything is fully realtime and dynamic, with no baking required.</p>
+<p>Direct lighting is handled via ReSTIR DI, while indirect lighting is handled by a combination of ReSTIR GI and a world-space irradiance cache. Denoising is handled by DLSS Ray Reconstruction.</p>
+<p>As opposed to coarse screen-space probes, per-pixel ReSTIR brings much better detail, along with being <em>considerably</em> easier to get started with. I had my first prototype working in a weekend.</p>
+<p>While I won't be covering ReSTIR from first principles (that could be its own entire blog post), <a rel="nofollow noreferrer" href="https://intro-to-restir.cwyman.org">A Gentle Introduction to ReSTIR:
+Path Reuse in Real-time</a> and <a rel="nofollow noreferrer" href="https://interplayoflight.wordpress.com/2023/12/17/a-gentler-introduction-to-restir">A gentler introduction to ReSTIR</a> are both really great resources. If you haven't played with ReSTIR before, I suggest giving them a skim before continuing with this post. Or continue anyways, and just admire the pretty pixels :)</p>
+<p>Onto the frame breakdown!</p>
+<h3 id="gbuffer-raster">GBuffer Raster<a class="zola-anchor" href="#gbuffer-raster" aria-label="Anchor link for: gbuffer-raster" style="visibility: hidden;"></a>
+</h3>
+<p>The first step of Solari is also the most boring: rasterize a standard GBuffer.</p>
+<p><figure>
+    <img
+        src="gbuffer_base_color.png"
+        
+        
+        
+    >
+    
+    <figcaption><p>Base color</p>
+</figcaption>
+    
+</figure>
+
+<figure>
+    <img
+        src="gbuffer_normals.png"
+        
+        
+        
+    >
+    
+    <figcaption><p>Normals</p>
+</figcaption>
+    
+</figure>
+
+<figure>
+    <img
+        src="gbuffer_position.png"
+        
+        
+        
+    >
+    
+    <figcaption><p>Position reconstructed from depth buffer</p>
+</figcaption>
+    
+</figure>
+</p>
+<h4 id="why-raster">Why Raster?<a class="zola-anchor" href="#why-raster" aria-label="Anchor link for: why-raster" style="visibility: hidden;"></a>
+</h4>
+<p>The GBuffer pass remains completely unchanged from standard Bevy (it's the same plugin). This might seem like a missed opportunity - after all, I could have used raytracing for primary visibility instead of rasterization - but I decided to stick with rasterization here.</p>
+<p>By using raster for primary visibility, I maintain the option for people to use low-resolution proxy meshes in the raytracing scene, while still getting high quality meshes and textures in the primary view. The raster meshes can be full resolution with all their geometric detail, while the raytracing acceleration structure contains simplified versions that are cheaper to trace against.</p>
+<p>Rasterization also works better with other Bevy features like <a rel="nofollow noreferrer" href="https://jms55.github.io/tags/virtual-geometry">Virtual Geometry</a>.</p>
+<h4 id="attachments">Attachments<a class="zola-anchor" href="#attachments" aria-label="Anchor link for: attachments" style="visibility: hidden;"></a>
+</h4>
+<p>Bevy's GBuffer uses quite a bit of packing. The main attachment is a <code>Rgba32Uint</code> texture with each channel storing multiple values:</p>
+<ul>
+<li><strong>First channel</strong>: sRGB base color and perceptual roughness packed as 4x8unorm</li>
+<li><strong>Second channel</strong>: Emissive color stored as pre-exposed Rgb9e5</li>
+<li><strong>Third channel</strong>: Reflectance, metallic, baked diffuse occlusion (unused by Solari), and an unused slot, again packed as 4x8unorm</li>
+<li><strong>Fourth channel</strong>: World-space normal encoded into 24 bits via <a rel="nofollow noreferrer" href="https://www.jcgt.org/published/0003/02/01">octahedral encoding</a>, plus 8 bits of flags meant for Bevy's default deferred shading (unused by Solari)</li>
+</ul>
+<p>There's also a second <code>Rg16Float</code> attachment for motion vectors, and of course the depth attachment.</p>
+<h4 id="drawing">Drawing<a class="zola-anchor" href="#drawing" aria-label="Anchor link for: drawing" style="visibility: hidden;"></a>
+</h4>
+<p>The GBuffer rendering itself uses <code>multi_draw_indirect</code> to draw several meshes at once, using <a rel="nofollow noreferrer" href="https://crates.io/crates/offset-allocator">sub-allocated</a> buffers. Culling is done on the GPU using <a href="https://jms55.github.io/posts/2024-06-09-virtual-geometry-bevy-0-14/#culling-first-pass">two-pass occlusion culling</a> against a hierarchal depth buffer. Textures are handled bindlessly, and we try to minimize overall pipeline permutations.</p>
+<p>These combined techniques keep draw call overhead and per-pixel overdraw fairly low, even for complex scenes.</p>
+<h3 id="restir-di">ReSTIR DI<a class="zola-anchor" href="#restir-di" aria-label="Anchor link for: restir-di" style="visibility: hidden;"></a>
+</h3>
+<p>In order to calculate direct lighting (light emitted by a light source, bouncing off a surface, and then hitting the camera), for each pixel, we need to loop over every light and point on those lights, and then calculate the light's contribution, as well as whether or not the light is visible.</p>
+<p>This is very expensive, so realtime applications tend to approximate it by averaging many individual light samples. If you choose those samples well, you can get an approximate result that's very close to the real thing, without tons of expensive calculations.</p>
+<p>To quickly estimate direct lighting, Solari uses a pretty standard ReSTIR DI setup.</p>
+<p>ReSTIR DI randomly selects points on lights, and then shares the random samples between pixels based in order to choose the best light (most contribution to the image) for a given pixel.</p>
+<h4 id="di-structure">DI Structure<a class="zola-anchor" href="#di-structure" aria-label="Anchor link for: di-structure" style="visibility: hidden;"></a>
+</h4>
+<p>Reservoirs store the light sample, confidence weight, and unbiased contribution weight (acting as the sample's PDF).</p>
+<pre data-lang="rust" style="background-color:#002b36;color:#839496;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#268bd2;">struct </span><span style="color:#b58900;">Reservoir </span><span style="color:#657b83;">{
+</span><span>    </span><span style="color:#268bd2;">sample</span><span>: LightSample,
+</span><span>    </span><span style="color:#268bd2;">confidence_weight</span><span>: </span><span style="color:#268bd2;">f32</span><span>,
+</span><span>    </span><span style="color:#268bd2;">unbiased_contribution_weight</span><span>: </span><span style="color:#268bd2;">f32</span><span>,
+</span><span style="color:#657b83;">}
+</span></code></pre>
+<p>Direct lighting is handled in two compute dispatches. The first pass does initial and temporal resampling, while the second pass does spatial resampling and shading.</p>
+<h4 id="di-initial-resampling">DI Initial Resampling<a class="zola-anchor" href="#di-initial-resampling" aria-label="Anchor link for: di-initial-resampling" style="visibility: hidden;"></a>
+</h4>
+<p>Initial sampling uses 32 samples from a light tile (more on this later), and chooses the brightest one via resampling importance sampling (RIS), using constant MIS weights.</p>
+<p>32 samples per pixel is often overkill for scenes with a small number of lights. As this is one of the most expensive parts of Solari, I'm planning on letting users control this number in a future release.</p>
+<p>After choosing the best sample, we trace a ray to test visibility, setting the unbiased contribution weight to 0 in the case of occlusion.</p>
+
+<blockquote class="callout note no-title">
+  
+  
+  <div class="icon">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18"><path d="M12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2C17.5228 2 22 6.47715 22 12C22 17.5228 17.5228 22 12 22ZM12 20C16.4183 20 20 16.4183 20 12C20 7.58172 16.4183 4 12 4C7.58172 4 4 7.58172 4 12C4 16.4183 7.58172 20 12 20ZM11 7H13V9H11V7ZM11 11H13V17H11V11Z" fill="currentColor"></path></svg>
+
+  </div>
+  <div class="content">
+    <p>All raytracing in Solari is handled via inline ray queries. Wgpu does not yet support raytracing pipelines, so I haven't gotten a chance to play around with them.</p>
+
+  </div>
+  
+</blockquote>
+
+<p><figure>
+    <img
+        src="noisy_di_one_sample.png"
+        
+        
+        
+    >
+    
+    <figcaption><p>One candidate sample DI</p>
+</figcaption>
+    
+</figure>
+
+<figure>
+    <img
+        src="noisy_di_32_samples.png"
+        
+        
+        
+    >
+    
+    <figcaption><p>32 candidate sample DI, one sample chosen via RIS</p>
+</figcaption>
+    
+</figure>
+</p>
+<h4 id="di-temporal-resampling">DI Temporal Resampling<a class="zola-anchor" href="#di-temporal-resampling" aria-label="Anchor link for: di-temporal-resampling" style="visibility: hidden;"></a>
+</h4>
+<p>A temporal reservoir is then obtained via motion vectors and last frame's pixel data. We validate the reprojection using the <code>pixel_dissimilar</code> heuristic. We also need to check that the temporal light sample still exists in the current frame (i.e. the light has not been despawned).</p>
+<p>Additionally, the chosen light from last frame might no longer be visible this frame, e.g. if an object moved behind a wall. We could trace an additional ray here to validate visibility, but it's cheaper to just assume that the temporal light sample is still visible from the current pixel this frame.</p>
+<p>Reusing temporal visibility saves one raytrace, at the cost of shadows for moving objects being delayed by 1 frame, and some slighty darker/wider shadows. Overall the artifacts are not very noticable, so I find that it's well worth reusing visibility for the temporal reservoir resampling.</p>
+<p>The initial and temporal reservoir are then merged together using constant MIS weights. I tried using the balance heuristic, but didn't notice much difference for DI, and constant MIS weights are much cheaper.</p>
+<pre data-lang="rust" style="background-color:#002b36;color:#839496;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#586e75;">// Reject if tangent plane difference difference more than 0.3% or angle between normals more than 25 degrees
+</span><span style="color:#268bd2;">fn </span><span style="color:#b58900;">pixel_dissimilar</span><span style="color:#657b83;">(</span><span style="color:#268bd2;">depth</span><span>: </span><span style="color:#268bd2;">f32</span><span>, </span><span style="color:#268bd2;">world_position</span><span>: vec3&lt;</span><span style="color:#268bd2;">f32</span><span>&gt;, </span><span style="color:#268bd2;">other_world_position</span><span>: vec3&lt;</span><span style="color:#268bd2;">f32</span><span>&gt;, </span><span style="color:#268bd2;">normal</span><span>: vec3&lt;</span><span style="color:#268bd2;">f32</span><span>&gt;, </span><span style="color:#268bd2;">other_normal</span><span>: vec3&lt;</span><span style="color:#268bd2;">f32</span><span>&gt;</span><span style="color:#657b83;">) </span><span>-&gt; </span><span style="color:#268bd2;">bool </span><span style="color:#657b83;">{
+</span><span>    </span><span style="color:#586e75;">// https://developer.download.nvidia.com/video/gputechconf/gtc/2020/presentations/s22699-fast-denoising-with-self-stabilizing-recurrent-blurs.pdf#page=45
+</span><span>    </span><span style="color:#268bd2;">let</span><span> tangent_plane_distance </span><span style="color:#657b83;">= </span><span style="color:#859900;">abs</span><span style="color:#657b83;">(</span><span style="color:#859900;">dot</span><span style="color:#657b83;">(</span><span>normal, other_world_position </span><span style="color:#657b83;">-</span><span> world_position</span><span style="color:#657b83;">))</span><span>;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> view_z </span><span style="color:#657b83;">= -</span><span style="color:#859900;">depth_ndc_to_view_z</span><span style="color:#657b83;">(</span><span>depth</span><span style="color:#657b83;">)</span><span>;
+</span><span>
+</span><span>    </span><span style="color:#859900;">return</span><span> tangent_plane_distance </span><span style="color:#657b83;">/</span><span> view_z </span><span style="color:#657b83;">&gt; </span><span style="color:#6c71c4;">0.003 </span><span style="color:#859900;">|| dot</span><span style="color:#657b83;">(</span><span>normal, other_normal</span><span style="color:#657b83;">) &lt; </span><span style="color:#6c71c4;">0.906</span><span>;
+</span><span style="color:#657b83;">}
+</span></code></pre>
+<h4 id="di-spatial-resampling">DI Spatial Resampling<a class="zola-anchor" href="#di-spatial-resampling" aria-label="Anchor link for: di-spatial-resampling" style="visibility: hidden;"></a>
+</h4>
+<p>The second pass handles spatial resampling. We choose one random pixel within a 30 pixel-radius disk, and borrow its reservoir. We use the same <code>pixel_dissimilar</code> heuristic as the temporal pass to validate the spatial reservoir.</p>
+<p>We must also trace a ray to test visibility, as the reservoir comes from a neighboring pixel, and we cannot assume that the same light sample visible at the neighbor pixel is also visible for the current pixel.</p>
+<p>Unlike a lot of other ReSTIR implementations, we only ever use 1 spatial sample. Using more than 1 sample does not tend to improve quality, and increases performance costs. We cannot, however, skip spatial resampling entirely. Having a source of new samples from other pixels is crucial to prevent artifacts from temporal resampling.</p>
+<figure>
+    <img
+        src="spatial_baseline.jpg"
+        
+        
+        
+    >
+    
+    <figcaption><p>1 random spatial sample, 6.4 ms</p>
+</figcaption>
+    
+</figure>
+<p>Spatial sampling is probably the least well-researched part of ReSTIR. I tried a couple of other schemes, including trying to reuse reservoirs across a workgroup/subgroup similar to <a rel="nofollow noreferrer" href="https://iribis.github.io/publication/2025_Stratified_Histogram_Resampling">Histogram Stratification for Spatio-Temporal Reservoir Sampling</a>, but none of them worked out well.</p>
+<p>Subgroups-level resampling was very cheap, but had tiling artifacts, and was not easily portable to different machines with different amounts of threads per workgroup.</p>
+<figure>
+    <img
+        src="spatial_subgroup.jpg"
+        
+        
+        
+    >
+    
+    <figcaption><p>Subgroup-level spatial resampling, 7.3 ms</p>
+</figcaption>
+    
+</figure>
+<p>Workgroup-level resampling had much better quality, but was twice as expensive compared to 1 spatial sample, and introduced correlations that broke the denoiser.</p>
+<figure>
+    <img
+        src="spatial_workgroup.jpg"
+        
+        
+        
+    >
+    
+    <figcaption><p>Workgroup-level spatial resampling, 12 ms</p>
+</figcaption>
+    
+</figure>
+<p>In the end, I stuck with the 1 random spatial sample I described above.</p>
+<p>The reservoir produced by the first pass and the spatial reservoir are combined with the same routine that we used for merging initial and temporal reservoirs.</p>
+<h4 id="di-shading">DI Shading<a class="zola-anchor" href="#di-shading" aria-label="Anchor link for: di-shading" style="visibility: hidden;"></a>
+</h4>
+<p>Once the final reservoir is produced, we can use its chosen light sample to shade the pixel, producing the final direct lighting.</p>
+<p>I did try out shading the pixel using all 3 samples (initial, temporal, and spatial), weighed by their resampling probabilities as <a rel="nofollow noreferrer" href="https://cwyman.org/papers/hpg21_rearchitectingReSTIR.pdf">Rearchitecting Spatiotemporal Resampling for Production</a> suggests, but had noisier results compared to shading using the final reservoir only. I'm not sure if I messed up the implementation or what.</p>
+<p>Overall the DI pass uses two raytraces per pixel (1 initial, 1 spatial).</p>
+<figure>
+    <img
+        src="noisy_di.png"
+        
+        
+        
+    >
+    
+    <figcaption><p>DI with 32 initial candidates, 1 temporal resample, and 1 spatial resample</p>
+</figcaption>
+    
+</figure>
+<h3 id="restir-gi">ReSTIR GI<a class="zola-anchor" href="#restir-gi" aria-label="Anchor link for: restir-gi" style="visibility: hidden;"></a>
+</h3>
+<p>Indirect lighting (light emitted by a light source, bouncing off more than 1 surface, and then hitting the camera) is even more expensive to calculate than direct lighting, as you need to trace multiple bounces of each ray to calculate the lighting for a given path.</p>
+<p>To quickly estimate indirect lighting, Solari uses ReSTIR GI, with a very similar setup to the previous ReSTIR DI.</p>
+<p>Where as ReStir DI picks the best light, ReSTIR GI randomly selects directions in a hemisphere, and then shares the random samples between pixels in order to choose the best 1-bounce <em>path</em> for a given pixel.</p>
+<h4 id="gi-structure">GI Structure<a class="zola-anchor" href="#gi-structure" aria-label="Anchor link for: gi-structure" style="visibility: hidden;"></a>
+</h4>
+<p>Reservoirs store the cached radiance bouncing off of the sample point, sample point geometry info, confidence weight, and unbiased contribution weight.</p>
+<pre data-lang="rust" style="background-color:#002b36;color:#839496;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#268bd2;">struct </span><span style="color:#b58900;">Reservoir </span><span style="color:#657b83;">{
+</span><span>    </span><span style="color:#268bd2;">radiance</span><span>: vec3&lt;</span><span style="color:#268bd2;">f32</span><span>&gt;,
+</span><span>    </span><span style="color:#268bd2;">sample_point_world_position</span><span>: vec3&lt;</span><span style="color:#268bd2;">f32</span><span>&gt;,
+</span><span>    </span><span style="color:#268bd2;">sample_point_world_normal</span><span>: vec3&lt;</span><span style="color:#268bd2;">f32</span><span>&gt;,
+</span><span>    </span><span style="color:#268bd2;">confidence_weight</span><span>: </span><span style="color:#268bd2;">f32</span><span>,
+</span><span>    </span><span style="color:#268bd2;">unbiased_contribution_weight</span><span>: </span><span style="color:#268bd2;">f32</span><span>,
+</span><span style="color:#657b83;">}
+</span></code></pre>
+<p>I tried some basic packing schemes for the GI reservoir (Rgb9e5 radiance, octahedral-encoded normals), but didn't find that it meaningfully reduced GI costs. Reservoir memory bandwidth is not a big bottleneck compared to raytracing and reading mesh/texture data for ray intersections.</p>
+<p>I have heard that people had good results storing reservoirs as struct-of-arrays instead of array-of-structs, so I'll likely revist this topic at some point.</p>
+<p>ReSTIR GI again uses two compute dispatches, with the first pass doing initial and temporal resampling, and the second pass doing spatial resampling and shading.</p>
+<h4 id="gi-initial-sampling">GI Initial Sampling<a class="zola-anchor" href="#gi-initial-sampling" aria-label="Anchor link for: gi-initial-sampling" style="visibility: hidden;"></a>
+</h4>
+<p>GI samples are much more expensive to generate than DI samples (tracing paths is more expensive than looping over a list of light sources), so for initial sampling, we only generate 1 sample.</p>
+<p>We start by tracing a ray along a random direction chosen from a uniform hemisphere distribution. At some point I also want to try using <a rel="nofollow noreferrer" href="https://github.com/electronicarts/fastnoise">spatiotemporal blue noise</a>. Although DLSS-RR recommends white noise, the docs do say that blue noise with a sufficiently long period can also work.</p>
+<p>At the ray's hit point, we need to obtain an estimate of the incoming irradiance, which becomes the outgoing radiance towards the current pixel, i.e. the path's contribution.</p>
+<figure>
+    <img
+        src="noisy_gi_one_sample.png"
+        
+        
+        
+    >
+    
+    <figcaption><p>One sample GI</p>
+</figcaption>
+    
+</figure>
+<p>To obtain irradiance, we query the world cache at the hit point (more on this later).</p>
+<pre data-lang="rust" style="background-color:#002b36;color:#839496;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#268bd2;">fn </span><span style="color:#b58900;">generate_initial_reservoir</span><span style="color:#657b83;">(</span><span style="color:#268bd2;">world_position</span><span>: vec3&lt;</span><span style="color:#268bd2;">f32</span><span>&gt;, </span><span style="color:#268bd2;">world_normal</span><span>: vec3&lt;</span><span style="color:#268bd2;">f32</span><span>&gt;, </span><span style="color:#268bd2;">rng</span><span>: ptr&lt;function, </span><span style="color:#268bd2;">u32</span><span>&gt;</span><span style="color:#657b83;">) </span><span>-&gt; Reservoir </span><span style="color:#657b83;">{
+</span><span>    var reservoir </span><span style="color:#657b83;">= </span><span style="color:#859900;">empty_reservoir</span><span style="color:#657b83;">()</span><span>;
+</span><span>
+</span><span>    </span><span style="color:#268bd2;">let</span><span> ray_direction </span><span style="color:#657b83;">= </span><span style="color:#859900;">sample_uniform_hemisphere</span><span style="color:#657b83;">(</span><span>world_normal, rng</span><span style="color:#657b83;">)</span><span>;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> ray_hit </span><span style="color:#657b83;">= </span><span style="color:#859900;">trace_ray</span><span style="color:#657b83;">(</span><span>world_position, ray_direction, </span><span style="color:#cb4b16;">RAY_T_MIN</span><span>, </span><span style="color:#cb4b16;">RAY_T_MAX</span><span>, </span><span style="color:#cb4b16;">RAY_FLAG_NONE</span><span style="color:#657b83;">)</span><span>;
+</span><span>
+</span><span>    </span><span style="color:#859900;">if</span><span> ray_hit.kind </span><span style="color:#657b83;">== </span><span style="color:#cb4b16;">RAY_QUERY_INTERSECTION_NONE </span><span style="color:#657b83;">{
+</span><span>        </span><span style="color:#859900;">return</span><span> reservoir;
+</span><span>    </span><span style="color:#657b83;">}
+</span><span>
+</span><span>    </span><span style="color:#268bd2;">let</span><span> sample_point </span><span style="color:#657b83;">= </span><span style="color:#859900;">resolve_ray_hit_full</span><span style="color:#657b83;">(</span><span>ray_hit</span><span style="color:#657b83;">)</span><span>;
+</span><span>
+</span><span>    </span><span style="color:#586e75;">// Direct lighting is handled by ReSTIR DI
+</span><span>    </span><span style="color:#859900;">if all</span><span style="color:#657b83;">(</span><span>sample_point.material.emissive </span><span style="color:#657b83;">!= </span><span style="color:#859900;">vec3</span><span style="color:#657b83;">(</span><span style="color:#6c71c4;">0.0</span><span style="color:#657b83;">)) {
+</span><span>        </span><span style="color:#859900;">return</span><span> reservoir;
+</span><span>    </span><span style="color:#657b83;">}
+</span><span>
+</span><span>    reservoir.unbiased_contribution_weight </span><span style="color:#657b83;">= </span><span style="color:#859900;">uniform_hemisphere_inverse_pdf</span><span style="color:#657b83;">()</span><span>;
+</span><span>    reservoir.sample_point_world_position </span><span style="color:#657b83;">=</span><span> sample_point.world_position;
+</span><span>    reservoir.sample_point_world_normal </span><span style="color:#657b83;">=</span><span> sample_point.world_normal;
+</span><span>    reservoir.confidence_weight </span><span style="color:#657b83;">= </span><span style="color:#6c71c4;">1.0</span><span>;
+</span><span>
+</span><span>    reservoir.radiance </span><span style="color:#657b83;">= </span><span style="color:#859900;">query_world_cache</span><span style="color:#657b83;">(</span><span>sample_point.world_position, sample_point.geometric_world_normal, view.world_position</span><span style="color:#657b83;">)</span><span>;
+</span><span>
+</span><span>    </span><span style="color:#268bd2;">let</span><span> sample_point_diffuse_brdf </span><span style="color:#657b83;">=</span><span> sample_point.material.base_color </span><span style="color:#657b83;">/ </span><span style="color:#cb4b16;">PI</span><span>;
+</span><span>    reservoir.radiance </span><span style="color:#657b83;">*=</span><span> sample_point_diffuse_brdf;
+</span><span>
+</span><span>    </span><span style="color:#859900;">return</span><span> reservoir;
+</span><span style="color:#657b83;">}
+</span></code></pre>
+<h4 id="gi-temporal-and-spatial-resampling">GI Temporal and Spatial Resampling<a class="zola-anchor" href="#gi-temporal-and-spatial-resampling" aria-label="Anchor link for: gi-temporal-and-spatial-resampling" style="visibility: hidden;"></a>
+</h4>
+<p>Temporal reservoir selection for GI is a little different from DI.</p>
+<p>In addition to reprojecting based on motion vectors, we jitter the reprojected location by a few pixels in either direction using <a rel="nofollow noreferrer" href="https://www.amazon.com/GPU-Zen-Advanced-Rendering-Techniques/dp/B0DNXNM14K">permutation sampling</a>. This essentially adds a small spatial component to the temporal resampling, which helps break up temporal correlations.</p>
+<figure>
+    <img
+        src="no_permutation_sampling.png"
+        
+        
+        
+    >
+    
+    <figcaption><p>No permutation sampling: The denoiser (DLSS-RR) produces blotchy noise</p>
+</figcaption>
+    
+</figure>
+<p>I also tried permutation sampling for ReSTIR DI, and while it did reduce correlation artifacts, it also added even worse artifacts because we reuse visibility, which becomes very obvious under permutation sampling. Tracing an extra ray to validate visibility would fix this, but I'm not quite ready to pay that performance cost.</p>
+<figure>
+    <img
+        src="di_permutation_sampling.png"
+        
+        
+        
+    >
+    
+    <figcaption><p>DI: Permutation sampling and visibility reuse do not work well together</p>
+</figcaption>
+    
+</figure>
+<p>Spatial reservoir selection for GI is identical to DI.</p>
+<p>Reservoir merging for GI uses the balance heuristic for MIS weights, and includes the BRDF contribution, as I found that unlike for DI, these make a significant quality difference. The balance heuristic is not much more expensive here, as we are only ever merging two reservoirs at a time.</p>
+<h4 id="gi-jacobian">GI Jacobian<a class="zola-anchor" href="#gi-jacobian" aria-label="Anchor link for: gi-jacobian" style="visibility: hidden;"></a>
+</h4>
+<p>Additionally, since both temporal and spatial resampling use neighboring pixels, we need to add a Jacobian determinant to the MIS weights to account for the change in sampling domain.</p>
+<p>The Jacobian proved to be the absolute hardest part of ReSTIR GI for me. While it makes the GI more correct, it also adds a lot of noise in corners. Worse, the Jacobian tends to make the GI calculations "explode" into super high numbers that result in overflow to <code>inf</code>, which then spreads over the entire screen due to resampling and denoising.</p>
+<p>The best solution I have found to reduce artifacts from the Jacobian is to reject neighbor samples when the Jacobian is greater than 2 (i.e., a neighboring sample reused at the current pixel would have more than 2x the contribution it originally did). While this somewhat works, there are still issues with stability. If I leave Solari running for a couple of minutes in the same spot, it will eventually lead to overflow. I haven't yet figured out how to prevent this.</p>
+<p>Using the balance heuristic (and factoring in the two Jacobians) for MIS weights when resampling also helped a lot with fighting the noise introduced by the Jacobian.</p>
+<h4 id="gi-shading">GI Shading<a class="zola-anchor" href="#gi-shading" aria-label="Anchor link for: gi-shading" style="visibility: hidden;"></a>
+</h4>
+<p>Once the final reservoir is produced, we can use it to shade the pixel, producing the final indirect lighting.</p>
+<p>Since we're using DLSS-RR for denoising, we can simply add the GI on top of the existing framebuffer (holding the DI). There's no need to write to a separate buffer for use with a separate denoising process, unlike a lot of other GI implementations.</p>
+<p>Overall the GI pass uses two raytraces per pixel (1 initial, 1 spatial), same as DI.</p>
+<figure>
+    <img
+        src="noisy_gi.png"
+        
+        
+        
+    >
+    
+    <figcaption><p>GI with 1 initial candidate, 1 temporal resample, and 1 spatial resample</p>
+</figcaption>
+    
+</figure>
+<h3 id="interlude-what-is-restir-doing">Interlude: What is ReSTIR Doing?<a class="zola-anchor" href="#interlude-what-is-restir-doing" aria-label="Anchor link for: interlude-what-is-restir-doing" style="visibility: hidden;"></a>
+</h3>
+<p>I have heard ReSTIR described as a signal <em>amplifier</em>. If you feed it decent samples, it's likely to produce a good sample. If you feed it good samples, it's likely to produce a great sample.</p>
+<p>The better your initial sampling, the better ReSTIR does. The quality of your final result heavily depends on the quality of the initial samples you feed into it.</p>
+<p>For this reason, it's important that you spend time improving the initial sampling process. This could take the form of generating more initial samples, or improving your sampling strategy.</p>
+<p>For ReSTIR DI, taking more initial samples is viable, as samples are just random lights, and are fairly cheap to generate.</p>
+<p>For ReSTIR GI, even 1 initial sample is already expensive, as each sample involves tracing a ray. Instead of increasing initial sample count, we'll have to be smart about <em>how</em> we obtain that 1 sample.</p>
+<p>In the next two sections of the frame breakdown, we will discuss how I improved initial sampling for ReSTIR DI and GI.</p>
+<h3 id="light-tile-presampling">Light Tile Presampling<a class="zola-anchor" href="#light-tile-presampling" aria-label="Anchor link for: light-tile-presampling" style="visibility: hidden;"></a>
+</h3>
+<p>While generating initial samples for ReSTIR DI is fairly cheap, when we start taking 32 or more samples per pixel, the memory bandwidth costs quickly add up. In order to make 32 samples per pixel viable, we'll need a way to improve our cache coherency.</p>
+<p>In this section, we will generate some light tile buffers, following section 5 of <a rel="nofollow noreferrer" href="https://cwyman.org/papers/hpg21_rearchitectingReSTIR.pdf">Rearchitecting Spatiotemporal Resampling for Production</a>.</p>
+<h4 id="light-sampling-apis">Light Sampling APIs<a class="zola-anchor" href="#light-sampling-apis" aria-label="Anchor link for: light-sampling-apis" style="visibility: hidden;"></a>
+</h4>
+<p>Before I can explain light tiles, we first need to talk about Solari's shader API for working with light sources.</p>
+<p>Bevy stores light sources as a big list of objects on the GPU. All emissive meshes and directional lights get collected by the CPU, and put in this list.</p>
+<p>When calculating radiance emitted by a light source, Bevy works with specific light <em>samples</em> - not the whole light at once. A <code>LightSample</code> uniquely identifies a specific subset of the light source, e.g. a specific point on an emissive mesh.</p>
+<pre data-lang="rust" style="background-color:#002b36;color:#839496;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#268bd2;">struct </span><span style="color:#b58900;">LightSample </span><span style="color:#657b83;">{
+</span><span>    </span><span style="color:#268bd2;">light_id</span><span>: </span><span style="color:#268bd2;">u16</span><span>,
+</span><span>    </span><span style="color:#268bd2;">triangle_id</span><span>: </span><span style="color:#268bd2;">u16</span><span>, </span><span style="color:#586e75;">// Unused for directional lights
+</span><span>    </span><span style="color:#268bd2;">seed</span><span>: </span><span style="color:#268bd2;">u32</span><span>,
+</span><span style="color:#657b83;">}
+</span><span>
+</span><span style="color:#268bd2;">fn </span><span style="color:#b58900;">generate_random_light_sample</span><span style="color:#657b83;">(</span><span style="color:#268bd2;">rng</span><span>: ptr&lt;function, </span><span style="color:#268bd2;">u32</span><span>&gt;</span><span style="color:#657b83;">) </span><span>-&gt; LightSample </span><span style="color:#657b83;">{
+</span><span>    </span><span style="color:#268bd2;">let</span><span> light_count </span><span style="color:#657b83;">=</span><span> arrayLength</span><span style="color:#657b83;">(</span><span style="color:#859900;">&amp;</span><span>light_sources</span><span style="color:#657b83;">)</span><span>;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> light_id </span><span style="color:#657b83;">= </span><span style="color:#859900;">rand_range_u</span><span style="color:#657b83;">(</span><span>light_count, rng</span><span style="color:#657b83;">)</span><span>;
+</span><span>
+</span><span>    </span><span style="color:#268bd2;">let</span><span> light_source </span><span style="color:#657b83;">=</span><span> light_sources</span><span style="color:#657b83;">[</span><span>light_id</span><span style="color:#657b83;">]</span><span>;
+</span><span>
+</span><span>    var triangle_id </span><span style="color:#657b83;">=</span><span> 0u;
+</span><span>    </span><span style="color:#859900;">if</span><span> light_source.kind </span><span style="color:#657b83;">!= </span><span style="color:#cb4b16;">LIGHT_SOURCE_KIND_DIRECTIONAL </span><span style="color:#657b83;">{
+</span><span>        </span><span style="color:#268bd2;">let</span><span> triangle_count </span><span style="color:#657b83;">=</span><span> light_source.kind </span><span style="color:#657b83;">&gt;&gt;</span><span> 1u;
+</span><span>        triangle_id </span><span style="color:#657b83;">= </span><span style="color:#859900;">rand_range_u</span><span style="color:#657b83;">(</span><span>triangle_count, rng</span><span style="color:#657b83;">)</span><span>;
+</span><span>    </span><span style="color:#657b83;">}
+</span><span>
+</span><span>    </span><span style="color:#268bd2;">let</span><span> seed </span><span style="color:#657b83;">= </span><span style="color:#859900;">rand_u</span><span style="color:#657b83;">(</span><span>rng</span><span style="color:#657b83;">)</span><span>;
+</span><span>
+</span><span>    </span><span style="color:#859900;">return</span><span> LightSample</span><span style="color:#657b83;">(</span><span>light_id, triangle_id, seed</span><span style="color:#657b83;">)</span><span>;
+</span><span style="color:#657b83;">}
+</span></code></pre>
+<p>The light ID points to the overall light source object in the big list of lights.</p>
+<p>The seed is used to initialize a random number generator (RNG). For directional lights, the RNG is used to choose a direction within a cone. For emissive meshes, the RNG is used to choose a specific point on the triangle identified by the triangle ID.</p>
+<p>A <code>LightSample</code> can be resolved, giving some info on its properties:</p>
+<pre data-lang="rust" style="background-color:#002b36;color:#839496;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#268bd2;">struct </span><span style="color:#b58900;">ResolvedLightSample </span><span style="color:#657b83;">{
+</span><span>    </span><span style="color:#268bd2;">world_position</span><span>: vec4&lt;</span><span style="color:#268bd2;">f32</span><span>&gt;, </span><span style="color:#586e75;">// w component is 0.0 for directional lights, and 1.0 for emissive meshes
+</span><span>    </span><span style="color:#268bd2;">world_normal</span><span>: vec3&lt;</span><span style="color:#268bd2;">f32</span><span>&gt;,
+</span><span>    </span><span style="color:#268bd2;">emitted_radiance</span><span>: vec3&lt;</span><span style="color:#268bd2;">f32</span><span>&gt;,
+</span><span>    </span><span style="color:#268bd2;">inverse_pdf</span><span>: </span><span style="color:#268bd2;">f32</span><span>,
+</span><span style="color:#657b83;">}
+</span><span>
+</span><span style="color:#268bd2;">fn </span><span style="color:#b58900;">resolve_light_sample</span><span style="color:#657b83;">(</span><span style="color:#268bd2;">light_sample</span><span>: LightSample, </span><span style="color:#268bd2;">light_source</span><span>: LightSource</span><span style="color:#657b83;">) </span><span>-&gt; ResolvedLightSample </span><span style="color:#657b83;">{
+</span><span>    </span><span style="color:#859900;">if</span><span> light_source.kind </span><span style="color:#657b83;">== </span><span style="color:#cb4b16;">LIGHT_SOURCE_KIND_DIRECTIONAL </span><span style="color:#657b83;">{
+</span><span>        </span><span style="color:#268bd2;">let</span><span> directional_light </span><span style="color:#657b83;">=</span><span> directional_lights</span><span style="color:#657b83;">[</span><span>light_source.id</span><span style="color:#657b83;">]</span><span>;
+</span><span>
+</span><span>        </span><span style="color:#268bd2;">let</span><span> direction_to_light </span><span style="color:#657b83;">= </span><span style="color:#859900;">sample_cone</span><span style="color:#657b83;">(</span><span>directional_light</span><span style="color:#657b83;">)</span><span>;
+</span><span>
+</span><span>        </span><span style="color:#859900;">return</span><span> ResolvedLightSample</span><span style="color:#657b83;">(
+</span><span>            </span><span style="color:#859900;">vec4</span><span style="color:#657b83;">(</span><span>direction_to_light, </span><span style="color:#6c71c4;">0.0</span><span style="color:#657b83;">)</span><span>,
+</span><span>            </span><span style="color:#657b83;">-</span><span>direction_to_light,
+</span><span>            directional_light.luminance,
+</span><span>            directional_light.inverse_pdf,
+</span><span>        </span><span style="color:#657b83;">)</span><span>;
+</span><span>    </span><span style="color:#657b83;">} </span><span style="color:#859900;">else </span><span style="color:#657b83;">{
+</span><span>        </span><span style="color:#268bd2;">let</span><span> triangle_count </span><span style="color:#657b83;">=</span><span> light_source.kind </span><span style="color:#657b83;">&gt;&gt;</span><span> 1u;
+</span><span>        </span><span style="color:#268bd2;">let</span><span> triangle_id </span><span style="color:#657b83;">=</span><span> light_sample.light_id </span><span style="color:#859900;">&amp;</span><span> 0xFFFFu;
+</span><span>        </span><span style="color:#268bd2;">let</span><span> barycentrics </span><span style="color:#657b83;">= </span><span style="color:#859900;">triangle_barycentrics</span><span style="color:#657b83;">(</span><span>light_sample.seed</span><span style="color:#657b83;">)</span><span>;
+</span><span>
+</span><span>        </span><span style="color:#586e75;">// Interpolates and transforms vertex positions, UVs, etc, and samples material textures
+</span><span>        </span><span style="color:#268bd2;">let</span><span> triangle_data </span><span style="color:#657b83;">= </span><span style="color:#859900;">resolve_triangle_data_full</span><span style="color:#657b83;">(</span><span>light_source.id, triangle_id, barycentrics</span><span style="color:#657b83;">)</span><span>;
+</span><span>
+</span><span>        </span><span style="color:#859900;">return</span><span> ResolvedLightSample</span><span style="color:#657b83;">(
+</span><span>            </span><span style="color:#859900;">vec4</span><span style="color:#657b83;">(</span><span>triangle_data.world_position, </span><span style="color:#6c71c4;">1.0</span><span style="color:#657b83;">)</span><span>,
+</span><span>            triangle_data.world_normal,
+</span><span>            triangle_data.material.emissive.rgb,
+</span><span>            </span><span style="color:#268bd2;">f32</span><span style="color:#657b83;">(</span><span>triangle_count</span><span style="color:#657b83;">) *</span><span> triangle_data.triangle_area,
+</span><span>        </span><span style="color:#657b83;">)</span><span>;
+</span><span>    </span><span style="color:#657b83;">}
+</span><span style="color:#657b83;">}
+</span></code></pre>
+<p>And finally a <code>ResolvedLightSample</code> can be used to calculate the received radiance at a point from the light sample, also known as the unshadowed light contribution:</p>
+<pre data-lang="rust" style="background-color:#002b36;color:#839496;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#268bd2;">struct </span><span style="color:#b58900;">LightContribution </span><span style="color:#657b83;">{
+</span><span>    </span><span style="color:#268bd2;">received_radiance</span><span>: vec3&lt;</span><span style="color:#268bd2;">f32</span><span>&gt;,
+</span><span>    </span><span style="color:#268bd2;">inverse_pdf</span><span>: </span><span style="color:#268bd2;">f32</span><span>,
+</span><span>    </span><span style="color:#268bd2;">wi</span><span>: vec3&lt;</span><span style="color:#268bd2;">f32</span><span>&gt;,
+</span><span style="color:#657b83;">}
+</span><span>
+</span><span style="color:#268bd2;">fn </span><span style="color:#b58900;">calculate_resolved_light_contribution</span><span style="color:#657b83;">(</span><span style="color:#268bd2;">resolved_light_sample</span><span>: ResolvedLightSample, </span><span style="color:#268bd2;">ray_origin</span><span>: vec3&lt;</span><span style="color:#268bd2;">f32</span><span>&gt;, </span><span style="color:#268bd2;">origin_world_normal</span><span>: vec3&lt;</span><span style="color:#268bd2;">f32</span><span>&gt;</span><span style="color:#657b83;">) </span><span>-&gt; LightContribution </span><span style="color:#657b83;">{
+</span><span>    </span><span style="color:#268bd2;">let</span><span> ray </span><span style="color:#657b83;">=</span><span> resolved_light_sample.world_position.xyz </span><span style="color:#657b83;">- (</span><span>resolved_light_sample.world_position.w </span><span style="color:#657b83;">*</span><span> ray_origin</span><span style="color:#657b83;">)</span><span>;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> light_distance </span><span style="color:#657b83;">= </span><span style="color:#859900;">length</span><span style="color:#657b83;">(</span><span>ray</span><span style="color:#657b83;">)</span><span>;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> wi </span><span style="color:#657b83;">=</span><span> ray </span><span style="color:#657b83;">/</span><span> light_distance;
+</span><span>
+</span><span>    </span><span style="color:#268bd2;">let</span><span> cos_theta_origin </span><span style="color:#657b83;">= </span><span style="color:#859900;">saturate</span><span style="color:#657b83;">(</span><span style="color:#859900;">dot</span><span style="color:#657b83;">(</span><span>wi, origin_world_normal</span><span style="color:#657b83;">))</span><span>;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> cos_theta_light </span><span style="color:#657b83;">= </span><span style="color:#859900;">saturate</span><span style="color:#657b83;">(</span><span style="color:#859900;">dot</span><span style="color:#657b83;">(-</span><span>wi, resolved_light_sample.world_normal</span><span style="color:#657b83;">))</span><span>;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> light_distance_squared </span><span style="color:#657b83;">=</span><span> light_distance </span><span style="color:#657b83;">*</span><span> light_distance;
+</span><span>
+</span><span>    </span><span style="color:#268bd2;">let</span><span> received_radiance </span><span style="color:#657b83;">=</span><span> resolved_light_sample.emitted_radiance </span><span style="color:#657b83;">*</span><span> cos_theta_origin </span><span style="color:#657b83;">* (</span><span>cos_theta_light </span><span style="color:#657b83;">/</span><span> light_distance_squared</span><span style="color:#657b83;">)</span><span>;
+</span><span>
+</span><span>    </span><span style="color:#859900;">return</span><span> LightContribution</span><span style="color:#657b83;">(</span><span>received_radiance, resolved_light_sample.inverse_pdf, wi</span><span style="color:#657b83;">)</span><span>;
+</span><span style="color:#657b83;">}
+</span></code></pre>
+<p>Notably, only the first and second steps (generating a <code>LightSample</code>, resolving it into a <code>ResolvedLightSample</code>) involve branching based on the type of light (directional or emissive). Calculating the light contribution involves no branching.</p>
+<h4 id="presampling-lights">Presampling Lights<a class="zola-anchor" href="#presampling-lights" aria-label="Anchor link for: presampling-lights" style="visibility: hidden;"></a>
+</h4>
+<p>The straightforward way to implement ReSTIR DI initial sampling is to perform the whole light sampling process (generate -&gt; resolve -&gt; calculate contribution) all in one shader.</p>
+<p>Indeed, for my first ReSTIR DI prototype, this is what I did - but performance was terrible.</p>
+<p>By generating the light sample, resolving it, and then calculating its contribution all in the same shader, we're introducing a lot of divergent branches and incoherent memory accesses. If there's one thing GPUs hate, it's divergence. GPUs perform better when all threads in a group are executing the same branch and don't need masking, and when the threads are all accessing similar memory locations that are likely in a nearby cache.</p>
+<p>Instead, we can separate out the steps. Generating a bunch of random light samples and resolving them can be performed ahead of time, by a separate shader. We can then pack the resolved samples and store them in a buffer.</p>
+<pre data-lang="rust" style="background-color:#002b36;color:#839496;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#268bd2;">fn </span><span style="color:#b58900;">pack_resolved_light_sample</span><span style="color:#657b83;">(</span><span style="color:#268bd2;">sample</span><span>: ResolvedLightSample</span><span style="color:#657b83;">) </span><span>-&gt; ResolvedLightSamplePacked </span><span style="color:#657b83;">{
+</span><span>    </span><span style="color:#859900;">return</span><span> ResolvedLightSamplePacked</span><span style="color:#657b83;">(
+</span><span>        sample.world_position.x,
+</span><span>        sample.world_position.y,
+</span><span>        sample.world_position.z,
+</span><span>        </span><span style="color:#859900;">pack2x16unorm</span><span style="color:#657b83;">(</span><span style="color:#859900;">octahedral_encode</span><span style="color:#657b83;">(</span><span>sample.world_normal</span><span style="color:#657b83;">))</span><span>,
+</span><span>        </span><span style="color:#859900;">vec3_to_rgb9e5_</span><span style="color:#657b83;">(</span><span>sample.radiance </span><span style="color:#657b83;">*</span><span> view.exposure</span><span style="color:#657b83;">)</span><span>,
+</span><span>        sample.inverse_pdf </span><span style="color:#657b83;">* </span><span style="color:#859900;">select</span><span style="color:#657b83;">(</span><span style="color:#6c71c4;">1.0</span><span>, </span><span style="color:#657b83;">-</span><span style="color:#6c71c4;">1.0</span><span>, sample.world_position.w </span><span style="color:#657b83;">== </span><span style="color:#6c71c4;">0.0</span><span style="color:#657b83;">)</span><span>,
+</span><span>    </span><span style="color:#657b83;">)</span><span>;
+</span><span style="color:#657b83;">}
+</span><span>
+</span><span style="color:#268bd2;">fn </span><span style="color:#b58900;">unpack_resolved_light_sample</span><span style="color:#657b83;">(</span><span style="color:#268bd2;">packed</span><span>: ResolvedLightSamplePacked, </span><span style="color:#268bd2;">exposure</span><span>: </span><span style="color:#268bd2;">f32</span><span style="color:#657b83;">) </span><span>-&gt; ResolvedLightSample </span><span style="color:#657b83;">{
+</span><span>    </span><span style="color:#859900;">return</span><span> ResolvedLightSample</span><span style="color:#657b83;">(
+</span><span>        </span><span style="color:#859900;">vec4</span><span style="color:#657b83;">(</span><span>packed.world_position_x, packed.world_position_y, packed.world_position_z, </span><span style="color:#859900;">select</span><span style="color:#657b83;">(</span><span style="color:#6c71c4;">1.0</span><span>, </span><span style="color:#6c71c4;">0.0</span><span>, packed.inverse_pdf </span><span style="color:#657b83;">&lt; </span><span style="color:#6c71c4;">0.0</span><span style="color:#657b83;">))</span><span>,
+</span><span>        </span><span style="color:#859900;">octahedral_decode</span><span style="color:#657b83;">(</span><span style="color:#859900;">unpack2x16unorm</span><span style="color:#657b83;">(</span><span>packed.world_normal</span><span style="color:#657b83;">))</span><span>,
+</span><span>        </span><span style="color:#859900;">rgb9e5_to_vec3_</span><span style="color:#657b83;">(</span><span>packed.radiance</span><span style="color:#657b83;">) /</span><span> exposure,
+</span><span>        </span><span style="color:#859900;">abs</span><span style="color:#657b83;">(</span><span>packed.inverse_pdf</span><span style="color:#657b83;">)</span><span>,
+</span><span>    </span><span style="color:#657b83;">)</span><span>;
+</span><span style="color:#657b83;">}
+</span></code></pre>
+<p>We call these presampled sets of lights "light tiles". Following the paper, we perform a compute dispatch to generate a fixed 128 tiles (these are not screen-space tiles), each with 1024 samples (<code>ResolvedLightSamplePacked</code>).</p>
+<p>Samples are generated completely randomly, without any info about the scene - there is no spatial heuristic or any way of identifying "good" samples.</p>
+<p>ReSTIR DI initial sampling can now pick a random tile, and then random samples within the tile, and use <code>calculate_resolved_light_contribution()</code> to calculate their radiance.</p>
+<p>With light tiles, we have much higher cache hit rates when sampling lights, which greatly improves our performance. In fact, even more than the actual raytracing - light sampling is by far the biggest performance bottleneck in Solari.</p>
+<h3 id="world-cache">World Cache<a class="zola-anchor" href="#world-cache" aria-label="Anchor link for: world-cache" style="visibility: hidden;"></a>
+</h3>
+<p>With light tiles accelerating initial sampling for ReSTIR DI, it's time to talk about how we accelerate initial sampling for ReSTIR GI.</p>
+<p>Unlike DI, where generating more samples is relatively cheap, for GI we can only afford 1 sample. However, unlike DI, GI is a lot more forgiving of inaccuracies. GI just has to be "mostly correct".</p>
+<p>We can take advantage of that fact by sharing the same work amongst multiple pixels, via the use of a world-space irradiance cache.</p>
+<p><img src="https://jms55.github.io/posts/2025-09-20-solari-bevy-0-17/world_cache_close.png" alt="world_cache_close" /></p>
+<p>The world cache voxelizes the world, storing accumulated irradiance (light hitting the surface) at each voxel.</p>
+<p>When sampling indirect lighting in ReSTIR GI, rather than having to trace additional rays towards light sources to estimate the irradiance, we can simply lookup the irradiance at the given voxel.</p>
+<p>The world cache both amortizes the cost of the GI pass, and reduces variance, especially for newly-disoccluded pixels for which the screen-space ReSTIR GI has no temporal history.</p>
+<p>Adding the world cache both significantly improved quality, and halved the time spent on the initial GI sampling.</p>
+<h4 id="cache-querying">Cache Querying<a class="zola-anchor" href="#cache-querying" aria-label="Anchor link for: cache-querying" style="visibility: hidden;"></a>
+</h4>
+<p>The world cache uses <a rel="nofollow noreferrer" href="https://arxiv.org/pdf/1902.05942v1">spatial hashing</a> to discretize the world. Unlike other options such as <a rel="nofollow noreferrer" href="https://github.com/EmbarkStudios/kajiya/blob/main/docs/gi-overview.md#irradiance-cache-055ms">clipmaps</a>, <a rel="nofollow noreferrer" href="https://advances.realtimerendering.com/s2022/SIGGRAPH2022-Advances-Lumen-Wright%20et%20al.pdf#page=59">cards</a>, or <a rel="nofollow noreferrer" href="https://gpuopen.com/download/GDC2024_GI_with_AMD_FidelityFX_Brixelizer.pdf">bricks</a>, spatial hashing requires no explicit build step, and automatically adapts to scene geometry while having minimal light leaks.</p>
+<p>With spatial hashing, a given descriptor (e.g. <code>{position, normal}</code>) hashes to a <code>u32</code> key. This key corresponds to an index within a fixed-size buffer, which holds whatever values you want to store in the hashmap - in our case, irradiance.</p>
+<p>Either the entry that you're querying corresponds to some existing entry (same checksum), and you can return the value, or the entry does not exist (empty checksum), and you can initialize the entry by writing the checksum to it.</p>
+<p>The checksum is the same descriptor, hashed to a different key via a different hash function, and is used to detect hash collisions.</p>
+<p>The <code>query_world_cache()</code> function below is what ReSTIR GI uses to lookup irradiance at the hit point for raytraces.</p>
+<pre data-lang="rust" style="background-color:#002b36;color:#839496;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#268bd2;">fn </span><span style="color:#b58900;">query_world_cache</span><span style="color:#657b83;">(</span><span style="color:#268bd2;">world_position</span><span>: vec3&lt;</span><span style="color:#268bd2;">f32</span><span>&gt;, </span><span style="color:#268bd2;">world_normal</span><span>: vec3&lt;</span><span style="color:#268bd2;">f32</span><span>&gt;, </span><span style="color:#268bd2;">view_position</span><span>: vec3&lt;</span><span style="color:#268bd2;">f32</span><span>&gt;</span><span style="color:#657b83;">) </span><span>-&gt; vec3&lt;</span><span style="color:#268bd2;">f32</span><span>&gt; </span><span style="color:#657b83;">{
+</span><span>    </span><span style="color:#268bd2;">let</span><span> cell_size </span><span style="color:#657b83;">= </span><span style="color:#859900;">get_cell_size</span><span style="color:#657b83;">(</span><span>world_position, view_position</span><span style="color:#657b83;">)</span><span>;
+</span><span>
+</span><span>    </span><span style="color:#268bd2;">let</span><span> world_position_quantized </span><span style="color:#657b83;">= </span><span>bitcast&lt;vec3&lt;</span><span style="color:#268bd2;">u32</span><span>&gt;&gt;</span><span style="color:#657b83;">(</span><span style="color:#859900;">quantize_position</span><span style="color:#657b83;">(</span><span>world_position, cell_size</span><span style="color:#657b83;">))</span><span>;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> world_normal_quantized </span><span style="color:#657b83;">= </span><span>bitcast&lt;vec3&lt;</span><span style="color:#268bd2;">u32</span><span>&gt;&gt;</span><span style="color:#657b83;">(</span><span style="color:#859900;">quantize_normal</span><span style="color:#657b83;">(</span><span>world_normal</span><span style="color:#657b83;">))</span><span>;
+</span><span>
+</span><span>    var key </span><span style="color:#657b83;">= </span><span style="color:#859900;">compute_key</span><span style="color:#657b83;">(</span><span>world_position_quantized, world_normal_quantized</span><span style="color:#657b83;">)</span><span>;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> checksum </span><span style="color:#657b83;">= </span><span style="color:#859900;">compute_checksum</span><span style="color:#657b83;">(</span><span>world_position_quantized, world_normal_quantized</span><span style="color:#657b83;">)</span><span>;
+</span><span>
+</span><span>    </span><span style="color:#859900;">for </span><span style="color:#657b83;">(</span><span>var i </span><span style="color:#657b83;">=</span><span> 0u; i </span><span style="color:#657b83;">&lt; </span><span style="color:#cb4b16;">WORLD_CACHE_MAX_SEARCH_STEPS</span><span>; i</span><span style="color:#657b83;">++) {
+</span><span>        </span><span style="color:#268bd2;">let</span><span> existing_checksum </span><span style="color:#657b83;">=</span><span> atomicCompareExchangeWeak</span><span style="color:#657b83;">(</span><span style="color:#859900;">&amp;</span><span>world_cache_checksums</span><span style="color:#657b83;">[</span><span>key</span><span style="color:#657b83;">]</span><span>, </span><span style="color:#cb4b16;">WORLD_CACHE_EMPTY_CELL</span><span>, checksum</span><span style="color:#657b83;">)</span><span>.old_value;
+</span><span>        </span><span style="color:#859900;">if</span><span> existing_checksum </span><span style="color:#657b83;">==</span><span> checksum </span><span style="color:#657b83;">{
+</span><span>            </span><span style="color:#586e75;">// Cache entry already exists - get irradiance and reset cell lifetime
+</span><span>            atomicStore</span><span style="color:#657b83;">(</span><span style="color:#859900;">&amp;</span><span>world_cache_life</span><span style="color:#657b83;">[</span><span>key</span><span style="color:#657b83;">]</span><span>, </span><span style="color:#cb4b16;">WORLD_CACHE_CELL_LIFETIME</span><span style="color:#657b83;">)</span><span>;
+</span><span>            </span><span style="color:#859900;">return</span><span> world_cache_irradiance</span><span style="color:#657b83;">[</span><span>key</span><span style="color:#657b83;">]</span><span>.rgb;
+</span><span>        </span><span style="color:#657b83;">} </span><span style="color:#859900;">else if</span><span> existing_checksum </span><span style="color:#657b83;">== </span><span style="color:#cb4b16;">WORLD_CACHE_EMPTY_CELL </span><span style="color:#657b83;">{
+</span><span>            </span><span style="color:#586e75;">// Cell is empty - reset cell lifetime so that it starts getting updated next frame
+</span><span>            atomicStore</span><span style="color:#657b83;">(</span><span style="color:#859900;">&amp;</span><span>world_cache_life</span><span style="color:#657b83;">[</span><span>key</span><span style="color:#657b83;">]</span><span>, </span><span style="color:#cb4b16;">WORLD_CACHE_CELL_LIFETIME</span><span style="color:#657b83;">)</span><span>;
+</span><span>            world_cache_geometry_data</span><span style="color:#657b83;">[</span><span>key</span><span style="color:#657b83;">]</span><span>.world_position </span><span style="color:#657b83;">=</span><span> world_position;
+</span><span>            world_cache_geometry_data</span><span style="color:#657b83;">[</span><span>key</span><span style="color:#657b83;">]</span><span>.world_normal </span><span style="color:#657b83;">=</span><span> world_normal;
+</span><span>            </span><span style="color:#859900;">return vec3</span><span style="color:#657b83;">(</span><span style="color:#6c71c4;">0.0</span><span style="color:#657b83;">)</span><span>;
+</span><span>        </span><span style="color:#657b83;">} </span><span style="color:#859900;">else </span><span style="color:#657b83;">{
+</span><span>            </span><span style="color:#586e75;">// Collision - jump to another entry
+</span><span>            key </span><span style="color:#657b83;">= </span><span style="color:#859900;">wrap_key</span><span style="color:#657b83;">(</span><span style="color:#859900;">pcg_hash</span><span style="color:#657b83;">(</span><span>key</span><span style="color:#657b83;">))</span><span>;
+</span><span>        </span><span style="color:#657b83;">}
+</span><span>    </span><span style="color:#657b83;">}
+</span><span>
+</span><span>    </span><span style="color:#859900;">return vec3</span><span style="color:#657b83;">(</span><span style="color:#6c71c4;">0.0</span><span style="color:#657b83;">)</span><span>;
+</span><span style="color:#657b83;">}
+</span></code></pre>
+<p>In Solari, the descriptor is a combination of the <code>world_position</code> of the query point, the <code>geometric_world_normal</code> (shading normal is too detailed) of the query point, and a LOD factor that's used to reduce cell count for far-away query points.</p>
+<pre data-lang="rust" style="background-color:#002b36;color:#839496;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#268bd2;">fn </span><span style="color:#b58900;">quantize_position</span><span style="color:#657b83;">(</span><span style="color:#268bd2;">world_position</span><span>: vec3&lt;</span><span style="color:#268bd2;">f32</span><span>&gt;, </span><span style="color:#268bd2;">quantization_factor</span><span>: </span><span style="color:#268bd2;">f32</span><span style="color:#657b83;">) </span><span>-&gt; vec3&lt;</span><span style="color:#268bd2;">f32</span><span>&gt; </span><span style="color:#657b83;">{
+</span><span>    </span><span style="color:#859900;">return floor</span><span style="color:#657b83;">(</span><span>world_position </span><span style="color:#657b83;">/</span><span> quantization_factor </span><span style="color:#657b83;">+ </span><span style="color:#6c71c4;">0.0001</span><span style="color:#657b83;">)</span><span>;
+</span><span style="color:#657b83;">}
+</span><span>
+</span><span style="color:#268bd2;">fn </span><span style="color:#b58900;">quantize_normal</span><span style="color:#657b83;">(</span><span style="color:#268bd2;">world_normal</span><span>: vec3&lt;</span><span style="color:#268bd2;">f32</span><span>&gt;</span><span style="color:#657b83;">) </span><span>-&gt; vec3&lt;</span><span style="color:#268bd2;">f32</span><span>&gt; </span><span style="color:#657b83;">{
+</span><span>    </span><span style="color:#859900;">return floor</span><span style="color:#657b83;">(</span><span>world_normal </span><span style="color:#657b83;">+ </span><span style="color:#6c71c4;">0.0001</span><span style="color:#657b83;">)</span><span>;
+</span><span style="color:#657b83;">}
+</span><span>
+</span><span style="color:#268bd2;">fn </span><span style="color:#b58900;">compute_key</span><span style="color:#657b83;">(</span><span style="color:#268bd2;">world_position</span><span>: vec3&lt;</span><span style="color:#268bd2;">u32</span><span>&gt;, </span><span style="color:#268bd2;">world_normal</span><span>: vec3&lt;</span><span style="color:#268bd2;">u32</span><span>&gt;</span><span style="color:#657b83;">) </span><span>-&gt; </span><span style="color:#268bd2;">u32 </span><span style="color:#657b83;">{
+</span><span>    var key </span><span style="color:#657b83;">= </span><span style="color:#859900;">pcg_hash</span><span style="color:#657b83;">(</span><span>world_position.x</span><span style="color:#657b83;">)</span><span>;
+</span><span>    key </span><span style="color:#657b83;">= </span><span style="color:#859900;">pcg_hash</span><span style="color:#657b83;">(</span><span>key </span><span style="color:#657b83;">+</span><span> world_position.y</span><span style="color:#657b83;">)</span><span>;
+</span><span>    key </span><span style="color:#657b83;">= </span><span style="color:#859900;">pcg_hash</span><span style="color:#657b83;">(</span><span>key </span><span style="color:#657b83;">+</span><span> world_position.z</span><span style="color:#657b83;">)</span><span>;
+</span><span>    key </span><span style="color:#657b83;">= </span><span style="color:#859900;">pcg_hash</span><span style="color:#657b83;">(</span><span>key </span><span style="color:#657b83;">+</span><span> world_normal.x</span><span style="color:#657b83;">)</span><span>;
+</span><span>    key </span><span style="color:#657b83;">= </span><span style="color:#859900;">pcg_hash</span><span style="color:#657b83;">(</span><span>key </span><span style="color:#657b83;">+</span><span> world_normal.y</span><span style="color:#657b83;">)</span><span>;
+</span><span>    key </span><span style="color:#657b83;">= </span><span style="color:#859900;">pcg_hash</span><span style="color:#657b83;">(</span><span>key </span><span style="color:#657b83;">+</span><span> world_normal.z</span><span style="color:#657b83;">)</span><span>;
+</span><span>    </span><span style="color:#859900;">return wrap_key</span><span style="color:#657b83;">(</span><span>key</span><span style="color:#657b83;">)</span><span>;
+</span><span style="color:#657b83;">}
+</span><span>
+</span><span style="color:#268bd2;">fn </span><span style="color:#b58900;">compute_checksum</span><span style="color:#657b83;">(</span><span style="color:#268bd2;">world_position</span><span>: vec3&lt;</span><span style="color:#268bd2;">u32</span><span>&gt;, </span><span style="color:#268bd2;">world_normal</span><span>: vec3&lt;</span><span style="color:#268bd2;">u32</span><span>&gt;</span><span style="color:#657b83;">) </span><span>-&gt; </span><span style="color:#268bd2;">u32 </span><span style="color:#657b83;">{
+</span><span>    var key </span><span style="color:#657b83;">= </span><span style="color:#859900;">iqint_hash</span><span style="color:#657b83;">(</span><span>world_position.x</span><span style="color:#657b83;">)</span><span>;
+</span><span>    key </span><span style="color:#657b83;">= </span><span style="color:#859900;">iqint_hash</span><span style="color:#657b83;">(</span><span>key </span><span style="color:#657b83;">+</span><span> world_position.y</span><span style="color:#657b83;">)</span><span>;
+</span><span>    key </span><span style="color:#657b83;">= </span><span style="color:#859900;">iqint_hash</span><span style="color:#657b83;">(</span><span>key </span><span style="color:#657b83;">+</span><span> world_position.z</span><span style="color:#657b83;">)</span><span>;
+</span><span>    key </span><span style="color:#657b83;">= </span><span style="color:#859900;">iqint_hash</span><span style="color:#657b83;">(</span><span>key </span><span style="color:#657b83;">+</span><span> world_normal.x</span><span style="color:#657b83;">)</span><span>;
+</span><span>    key </span><span style="color:#657b83;">= </span><span style="color:#859900;">iqint_hash</span><span style="color:#657b83;">(</span><span>key </span><span style="color:#657b83;">+</span><span> world_normal.y</span><span style="color:#657b83;">)</span><span>;
+</span><span>    key </span><span style="color:#657b83;">= </span><span style="color:#859900;">iqint_hash</span><span style="color:#657b83;">(</span><span>key </span><span style="color:#657b83;">+</span><span> world_normal.z</span><span style="color:#657b83;">)</span><span>;
+</span><span>    </span><span style="color:#859900;">return</span><span> key;
+</span><span style="color:#657b83;">}
+</span></code></pre>
+<figure>
+    <img
+        src="world_cache_far.png"
+        
+        
+        
+    >
+    
+    <figcaption><p>World cache from further away, showing LOD</p>
+</figcaption>
+    
+</figure>
+<h4 id="cache-decay">Cache Decay<a class="zola-anchor" href="#cache-decay" aria-label="Anchor link for: cache-decay" style="visibility: hidden;"></a>
+</h4>
+<p>In order to maintain the world cache, we need a series of passes to decay and update active entries.</p>
+<p>The first compute dispatch checks every entry in the hashmap, decaying their "life" count by 1. Each entry's life is initialized when the entry is created, and is reset when queried.</p>
+<p>When an entry reaches 0 life, we clear out the entry, freeing up a space for future voxels to use.</p>
+<pre data-lang="rust" style="background-color:#002b36;color:#839496;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#859900;">@</span><span>compute </span><span style="color:#859900;">@workgroup_size</span><span style="color:#657b83;">(</span><span style="color:#6c71c4;">1024</span><span>, </span><span style="color:#6c71c4;">1</span><span>, </span><span style="color:#6c71c4;">1</span><span style="color:#657b83;">)
+</span><span style="color:#268bd2;">fn </span><span style="color:#b58900;">decay_world_cache</span><span style="color:#657b83;">(</span><span>@builtin</span><span style="color:#657b83;">(</span><span style="color:#268bd2;">global_invocation_id</span><span style="color:#657b83;">) </span><span style="color:#268bd2;">global_id</span><span>: vec3&lt;</span><span style="color:#268bd2;">u32</span><span>&gt;</span><span style="color:#657b83;">) {
+</span><span>    var life </span><span style="color:#657b83;">=</span><span> world_cache_life</span><span style="color:#657b83;">[</span><span>global_id.x</span><span style="color:#657b83;">]</span><span>;
+</span><span>    </span><span style="color:#859900;">if</span><span> life </span><span style="color:#657b83;">&gt;</span><span> 0u </span><span style="color:#657b83;">{
+</span><span>        </span><span style="color:#586e75;">// Decay and write new life
+</span><span>        life </span><span style="color:#657b83;">-=</span><span> 1u;
+</span><span>        world_cache_life</span><span style="color:#657b83;">[</span><span>global_id.x</span><span style="color:#657b83;">] =</span><span> life;
+</span><span>
+</span><span>        </span><span style="color:#586e75;">// Clear cells that become dead
+</span><span>        </span><span style="color:#859900;">if</span><span> life </span><span style="color:#657b83;">==</span><span> 0u </span><span style="color:#657b83;">{
+</span><span>            world_cache_checksums</span><span style="color:#657b83;">[</span><span>global_id.x</span><span style="color:#657b83;">] = </span><span style="color:#cb4b16;">WORLD_CACHE_EMPTY_CELL</span><span>;
+</span><span>            world_cache_irradiance</span><span style="color:#657b83;">[</span><span>global_id.x</span><span style="color:#657b83;">] = </span><span style="color:#859900;">vec4</span><span style="color:#657b83;">(</span><span style="color:#6c71c4;">0.0</span><span style="color:#657b83;">)</span><span>;
+</span><span>        </span><span style="color:#657b83;">}
+</span><span>    </span><span style="color:#657b83;">}
+</span><span style="color:#657b83;">}
+</span></code></pre>
+<h4 id="cache-compact">Cache Compact<a class="zola-anchor" href="#cache-compact" aria-label="Anchor link for: cache-compact" style="visibility: hidden;"></a>
+</h4>
+<p>The next three dispatches compact and count the total number of active entries in the world cache. This produces a dense array of indices of active entries, as well as indirect dispatch parameters for the next two passes.</p>
+<p>The code is just a standard parallel prefix-sum, so I'm going to skip showing it.</p>
+<h4 id="cache-update">Cache Update<a class="zola-anchor" href="#cache-update" aria-label="Anchor link for: cache-update" style="visibility: hidden;"></a>
+</h4>
+<p>Now that we know the list of active entries in the world cache (and can perform indirect dispatches to process each active entry), it's time to update the irradiance estimate for each voxel.</p>
+<p>The first part of the update process is taking new samples of the scene's lighting.</p>
+<p>Two rays are traced per voxel: a direct light sample, and an indirect light sample.</p>
+<pre data-lang="rust" style="background-color:#002b36;color:#839496;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#859900;">@</span><span>compute </span><span style="color:#859900;">@workgroup_size</span><span style="color:#657b83;">(</span><span style="color:#6c71c4;">1024</span><span>, </span><span style="color:#6c71c4;">1</span><span>, </span><span style="color:#6c71c4;">1</span><span style="color:#657b83;">)
+</span><span style="color:#268bd2;">fn </span><span style="color:#b58900;">sample_irradiance</span><span style="color:#657b83;">(</span><span>@builtin</span><span style="color:#657b83;">(</span><span style="color:#268bd2;">workgroup_id</span><span style="color:#657b83;">) </span><span style="color:#268bd2;">workgroup_id</span><span>: vec3&lt;</span><span style="color:#268bd2;">u32</span><span>&gt;, @builtin</span><span style="color:#657b83;">(</span><span style="color:#268bd2;">global_invocation_id</span><span style="color:#657b83;">) </span><span style="color:#268bd2;">active_cell_id</span><span>: vec3&lt;</span><span style="color:#268bd2;">u32</span><span>&gt;</span><span style="color:#657b83;">) {
+</span><span>    </span><span style="color:#859900;">if</span><span> active_cell_id.x </span><span style="color:#657b83;">&lt;</span><span> world_cache_active_cells_count </span><span style="color:#657b83;">{
+</span><span>        </span><span style="color:#586e75;">// Get voxel data
+</span><span>        </span><span style="color:#268bd2;">let</span><span> cell_index </span><span style="color:#657b83;">=</span><span> world_cache_active_cell_indices</span><span style="color:#657b83;">[</span><span>active_cell_id.x</span><span style="color:#657b83;">]</span><span>;
+</span><span>        </span><span style="color:#268bd2;">let</span><span> geometry_data </span><span style="color:#657b83;">=</span><span> world_cache_geometry_data</span><span style="color:#657b83;">[</span><span>cell_index</span><span style="color:#657b83;">]</span><span>;
+</span><span>        var rng </span><span style="color:#657b83;">=</span><span> cell_index </span><span style="color:#657b83;">+</span><span> constants.frame_index;
+</span><span>
+</span><span>        </span><span style="color:#586e75;">// Sample direct lighting via RIS (1st ray)
+</span><span>        var new_irradiance </span><span style="color:#657b83;">= </span><span style="color:#859900;">sample_random_light_ris</span><span style="color:#657b83;">(</span><span>geometry_data.world_position, geometry_data.world_normal, workgroup_id.xy, </span><span style="color:#859900;">&amp;</span><span>rng</span><span style="color:#657b83;">)</span><span>;
+</span><span>
+</span><span>        </span><span style="color:#586e75;">// Sample indirect lighting via BRDF sampling + world cache querying (2nd ray)
+</span><span>        </span><span style="color:#268bd2;">let</span><span> ray_direction </span><span style="color:#657b83;">= </span><span style="color:#859900;">sample_cosine_hemisphere</span><span style="color:#657b83;">(</span><span>geometry_data.world_normal, </span><span style="color:#859900;">&amp;</span><span>rng</span><span style="color:#657b83;">)</span><span>;
+</span><span>        </span><span style="color:#268bd2;">let</span><span> ray_hit </span><span style="color:#657b83;">= </span><span style="color:#859900;">trace_ray</span><span style="color:#657b83;">(</span><span>geometry_data.world_position, ray_direction, </span><span style="color:#cb4b16;">RAY_T_MIN</span><span>, </span><span style="color:#cb4b16;">RAY_T_MAX</span><span>, </span><span style="color:#cb4b16;">RAY_FLAG_NONE</span><span style="color:#657b83;">)</span><span>;
+</span><span>        </span><span style="color:#859900;">if</span><span> ray_hit.kind </span><span style="color:#657b83;">!= </span><span style="color:#cb4b16;">RAY_QUERY_INTERSECTION_NONE </span><span style="color:#657b83;">{
+</span><span>            </span><span style="color:#268bd2;">let</span><span> ray_hit </span><span style="color:#657b83;">= </span><span style="color:#859900;">resolve_ray_hit_full</span><span style="color:#657b83;">(</span><span>ray_hit</span><span style="color:#657b83;">)</span><span>;
+</span><span>            new_irradiance </span><span style="color:#657b83;">+=</span><span> ray_hit.material.base_color </span><span style="color:#657b83;">* </span><span style="color:#859900;">query_world_cache</span><span style="color:#657b83;">(</span><span>ray_hit.world_position, ray_hit.geometric_world_normal, view.world_position</span><span style="color:#657b83;">)</span><span>;
+</span><span>        </span><span style="color:#657b83;">}
+</span><span>
+</span><span>        world_cache_active_cells_new_irradiance</span><span style="color:#657b83;">[</span><span>active_cell_id.x</span><span style="color:#657b83;">] =</span><span> new_irradiance;
+</span><span>    </span><span style="color:#657b83;">}
+</span><span style="color:#657b83;">}
+</span></code></pre>
+<p>The direct light sample is chosen via RIS, and uses the same presampled light tiles that we're going to use for ReSTIR DI. It's basically the same process as ReSTIR DI initial candidate sampling.</p>
+<p>I've thought about using ReSTIR (well, ReTIR, without the spatial resampling part) for the world cache, but it's not something I've tried yet.</p>
+<p>The indirect light sample is a little more interesting.</p>
+<p>In order to estimate indirect lighting, we trace a ray using a cosine-hemisphere distribution. At the ray hit point, we query the world cache.</p>
+<p>You might be thinking "Wait, aren't we <em>updating</em> the cache? But we're also sampling from the same cache in order to... update it?"</p>
+<p>By having the cache sample from itself, we form a full path tracer, where tracing the path is spread out across multiple frames (for performance).</p>
+<p>As an example: In frame 5, world cache cell A samples a light source. In frame 6, a different world cache cell B samples cell A. In frame 7, yet another world cache cell C samples cell B. We've now formed a multi-bounce path <code>light source-&gt;A-&gt;B-&gt;C</code>, and once ReSTIR GI gets involved, <code>light source-&gt;A-&gt;B-&gt;C-&gt;primary surface-&gt;camera</code>.</p>
+<p>By having the cache sample itself, we get full-length multi-bounce paths, instead of just single-bounce paths. In indoor scenes that make heavy use of indirect lighting, the difference is pretty dramatic.</p>
+<p><figure>
+    <img
+        src="cornell_box_no_multi_bounce.png"
+        
+        
+        
+    >
+    
+    <figcaption><p>Single-bounce lighting</p>
+</figcaption>
+    
+</figure>
+
+<figure>
+    <img
+        src="cornell_box_multi_bounce.png"
+        
+        
+        
+    >
+    
+    <figcaption><p>Multi-bounce lighting</p>
+</figcaption>
+    
+</figure>
+</p>
+<h4 id="cache-blend">Cache Blend<a class="zola-anchor" href="#cache-blend" aria-label="Anchor link for: cache-blend" style="visibility: hidden;"></a>
+</h4>
+<p>The second and final step of the world cache update process is to blend the new light samples with the existing irradiance samples, giving us an estimate of the overall irradiance via temporal accumulation. If you've ever seen code for temporal antialiasing, this should look pretty familiar.</p>
+<p>The blending factor is based on the total sample count of voxel, capped at a max value. New voxels without any existing irradiance estimate use more of the new sample's contribution, while existing voxels with existing irradiance estimates use less of the new sample.</p>
+<p>Choosing the max sample count is a tradeoff between having the cache be stable and low-variance, and having the cache be responsive to changes in the scene's lighting.</p>
+<p>It's also important to note that this is a separate compute dispatch from the previous dispatch we used for sampling lighting. If the passes were combined, we would have data races from voxels writing new irradiance estimates at the same time other voxels were querying them.</p>
+<pre data-lang="rust" style="background-color:#002b36;color:#839496;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#859900;">@</span><span>compute </span><span style="color:#859900;">@workgroup_size</span><span style="color:#657b83;">(</span><span style="color:#6c71c4;">1024</span><span>, </span><span style="color:#6c71c4;">1</span><span>, </span><span style="color:#6c71c4;">1</span><span style="color:#657b83;">)
+</span><span style="color:#268bd2;">fn </span><span style="color:#b58900;">blend_new_samples</span><span style="color:#657b83;">(</span><span>@builtin</span><span style="color:#657b83;">(</span><span style="color:#268bd2;">global_invocation_id</span><span style="color:#657b83;">) </span><span style="color:#268bd2;">active_cell_id</span><span>: vec3&lt;</span><span style="color:#268bd2;">u32</span><span>&gt;</span><span style="color:#657b83;">) {
+</span><span>    </span><span style="color:#859900;">if</span><span> active_cell_id.x </span><span style="color:#657b83;">&lt;</span><span> world_cache_active_cells_count </span><span style="color:#657b83;">{
+</span><span>        </span><span style="color:#268bd2;">let</span><span> cell_index </span><span style="color:#657b83;">=</span><span> world_cache_active_cell_indices</span><span style="color:#657b83;">[</span><span>active_cell_id.x</span><span style="color:#657b83;">]</span><span>;
+</span><span>
+</span><span>        </span><span style="color:#268bd2;">let</span><span> old_irradiance </span><span style="color:#657b83;">=</span><span> world_cache_irradiance</span><span style="color:#657b83;">[</span><span>cell_index</span><span style="color:#657b83;">]</span><span>;
+</span><span>        </span><span style="color:#268bd2;">let</span><span> new_irradiance </span><span style="color:#657b83;">=</span><span> world_cache_active_cells_new_irradiance</span><span style="color:#657b83;">[</span><span>active_cell_id.x</span><span style="color:#657b83;">]</span><span>;
+</span><span>        </span><span style="color:#268bd2;">let</span><span> sample_count </span><span style="color:#657b83;">= </span><span style="color:#859900;">min</span><span style="color:#657b83;">(</span><span>old_irradiance.a </span><span style="color:#657b83;">+ </span><span style="color:#6c71c4;">1.0</span><span>, </span><span style="color:#cb4b16;">WORLD_CACHE_MAX_TEMPORAL_SAMPLES</span><span style="color:#657b83;">)</span><span>;
+</span><span>
+</span><span>        </span><span style="color:#268bd2;">let</span><span> blended_irradiance </span><span style="color:#657b83;">= </span><span style="color:#859900;">mix</span><span style="color:#657b83;">(</span><span>old_irradiance.rgb, new_irradiance, </span><span style="color:#6c71c4;">1.0 </span><span style="color:#657b83;">/</span><span> sample_count</span><span style="color:#657b83;">)</span><span>;
+</span><span>
+</span><span>        world_cache_irradiance</span><span style="color:#657b83;">[</span><span>cell_index</span><span style="color:#657b83;">] = </span><span style="color:#859900;">vec4</span><span style="color:#657b83;">(</span><span>blended_irradiance, sample_count</span><span style="color:#657b83;">)</span><span>;
+</span><span>    </span><span style="color:#657b83;">}
+</span><span style="color:#657b83;">}
+</span></code></pre>
+<h3 id="dlss-ray-reconstruction">DLSS Ray Reconstruction<a class="zola-anchor" href="#dlss-ray-reconstruction" aria-label="Anchor link for: dlss-ray-reconstruction" style="visibility: hidden;"></a>
+</h3>
+<p>Once we have our noisy estimate of the scene, we run it through DLSS-RR to upscale, antialias, and denoise it.</p>
+<p><figure>
+    <img
+        src="noisy_full.png"
+        
+        
+        
+    >
+    
+    <figcaption><p>Noisy and aliased image</p>
+</figcaption>
+    
+</figure>
+
+<figure>
+    <img
+        src="denoised_full.png"
+        
+        
+        
+    >
+    
+    <figcaption><p>Denoised and antialiased image</p>
+</figcaption>
+    
+</figure>
+
+<figure>
+    <img
+        src="pathtraced.png"
+        
+        
+        
+    >
+    
+    <figcaption><p>Pathtraced reference</p>
+</figcaption>
+    
+</figure>
+</p>
+<p>While ideally we would be able to configure DLSS-RR to read directly from our GBuffer, we unfortunately need a small pass to first copy from the GBuffer to some standalone textures. DLSS-RR will read these textures as inputs to help guide the denoising pass.</p>
+<p>DLSS-RR is called via the <a rel="nofollow noreferrer" href="https://crates.io/crates/dlss_wgpu">dlss_wgpu</a> wrapper I wrote, which is integrated into bevy_anti_alias as a Bevy plugin.</p>
+
+<blockquote class="callout note no-title">
+  
+  
+  <div class="icon">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18"><path d="M12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2C17.5228 2 22 6.47715 22 12C22 17.5228 17.5228 22 12 22ZM12 20C16.4183 20 20 16.4183 20 12C20 7.58172 16.4183 4 12 4C7.58172 4 4 7.58172 4 12C4 16.4183 7.58172 20 12 20ZM11 7H13V9H11V7ZM11 11H13V17H11V11Z" fill="currentColor"></path></svg>
+
+  </div>
+  <div class="content">
+    <p>The dlss_wgpu crate is standalone, and can also be used by non-Bevy projects that are using wgpu!</p>
+
+  </div>
+  
+</blockquote>
+
+<p><figure>
+    <img
+        src="denoised_di.png"
+        
+        
+        
+    >
+    
+    <figcaption><p>Denoised and antialiased image - DI only</p>
+</figcaption>
+    
+</figure>
+
+<figure>
+    <img
+        src="denoised_gi.png"
+        
+        
+        
+    >
+    
+    <figcaption><p>Denoised and antialiased image - GI only</p>
+</figcaption>
+    
+</figure>
+</p>
+<h2 id="performance">Performance<a class="zola-anchor" href="#performance" aria-label="Anchor link for: performance" style="visibility: hidden;"></a>
+</h2>
+<h3 id="numbers">Numbers<a class="zola-anchor" href="#numbers" aria-label="Anchor link for: numbers" style="visibility: hidden;"></a>
+</h3>
+<p>Timings for all scenes were measured on an RTX 3080, rendered at 1600x900, and upscaled to 3200x1800 using DLSS-RR performance mode.</p>
+<p><figure>
+    <img
+        src="pica_pica_perf.png"
+        
+        
+        
+    >
+    
+    <figcaption><p>PICA PICA</p>
+</figcaption>
+    
+</figure>
+
+<figure>
+    <img
+        src="bistro_perf.png"
+        
+        
+        
+    >
+    
+    <figcaption><p>Bistro</p>
+</figcaption>
+    
+</figure>
+
+<figure>
+    <img
+        src="cornell_box_perf.png"
+        
+        
+        
+    >
+    
+    <figcaption><p>Cornell Box</p>
+</figcaption>
+    
+</figure>
+</p>
+<!-- |                Pass               | PICA PICA Duration (ms) | Bistro Duration (ms) | Cornell Box Duration (ms) | Dependent On |
+|:---------------------------------:|:-----------------------:|:--------------------:|:-------------------------:|:------------:|
+| Presample Light Tiles             | 0.02761                 | 0.08403              | 0.02436                   | Negligible   |
+| World Cache: Decay Cells          | 0.01508                 | 0.02007              | 0.01484                   | Negligible   |
+| World Cache: Compaction P1        | 0.03823                 | 0.04357              | 0.03776                   | Negligible   |
+| World Cache: Compaction P2        | 0.00862                 | 0.00903              | 0.00858                   | Negligible   |
+| World Cache: Write Active Cells   | 0.01451                 | 0.01942              | 0.00138                   | Negligible   |
+| World Cache: Sample Lighting      | 0.06009                 | 2.09000              | 0.05367                   | World size   |
+| World Cache: Blend New Samples    | 0.01286                 | 0.06737              | 0.01272                   | Negligible   |
+| ReSTIR DI: Initial + Temporal     | 1.25000                 | 1.85000              | 1.28000                   | Pixel count  |
+| ReSTIR DI: Spatial + Shade        | 0.18628                 | 0.65952              | 0.18127                   | Pixel count  |
+| ReSTIR GI: Initial + Temporal     | 0.36913                 | 2.75000              | 0.32722                   | Pixel count  |
+| ReSTIR GI: Spatial + Shade        | 0.44301                 | 0.59905              | 0.45791                   | Pixel count  |
+| DLSS-RR: Copy Inputs From GBuffer | 0.04185                 | 0.06789              | 0.03517                   | Pixel count  |
+| DLSS-RR                           | 5.75000                 | 6.29000              | 5.82000                   | Pixel count  |
+| Total                             | 8.21727                 | 14.54995             | 8.25488                   | N/A          | -->
+<table><thead><tr><th style="text-align: center">Pass</th><th style="text-align: center">PICA PICA Duration (ms)</th><th style="text-align: center">Bistro Duration (ms)</th><th style="text-align: center">Cornell Box Duration (ms)</th><th style="text-align: center">Dependent On</th></tr></thead><tbody>
+<tr><td style="text-align: center">Presample Light Tiles</td><td style="text-align: center">0.03</td><td style="text-align: center">0.08</td><td style="text-align: center">0.02</td><td style="text-align: center">Negligible</td></tr>
+<tr><td style="text-align: center">World Cache: Decay Cells</td><td style="text-align: center">0.02</td><td style="text-align: center">0.02</td><td style="text-align: center">0.01</td><td style="text-align: center">Negligible</td></tr>
+<tr><td style="text-align: center">World Cache: Compaction P1</td><td style="text-align: center">0.04</td><td style="text-align: center">0.04</td><td style="text-align: center">0.04</td><td style="text-align: center">Negligible</td></tr>
+<tr><td style="text-align: center">World Cache: Compaction P2</td><td style="text-align: center">0.01</td><td style="text-align: center">0.01</td><td style="text-align: center">0.01</td><td style="text-align: center">Negligible</td></tr>
+<tr><td style="text-align: center">World Cache: Write Active Cells</td><td style="text-align: center">0.01</td><td style="text-align: center">0.02</td><td style="text-align: center">0.01</td><td style="text-align: center">Negligible</td></tr>
+<tr><td style="text-align: center">World Cache: Sample Lighting</td><td style="text-align: center">0.06</td><td style="text-align: center">2.09</td><td style="text-align: center">0.05</td><td style="text-align: center">World size</td></tr>
+<tr><td style="text-align: center">World Cache: Blend New Samples</td><td style="text-align: center">0.01</td><td style="text-align: center">0.07</td><td style="text-align: center">0.01</td><td style="text-align: center">Negligible</td></tr>
+<tr><td style="text-align: center">ReSTIR DI: Initial + Temporal</td><td style="text-align: center">1.25</td><td style="text-align: center">1.85</td><td style="text-align: center">1.28</td><td style="text-align: center">Pixel count</td></tr>
+<tr><td style="text-align: center">ReSTIR DI: Spatial + Shade</td><td style="text-align: center">0.19</td><td style="text-align: center">0.66</td><td style="text-align: center">0.18</td><td style="text-align: center">Pixel count</td></tr>
+<tr><td style="text-align: center">ReSTIR GI: Initial + Temporal</td><td style="text-align: center">0.37</td><td style="text-align: center">2.75</td><td style="text-align: center">0.33</td><td style="text-align: center">Pixel count</td></tr>
+<tr><td style="text-align: center">ReSTIR GI: Spatial + Shade</td><td style="text-align: center">0.44</td><td style="text-align: center">0.60</td><td style="text-align: center">0.46</td><td style="text-align: center">Pixel count</td></tr>
+<tr><td style="text-align: center">DLSS-RR: Copy Inputs From GBuffer</td><td style="text-align: center">0.04</td><td style="text-align: center">0.07</td><td style="text-align: center">0.04</td><td style="text-align: center">Pixel count</td></tr>
+<tr><td style="text-align: center">DLSS-RR</td><td style="text-align: center">5.75</td><td style="text-align: center">6.29</td><td style="text-align: center">5.82</td><td style="text-align: center">Pixel count</td></tr>
+<tr><td style="text-align: center">Total</td><td style="text-align: center">8.22</td><td style="text-align: center">14.55</td><td style="text-align: center">8.25</td><td style="text-align: center">N/A</td></tr>
+</tbody></table>
+<h3 id="upscaling-benefits">Upscaling Benefits<a class="zola-anchor" href="#upscaling-benefits" aria-label="Anchor link for: upscaling-benefits" style="visibility: hidden;"></a>
+</h3>
+<p>While DLSS-RR is quite expensive, it still ends up saving performance overall.</p>
+<p>Without upscaling, we would have 4x as many pixels total, meaning ReSTIR DI and GI would be ~4x as expensive. After that, we would need a separate denoising process (usually two separate processes, one for direct and one for indirect), a separate shading pass to apply the denoised lighting, and then an antialiasing method.</p>
+<p>Total performance costs would be higher than using the unified upscaling + denoising + antialiasing pipeline that DLSS-RR provides.</p>
+<p>DLSS-RR also performs much better on the newer Ada and Blackwell GPUs.</p>
+<p><img src="https://jms55.github.io/posts/2025-09-20-solari-bevy-0-17/dlss_rr_perf.png" alt="dlss_rr_perf" /></p>
+<h3 id="nsight-trace">NSight Trace<a class="zola-anchor" href="#nsight-trace" aria-label="Anchor link for: nsight-trace" style="visibility: hidden;"></a>
+</h3>
+<p>Looking at a GPU trace, our main ReSTIR DI/GI passes are primarily memory bound.</p>
+<p>The ReSTIR DI initial and temporal pass is mainly limited by loads from global memory (blue bar), which source-code level profiling reveals to come from loading <code>ResolvedLightSamplePacked</code> samples from light tiles during initial sampling.</p>
+<p>The ReSTIR DI spatial and shade pass, and both ReSTIR GI passes, are limited by raytracing throughput (yellow bar).</p>
+<figure>
+    <img
+        src="nsight_trace.png"
+        
+        
+        
+    >
+    
+    <figcaption><p>NSight Graphics GPU Trace</p>
+</figcaption>
+    
+</figure>
+<p>There are typically three ways to improve memory-bound shaders:</p>
+<ol>
+<li>Loading less data</li>
+<li>Improving cache hit rate</li>
+<li>Hiding the latency</li>
+</ol>
+<p>For ReSTIR DI initial sampling, this would correspond to:</p>
+<ol>
+<li>Taking less than 32 initial samples (viable, depending on the scene)</li>
+<li>Can't do this - we're already hitting 95% L2 cache throughput</li>
+<li>Would need to increase <a rel="nofollow noreferrer" href="https://gpuopen.com/learn/occupancy-explained">occupancy</a></li>
+</ol>
+<p>Unfortunately, the only real optimization I think we could do is hiding the latency by improving the occupancy. More threads for the GPU to swap between when while waiting for memory loads to finish = finishing the overall workload faster.</p>
+<p>NSight shows that we have a mediocre 32 out of a hardware maximum of 48 warps occupied, limited by the "registers per thread limiter". I.e. our shader code uses too many registers per thread, and NSight does not have enough register space to allocate additional warps.</p>
+<p>Source-code level profiling shows that the majority of live registers are consumed by the <a rel="nofollow noreferrer" href="https://github.com/bevyengine/bevy/blob/8b36cca28c4ea00425e1414fd88c8b82297e2b96/crates/bevy_solari/src/scene/raytracing_scene_bindings.wgsl#L177-L215">triangle resolve function</a>, which maps a point on a mesh to surface data like position, normal, material properties, etc. I'm not really sure how to reduce register usage here.</p>
+<p>For the other 3 passes limited by raytracing throughput, we have the same issue. Not a ton we can do besides hiding the latency, which runs into the same issue with register count and occupancy.</p>
+<p>For GI specifically though, there <em>is</em> a way I have thought of to do less work, again at the cost of worse quality depending on the scene.</p>
+<p>For the world cache, rather than trace rays for every active cell, we could do it for a random subset of cells each frame (up to some maximum), to help limit the cost of updating many cache entries.</p>
+<p>For the ReSTIR GI passes, we could perform them at quarter resolution (half the pixels along each axis). GI is not particuarly important to have exactly per-pixel data, so we can calculate it at a lower resolution, and then <a rel="nofollow noreferrer" href="https://www.nvidia.com/en-us/on-demand/session/gdc25-gdc1002">upscale</a> (timestamp 17:22). This upscaling would be in addition to the the DLSS-RR upscaling.</p>
+<h2 id="future-work">Future Work<a class="zola-anchor" href="#future-work" aria-label="Anchor link for: future-work" style="visibility: hidden;"></a>
+</h2>
+<p>As always, the first release of a new plugin is just the start. I still have a ton of ideas for future improvements to Solari!</p>
+<h3 id="feature-parity">Feature Parity<a class="zola-anchor" href="#feature-parity" aria-label="Anchor link for: feature-parity" style="visibility: hidden;"></a>
+</h3>
+<p>In terms of feature parity with Bevy's standard renderer, the most important missing feature is support for specular, transparent, and alpha-masked materials.</p>
+<p>I've been actively prototyping specular material support, and with any luck will be writing about it in a future blog post on Solari changes in Bevy v0.18.</p>
+<p>Custom material support is another big one, although it's blocked on raytracing pipeline support in wgpu (which would also unlock shader execution reordering!).</p>
+<p>Support for skinned meshes first needs some work done in Bevy to add GPU-driven skinning, but would be a great feature to add.</p>
+<p>Finally, Solari is eventually going to want to support more types of lights such as point lights, spot lights, and image-based lighting.</p>
+<h3 id="light-sampling">Light Sampling<a class="zola-anchor" href="#light-sampling" aria-label="Anchor link for: light-sampling" style="visibility: hidden;"></a>
+</h3>
+<p>Light sampling in Solari is currently purely random (not even uniformly random!), and there's big opportunities to improve it.</p>
+<p>Having a large number of lights in the scenes is <em>theoretically</em> viable with ReSTIR, but in practice Solari is not yet there. We need some sort of spatial/visibility-aware sampling to improve the quality of our initial candidate samples.</p>
+<p>One approach another Bevy developer is exploring is using <a rel="nofollow noreferrer" href="https://gpuopen.com/download/Hierarchical_Light_Sampling_with_Accurate_Spherical_Gaussian_Lighting.pdf">spherical gaussian light trees</a>.</p>
+<p>Another promising direction is copying from the recently released <a rel="nofollow noreferrer" href="https://advances.realtimerendering.com/s2025/content/MegaLights_Stochastic_Direct_Lighting_2025.pdf">MegaLights</a> presentation, and adding visible light lists. I want to experiment with implementing light lists in world space, so that it can also be used to improve our GI.</p>
+<h3 id="chromatic-restir">Chromatic ReSTIR<a class="zola-anchor" href="#chromatic-restir" aria-label="Anchor link for: chromatic-restir" style="visibility: hidden;"></a>
+</h3>
+<p>Another problem is that overlapping lights of similar brightness, but different chromas (R,G,B) tend to pose a problem for ReSTIR. ReSTIR can only select a single sample, but in this case, there are multiple overlapping lights.</p>
+<p>One approach I've been prototyping to solve this is using <a rel="nofollow noreferrer" href="https://suikasibyl.github.io/files/vvmc/paper.pdf">ratio control variates</a> (RCV). The basic idea (if I understand the paper correctly) is that you apply a vector-valued (R,G,B) weight to your lighting integral, based on the fraction of light a given sample contributes, divided by the overall light in the scene.</p>
+<p>E.g. if you sample a pure red light, but the scene has a large amount of blue and green light, then you downweight the sample's red contribution, and upweight its blue and green contributions.</p>
+<p>The paper gives a scheme involving precomputing (offline) the total amount of light in the scene ahead of time, using light trees. We could easily add RCV support if we go ahead with adding light trees to Solari.</p>
+<p>But another option I've been testing (without much luck yet) is to learn an <em>online</em> estimate of the total light in the scene. The idea is that each reservoir keeps track of the total amount of light it sees per channel as you do initial sampling and resampling between reservoirs. When it comes time to shade the final selected sample, you can use this estimate with RCV to weight the sample appropriately.</p>
+<p>We'll see if I can get it working!</p>
+<h3 id="gi-quality">GI Quality<a class="zola-anchor" href="#gi-quality" aria-label="Anchor link for: gi-quality" style="visibility: hidden;"></a>
+</h3>
+<p>While the world cache greatly improves GI quality and performance, it also brings its own set of downsides.</p>
+<p>The main one is that when we create a cache entry, we set its world-space position and normal. Every frame when the cache entry samples lighting, it uses that position and normal for sampling. The position and normal are fixed, and can never be updated.</p>
+<p>This means that if a bad position or normal that poorly represents the cache voxel is chosen when initializing the voxel, then it's stuck with that. This leads to weird artifacts that I haven't figured out how to solve, like some screenshots having orange lighting around the robot, and others not.</p>
+<p>Another unsolved problem is overall loss of energy. Compare the below screenshots of the current Solari scheme to a different scheme where instead of terminating in the world cache, the GI system traces an additional ray towards a random light.</p>
+<pre data-lang="rust" style="background-color:#002b36;color:#839496;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#586e75;">// Baseline scheme using the world cache
+</span><span>reservoir.radiance </span><span style="color:#657b83;">= </span><span style="color:#859900;">query_world_cache</span><span style="color:#657b83;">(</span><span>sample_point.world_position, sample_point.geometric_world_normal, view.world_position</span><span style="color:#657b83;">)</span><span>;
+</span><span>reservoir.unbiased_contribution_weight </span><span style="color:#657b83;">= </span><span style="color:#859900;">uniform_hemisphere_inverse_pdf</span><span style="color:#657b83;">()</span><span>;
+</span><span>
+</span><span style="color:#586e75;">// Alternate scheme sampling and tracing a ray towards 1 random light
+</span><span style="color:#268bd2;">let</span><span> direct_lighting </span><span style="color:#657b83;">= </span><span style="color:#859900;">sample_random_light</span><span style="color:#657b83;">(</span><span>sample_point.world_position, sample_point.world_normal, rng</span><span style="color:#657b83;">)</span><span>;
+</span><span>reservoir.radiance </span><span style="color:#657b83;">=</span><span> direct_lighting.radiance;
+</span><span>reservoir.unbiased_contribution_weight </span><span style="color:#657b83;">=</span><span> direct_lighting.inverse_pdf </span><span style="color:#657b83;">* </span><span style="color:#859900;">uniform_hemisphere_inverse_pdf</span><span style="color:#657b83;">()</span><span>;
+</span></code></pre>
+<figure>
+    <img
+        src="no_world_cache.png"
+        
+        
+        
+    >
+    
+    <figcaption><p>Alternate GI scheme, without the world cache</p>
+</figcaption>
+    
+</figure>
+<p>Despite the alternate scheme having higher variance and no multibounce pathtracing, it's actually <em>brighter</em> than using the world cache. For some reason, the voxelized nature of the world cache leads to a loss of energy.</p>
+<p>I've been thinking about trying out reprojecting the last frame to get multi bounce for rays that hit within the camera's view, instead of always relying on the world cache. That might mitigate some of the energy loss.</p>
+<p>Finally, the biggest problem with GI in general is both the overall lack of stability, and the slow reaction time to scene changes. The voxelized nature of the world cache, combined with how ReSTIR amplifies samples, means that bright outliers (e.g. world cache voxels much bighter than their neighbors) lead to temporal instability as shown below.</p>
+<p><img src="https://jms55.github.io/posts/2025-09-20-solari-bevy-0-17/gi_outlier.png" alt="gi_outlier" /></p>
+<p>While we could slow down the temporal accumulation speed to improve stability, that would slow down how fast Solari can react to changes in the scene's lighting. Our goal is realtime, <em>fully</em> dynamic lighting. Not sorta realtime, but actual realtime.</p>
+<p>Unfortunately the lack of validation rays in the ReSTIR GI temporal pass, combined with the recursive nature of the world cache, means that Solari already takes a decent amount of time to react to changes. Animated and moving light sources in particular leave trails behind in the GI. Slowing down the temporal accumulation speed would make it even worse.</p>
+<p>Going forwards with the project, I'm looking to mitigate all of these problems.</p>
+<p>While it would be more expensive, one option I've considered is combining the alternate sampling scheme with some kind of world-space feedback mechanism like the MegaLights visible light list I described above. The GI pass could trace an additional ray towards a light instead of sampling the world cache. If the light is visible, we could add it to a list stored in a world-space voxel, to be fed back into the (GI or DI) light sampling for future frames.</p>
+<h3 id="denoising-options">Denoising Options<a class="zola-anchor" href="#denoising-options" aria-label="Anchor link for: denoising-options" style="visibility: hidden;"></a>
+</h3>
+<p>While Solari currently requires a NVIDIA GPU, the DLSS-RR integration is a separate plugin from Solari. Users can optionally choose to bring their own denoiser.</p>
+<p>In the future, whenever they release them, I'm hoping to add support for <a rel="nofollow noreferrer" href="https://web.archive.org/web/20250822144949/https://www.amd.com/en/products/graphics/technologies/fidelityfx/super-resolution.html#upcoming">AMD's FSR Ray Regeneration</a>, whatever XeSS extension <a rel="nofollow noreferrer" href="https://community.intel.com/t5/Blogs/Tech-Innovation/Client/Neural-Image-Reconstruction-for-Real-Time-Path-Tracing/post/1688192">Intel</a> eventually releases, and potentially even <a rel="nofollow noreferrer" href="https://developer.apple.com/documentation/metalfx/mtl4fxtemporaldenoisedscaler">Apple's MTL4FXTemporalDenoisedScaler</a>. Even <a rel="nofollow noreferrer" href="https://newsroom.arm.com/news/arm-announces-arm-neural-technology">ARM</a> is working on a neural-network based denoiser!</p>
+<p>Writing a denoiser from scratch is a lot of work, but it would also be nice to add <a rel="nofollow noreferrer" href="https://developer.download.nvidia.com/video/gputechconf/gtc/2020/presentations/s22699-fast-denoising-with-self-stabilizing-recurrent-blurs.pdf">ReBLUR</a> as a fallback for users of other GPUs.</p>
+<h2 id="thank-you">Thank You<a class="zola-anchor" href="#thank-you" aria-label="Anchor link for: thank-you" style="visibility: hidden;"></a>
+</h2>
+<p>If you've read this far, thank you, I hope you've enjoyed it! (to be fair, I can't imagine you got this far if you didn't enjoy reading it...)</p>
+<p>Solari represents the culmination of a significant amount of research, development, testing, refining, and more than a few tears over the last three years of my spare time. Not just from me, but also from the shoulders of all the research and work it stands on. I couldn't be more proud of what I've made.</p>
+<p>Like the rest of Bevy, Solari is also free and open source, forever.</p>
+<p>If you find Solari useful, consider <a rel="nofollow noreferrer" href="https://github.com/sponsors/JMS55">donating</a> to help fund future development.</p>
+<h2 id="further-reading">Further Reading<a class="zola-anchor" href="#further-reading" aria-label="Anchor link for: further-reading" style="visibility: hidden;"></a>
+</h2>
+<ul>
+<li><a rel="nofollow noreferrer" href="https://intro-to-restir.cwyman.org">A Gentle Introduction to ReSTIR: Path Reuse in Real-time</a></li>
+<li><a rel="nofollow noreferrer" href="https://interplayoflight.wordpress.com/2023/12/17/a-gentler-introduction-to-restir">A gentler introduction to ReSTIR</a></li>
+<li><a rel="nofollow noreferrer" href="https://research.nvidia.com/labs/rtr/publication/bitterli2020spatiotemporal">Spatiotemporal Reservoir Resampling for Real-time Ray Tracing with Dynamic Direct Lighting</a></li>
+<li><a rel="nofollow noreferrer" href="https://research.nvidia.com/publication/2021-06_restir-gi-path-resampling-real-time-path-tracing">ReSTIR GI: Path Resampling for Real-Time Path Tracing</a></li>
+<li><a rel="nofollow noreferrer" href="https://cwyman.org/papers/hpg21_rearchitectingReSTIR.pdf">Rearchitecting Spatiotemporal Resampling for Production</a></li>
+<li><a rel="nofollow noreferrer" href="https://blog.traverseresearch.nl/dynamic-diffuse-global-illumination-b56dc0525a0a">Dynamic diffuse global illumination</a></li>
+<li><a rel="nofollow noreferrer" href="https://github.com/EmbarkStudios/kajiya/blob/main/docs/gi-overview.md">Kajiya global illumination overview</a></li>
+<li><a rel="nofollow noreferrer" href="https://advances.realtimerendering.com/s2025/content/SOUSA_SIGGRAPH_2025_Final.pdf">Fast as Hell: idTech8 Global Illumination</a></li>
+<li><a rel="nofollow noreferrer" href="https://advances.realtimerendering.com/s2022/SIGGRAPH2022-Advances-Lumen-Wright%20et%20al.pdf">Lumen: Real-time Global Illumination in Unreal Engine 5</a></li>
+<li><a rel="nofollow noreferrer" href="https://advances.realtimerendering.com/s2025/content/MegaLights_Stochastic_Direct_Lighting_2025.pdf">MegaLights: Stochastic Direct Lighting in Unreal Engine 5</a></li>
+<li><a rel="nofollow noreferrer" href="https://gpuopen.com/download/GPUOpen2022_GI1_0.pdf">GI-1.0: A Fast Scalable Two-Level Radiance Caching Scheme for Real-Time Global Illumination</a></li>
+</ul>
+
+      </article>
+
+      
+      
+
+      
+      
+      <div class="giscus"></div>
+      <script src="https://giscus.app/client.js"
+        data-repo="JMS55/jms55.github.io"
+        data-repo-id="R_kgDOKFxX0Q"
+        data-category="Announcements"
+        data-category-id="DIC_kwDOKFxX0c4Cvqkk"
+        data-mapping="url"
+        data-strict="0"
+        data-reactions-enabled="0"
+        data-emit-metadata="0"
+        data-input-position="top"
+        data-theme="https://jms55.github.io/giscus_light.css"
+        data-lang="en"
+        crossorigin="anonymous"
+        async>
+</script>
+
+      
+    </div>
+
+    
+
+
+<footer>
+  <div class="left">
+    <div class="copyright">
+      © 2025 JMS55
+      
+      <span>|</span>
+      Built with <a href="https://www.getzola.org" rel="noreferrer" target="_blank">zola</a> and <a href="https://github.com/isunjn/serene" rel="noreferrer" target="_blank">serene</a>
+      
+    </div>
+  </div>
+
+  <div class="right">
+    
+    
+      
+    
+    
+    <a id="rss-btn" href="https://jms55.github.io/atom.xml">RSS</a>
+    
+    
+
+    
+  </div>
+</footer>
+
+
+
+
+<dialog id="rss-mask">
+  <div>
+    <a href="https:&#x2F;&#x2F;jms55.github.io&#x2F;atom.xml">https:&#x2F;&#x2F;jms55.github.io&#x2F;atom.xml</a>
+    
+    
+    <button autofocus aria-label="copy" data-link="https:&#x2F;&#x2F;jms55.github.io&#x2F;atom.xml" data-copy-icon="&lt;svg xmlns=&quot;http:&#x2F;&#x2F;www.w3.org&#x2F;2000&#x2F;svg&quot; viewBox=&quot;0 0 24 24&quot; width=&quot;18&quot; height=&quot;18&quot;&gt;&lt;path d=&quot;M6.9998 6V3C6.9998 2.44772 7.44752 2 7.9998 2H19.9998C20.5521 2 20.9998 2.44772 20.9998 3V17C20.9998 17.5523 20.5521 18 19.9998 18H16.9998V20.9991C16.9998 21.5519 16.5499 22 15.993 22H4.00666C3.45059 22 3 21.5554 3 20.9991L3.0026 7.00087C3.0027 6.44811 3.45264 6 4.00942 6H6.9998ZM5.00242 8L5.00019 20H14.9998V8H5.00242ZM8.9998 6H16.9998V16H18.9998V4H8.9998V6Z&quot; fill=&quot;currentColor&quot;&gt;&lt;&#x2F;path&gt;&lt;&#x2F;svg&gt;
+" data-check-icon="&lt;svg xmlns=&quot;http:&#x2F;&#x2F;www.w3.org&#x2F;2000&#x2F;svg&quot; viewBox=&quot;0 0 24 24&quot; width=&quot;18&quot; height=&quot;18&quot;&gt;&lt;path d=&quot;M10.0007 15.1709L19.1931 5.97852L20.6073 7.39273L10.0007 17.9993L3.63672 11.6354L5.05093 10.2212L10.0007 15.1709Z&quot; fill=&quot;currentColor&quot;&gt;&lt;&#x2F;path&gt;&lt;&#x2F;svg&gt;
+" >
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18"><path d="M6.9998 6V3C6.9998 2.44772 7.44752 2 7.9998 2H19.9998C20.5521 2 20.9998 2.44772 20.9998 3V17C20.9998 17.5523 20.5521 18 19.9998 18H16.9998V20.9991C16.9998 21.5519 16.5499 22 15.993 22H4.00666C3.45059 22 3 21.5554 3 20.9991L3.0026 7.00087C3.0027 6.44811 3.45264 6 4.00942 6H6.9998ZM5.00242 8L5.00019 20H14.9998V8H5.00242ZM8.9998 6H16.9998V16H18.9998V4H8.9998V6Z" fill="currentColor"></path></svg>
+
+    </button>
+  </div>
+</dialog>
+
+
+
+  </main>
+</div>
+
+  
+<script src="/js/lightense.min.js"></script>
+
+
+  <script src="https://jms55.github.io/js/main.js"></script>
+</body>
+
+</html>

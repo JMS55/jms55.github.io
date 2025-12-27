@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light dark">
+  
+  
+    
+  
+  <meta name="description" content="Bevy, Rust, Graphics, etc">
+
+  <title>Bevy&#x27;s Fifth Birthday - Progress and Production Readiness</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="https://jms55.github.io/img/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="https://jms55.github.io/img/favicon-16x16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="https://jms55.github.io/img/apple-touch-icon.png">
+  
+  <style>
+
+  /* light mode colors */
+  body {
+    --primary-color: #5871a2;
+    --primary-pale-color: #5871a233;
+    --primary-decoration-color: #5871a210;
+    --bg-color: #ffffff;
+    --text-color: #2f3030;
+    --text-pale-color: #767676;
+    --text-decoration-color: #a9a9a9;
+    --highlight-mark-color: #5f75b020;
+
+    --callout-note-color: #5871a2;
+    --callout-tip-color: #268556;
+    --callout-important-color: #885fc9;
+    --callout-warning-color: #ab6632;
+    --callout-caution-color: #c64e4e;
+  }
+
+  /* dark mode colors */
+  body.dark {
+    --primary-color: #6f8fd1;
+    --primary-pale-color: #6f8fd166;
+    --primary-decoration-color: #6f8fd112;
+    --bg-color: #1c1c1c;
+    --text-color: #c1c1c1;
+    --text-pale-color: #848484;
+    --text-decoration-color: #5f5f5f;
+    --highlight-mark-color: #8296cb3b;
+
+    --callout-note-color: #6f8fd1;
+    --callout-tip-color: #47976f;
+    --callout-important-color: #9776cd;
+    --callout-warning-color: #ad7a52;
+    --callout-caution-color: #d06161;
+  }
+
+  /* typography */
+  body {
+    --main-font: ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+    --code-font: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+    --homepage-max-width: 768px;
+    --main-max-width: 768px;
+    --avatar-size: 60px;
+    --font-size: 16px;
+    --line-height: 1.75;
+    --img-border-radius: 0px;
+    --detail-border-radius: 0px;
+    --dark-mode-img-brightness: 0.75;
+    --dark-mode-chart-brightness: 0.75;
+    --inline-code-border-radius: 2px;
+    --inline-code-bg-color: var(--primary-decoration-color);
+    --block-code-border-radius: 0px;
+    --block-code-border-color: var(--primary-color);
+    --detail-border-color: var(--primary-color);
+  }
+
+</style>
+
+  <link rel="stylesheet" href="https://jms55.github.io/main.css">
+  
+
+
+
+  
+</head>
+
+<body class="post">
+  
+  
+<div id="wrapper">
+  <div id="blank"></div>
+  <aside>
+    
+    
+    <nav>
+      <ul>
+        
+        <li>
+          <a class="h2" href="#introduction">Introduction</a>
+          
+        </li>
+        
+        <li>
+          <a class="h2" href="#my-stuff">My Stuff</a>
+          
+        </li>
+        
+        <li>
+          <a class="h2" href="#unexpected-improvements">Unexpected Improvements</a>
+          
+        </li>
+        
+        <li>
+          <a class="h2" href="#next-year">Next Year?</a>
+          
+        </li>
+        
+        <li>
+          <a class="h2" href="#production-ready-what-s-missing">Production Ready - What&#x27;s Missing?</a>
+          
+        </li>
+        
+      </ul>
+    </nav>
+    
+    
+    <button id="back-to-top" aria-label="back to top">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-up"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>
+
+    </button>
+    
+  </aside>
+  <main>
+    
+<header>
+  <nav>
+    <a id="back-link" href="https:&#x2F;&#x2F;jms55.github.io&#x2F;posts">← Back</a>
+  </nav>
+</header>
+
+
+    <div>
+      
+      
+      
+      
+      <div id="copy-cfg" style="display: none;" data-copy-icon="&lt;svg xmlns=&quot;http:&#x2F;&#x2F;www.w3.org&#x2F;2000&#x2F;svg&quot; viewBox=&quot;0 0 24 24&quot; width=&quot;18&quot; height=&quot;18&quot;&gt;&lt;path d=&quot;M6.9998 6V3C6.9998 2.44772 7.44752 2 7.9998 2H19.9998C20.5521 2 20.9998 2.44772 20.9998 3V17C20.9998 17.5523 20.5521 18 19.9998 18H16.9998V20.9991C16.9998 21.5519 16.5499 22 15.993 22H4.00666C3.45059 22 3 21.5554 3 20.9991L3.0026 7.00087C3.0027 6.44811 3.45264 6 4.00942 6H6.9998ZM5.00242 8L5.00019 20H14.9998V8H5.00242ZM8.9998 6H16.9998V16H18.9998V4H8.9998V6Z&quot; fill=&quot;currentColor&quot;&gt;&lt;&#x2F;path&gt;&lt;&#x2F;svg&gt;
+" data-check-icon="&lt;svg xmlns=&quot;http:&#x2F;&#x2F;www.w3.org&#x2F;2000&#x2F;svg&quot; viewBox=&quot;0 0 24 24&quot; width=&quot;18&quot; height=&quot;18&quot;&gt;&lt;path d=&quot;M10.0007 15.1709L19.1931 5.97852L20.6073 7.39273L10.0007 17.9993L3.63672 11.6354L5.05093 10.2212L10.0007 15.1709Z&quot; fill=&quot;currentColor&quot;&gt;&lt;&#x2F;path&gt;&lt;&#x2F;svg&gt;
+"></div>
+      
+      <article class="prose">
+        <h1>Bevy&#x27;s Fifth Birthday - Progress and Production Readiness</h1>
+        <div id="post-info">
+          <div id="date">
+            <span id="publish">Sep 3, 2025</span>
+            </div>
+
+          
+          <div id="tags">
+            <a class="instant" href="https://jms55.github.io/tags/bevy"><span>#</span>bevy</a>
+          </div>
+          
+        </div>
+
+        
+        
+
+        
+
+        <blockquote>
+<p>Written in response to <a rel="nofollow noreferrer" href="https://bevy.org/news/bevys-fifth-birthday">Bevy's Fifth Birthday</a>.</p>
+</blockquote>
+<h3 id="introduction">Introduction<a class="zola-anchor" href="#introduction" aria-label="Anchor link for: introduction" style="visibility: hidden;"></a>
+</h3>
+<p>Welcome to the review of my third year of Bevy development!</p>
+<p>After three years, I'm still enjoying Bevy as much as ever. Not only that, but development is the smoothest it's ever been!</p>
+<p>As is my usual writing style, this post is going to be a bit dry and disjointed, and maybe not the most hype-oriented. It's not exactly what I aimed for when I started writing, but it seems to be how I end up writing things :). I <em>did</em> try using an LLM to help with writing, but it was way too fawning, so in the end I've written this by hand. Perfect is the enemy of good and all that.</p>
+<p>While I <em>am</em> really excited about Bevy, this year and every year, I'll leave hyping Bevy up to others, so go read their blog posts once they're posted to <a rel="nofollow noreferrer" href="https://bevy.org">https://bevy.org</a>! Consider this post more a brain dump of my own experiences, rather than on Bevy as a project.</p>
+<p>Anyways, let's talk about how this year went.</p>
+<h3 id="my-stuff">My Stuff<a class="zola-anchor" href="#my-stuff" aria-label="Anchor link for: my-stuff" style="visibility: hidden;"></a>
+</h3>
+<p>The Bevy community has collectively landed a metric truckload of features and improvements this year. Like, just a mind-blowingly large amount.</p>
+<p>The Bevy 0.15, 0.16, and 0.17 release notes do a good job of highlighting what's new in each release, so I'm going to give a brief overview of just the (rendering) work I did this year that I'm particularly proud of.</p>
+<p>The biggest project for me this year has been the massive amounts of improvements I (@JMS55), @atlv24, and @SparkyPotato have landed for virtual geometry. When I wrote about Bevy's fourth birthday, we had landed the initial virtual geometry feature in Bevy 0.14. Since then, we've made numerous improvements to asset deserialization, compression, rasterization performance, LOD selection, LOD building, and culling in Bevy 0.15-0.17.</p>
+<p>I'm optimistic that this year will be the year that we add streaming, improve CPU performance, and fix the remaining culling bugs. With any luck with asset processing (more on this later), we'll finally take virtual geometry out of experimental status later this year!</p>
+<p><img src="https://jms55.github.io/posts/2025-09-03-bevy-fifth-birthday/meshlet.png" alt="Virtual geometry scene with thousands of dragon meshes" /></p>
+<blockquote>
+<p>Side note: Unlike the last few releases, I won't be writing a blog post about virtual geometry for Bevy 0.17. I didn't work on the BVH-culling PR for Bevy 0.17 (that was all @atlv24 and @SparkyPotato) due to a combination of burnout and life getting in the way. While I've taken a break from virtual geometry, I've started <em>another</em> huge project: Solari.</p>
+</blockquote>
+<p>Bevy Solari is a brand new crate for raytraced lighting coming in Bevy 0.17. While most of the work was technically done in Bevy 0.17, its origins trace back to a ~2 year old project. I've mentioned in past blog posts how I started it, and then later abandoned it (which lead to me starting virtual geometry) after poor results, and issues with keeping forks of bevy/wgpu/naga_oil up to date.</p>
+<p>Now that I'm taking a break from virtual geometry, and due to the introduction of some new algorithms and research papers, along with 2 additional years of learning under my belt and upstreamed raytracing in wgpu, I've restarted the project with a completely new approach. I'm really <em>super</em> excited to share what we have so far, so expect a more detailed blog post about this soon!</p>
+<p><img src="https://jms55.github.io/posts/2025-09-03-bevy-fifth-birthday/solari.png" alt="Solari demo scene" /></p>
+<p>Like with Solari, DLSS integration is another abandoned project that I've revived thanks to work done in wgpu to enable interopt with underlying graphics APIs like Vulkan. Bevy 0.17 will be shipping support for DLSS (and DLSS-RR), alongside it's existing anti-aliasing options in MSAA, FXAA, SMAA, and TAA. NVIDIA users now have a great option for anti-aliasing, and much cheaper rendering via upscaling.</p>
+<p>I also wanted to add FSR4 support, but sadly FSR4 was released as a DirectX-only SDK, without any Vulkan support. This would have meant redoing a lot of work, and wasn't going to be done in time for Bevy 0.17 (and I don't own an RX 9070 XT). Still, eventually we could add support for FSR and XeSS (and potentially MetalFX), now that the infrastructure for temporal upscaling is in place.</p>
+<p><img src="https://jms55.github.io/posts/2025-09-03-bevy-fifth-birthday/dlss.jpg" alt="DLSS demo" /></p>
+<p>The last major feature I landed this year was hooking up our existing GPU timestamps to Tracy, the profiling tool we use. Now Bevy users can see combined CPU and GPU bottlenecks in one place, which is super useful!</p>
+<p><img src="https://jms55.github.io/posts/2025-09-03-bevy-fifth-birthday/tracy.png" alt="Tracy screenshot showing GPU timings" /></p>
+<p>This year I would also like to shout-out several contributors (besides @altv24 and @SparkyPotato) I've been working with: @cart and @alice-i-cecile of course, as well as (in no particular order) @mockersf, @tychedelia, @Elabajaba, @DGriffin91, @IceSentry, @mate-h, @ecoskey, @NthTensor, @viridia, @pcwalton, and @ickshonpe, as well as @cwfitzgerald and @Vecvec for their work on wgpu. Without their help, none of this would have been possible!</p>
+<h3 id="unexpected-improvements">Unexpected Improvements<a class="zola-anchor" href="#unexpected-improvements" aria-label="Anchor link for: unexpected-improvements" style="visibility: hidden;"></a>
+</h3>
+<p>Along with the usual headline features, there's also been a lot of work done by the Bevy community this year that has ended up suprising me.</p>
+<p>The major one would be required components. I was fairly skeptical of them when they were first introduced, and thought it wasn't really an "ECS" way of doing this. In retrospect, I was totally wrong. As a user, using required components is <em>way</em> more pleasant than the older bundle-based API, and is easier to get started with. It ends up being <em>easier</em> to explain to users to spawn and query an entity with a <code>Camera</code> component, rather than spawning with a <code>CameraBundle</code> and then querying for a <code>Camera</code>. As a plugin author, required components give me some peace of mind knowing that users can't easily add a component without adding its dependencies (and make the API a little nicer compared to bundles). There <em>is</em> still some rough edges to sort out, mainly making some sort of priority system for required components to override each other (e.g. <code>Camera</code> requiring <code>Msaa::Sample4</code>, and then <code>TemporalAntiAliasing</code> being able to override that with <code>Msaa::Off</code>), but overall it was an unexpectedly nice improvement. Cart absolutely cooked with this change.</p>
+<p>Retained rendering, and the other GPU-driven rendering parts have also worked out really well. Again some sharp edges with the APIs (mainly cleaning up render world entities being hard to write and easy to mess up), but these were hugely foundational changes, that overall landed really smoothly! I don't think the Bevy of 1-2 years ago would have landed these so easily, and they've <em>drastically</em> improved performance.</p>
+<p>The introduction of working groups was, to some extent, a big contributor of this. In the past I've complained about review speed for PRs, but this year it's been <em>way</em> better. Working groups give a set of built-in reviewers for larger projects, and Alice's Monday merge train often ends up being the final maintainer-review-once-over before merging, which keeps PRs merging smoothly. It's been working quite well!</p>
+<p>Similarly, having release notes in the main Bevy repo, and required as part of submitting PRs (something I've been advocating for!) has made the release process for Bevy 0.17 <em>so much easier</em>. Rather than having to crunch out release notes, changelogs, and showcases out at the end of the cycle (when we're all burnt out from writing PRs), writing them incrementally as a part of the PR process has been a huge time stress relief. As an unexpected benefit, it also makes reviewing PRs much easier, as it forces the author to write a good user-facing description of the changes for reviewers.</p>
+<h3 id="next-year">Next Year?<a class="zola-anchor" href="#next-year" aria-label="Anchor link for: next-year" style="visibility: hidden;"></a>
+</h3>
+<p>The end of the birthday post is usually where I take some time to talk about what I'm planning to work on for the next year, but honestly I don't have a ton of plans at the moment.</p>
+<p>Continuing virtual geometry and Solari is a given, but otherwise I don't have any other concrete goals in terms of features.</p>
+<p>Neural-compressed textures would be cool, but is maybe a little too-researchy, and requires better asset processing APIs.</p>
+<p>Writing more blog posts would be great, but I probably don't have it in me to write these more frequently. I <em>have</em> been using a <a rel="nofollow noreferrer" href="https://bsky.app/profile/jms5517.bsky.social">Bluesky page</a> to document short progress snippets as I work on PRs, so maybe follow that if you're interested in my content.</p>
+<p>I <em>would</em> like to write more documentation this year though - both API docs, and module docs / Bevy book content. As Bevy is getting increasingly mature, docs have become one of the bigger sticking points. Rendering in particular needs a lot more docs, both because it's under-documented, and because it's a fairly arcane subject.</p>
+<p>When I first started making 3d games, and later when I started working on rendering, I had absolutely no clue what to do. How to light a scene, how to write a custom material, what's important for rendering performance, how do I write my own rendering feature &lt;FOO&gt;, and more are all questions that would greatly benefit from some longer-form written documents.</p>
+<p>As we start to run out of major rendering features, putting my energy towards writing more docs seems like a good way to move Bevy closer to being production-ready. I've already <a rel="nofollow noreferrer" href="https://github.com/bevyengine/bevy-website/pull/2195">started writing some stuff</a>.</p>
+<h3 id="production-ready-what-s-missing">Production Ready - What's Missing?<a class="zola-anchor" href="#production-ready-what-s-missing" aria-label="Anchor link for: production-ready-what-s-missing" style="visibility: hidden;"></a>
+</h3>
+<p>So instead of writing my plans for next year, let's talk about what I think Bevy is missing (besides docs). I don't necessarily plan or not plan on working on any of this myself, but here are the things that I feel make it hard to say "Just use Bevy, duh!"</p>
+<p><strong>UI</strong> continues to be a weak point. While <code>bevy_ui</code> is a great foundation for rendering UI (in large part to @ickshonpe's and the taffy team's heroic efforts), no third-party crate (including my own bevy_dioxus) has proven out a good high-level API for declaring and updating UI trees. BSN is coming soon, but it only solves the declarative part of UI, and not the reactivity part. Until we resolve this, it's hard to reccomend Bevy for UI-heavy games and apps, and more importantly, we can't build the-</p>
+<p><strong>Editor</strong> absence continues to be a big, big hole for Bevy. Not just in terms of being production ready, but I think the first release with an official editor is going to get an exponential influx of new users, and eventually new contributors. Working on the Solari demo scene has made me feel the lack of an editor badly. It was quite frustrating trying to get the materials correct for everything without an editor. I <em>did</em> work on a <a rel="nofollow noreferrer" href="https://github.com/bevyengine/bevy_editor_prototypes/pull/167">prototype</a> scene tree + inspector using a third-party BSN crate, but it was exceedingly difficult to write and understand, and I gave up on it. I'm really excited to work on the editor, but I'm going to hold off until reactive UI lands.</p>
+<p><strong>Asset processing</strong> is another big bottleneck. Hard to say Bevy is production ready when the only texture compressor it has is an outdated version of BasisU. While cart added some asset processing APIs with Assets V2, it's clunky and dosen't support enough features. Trying to write a glTF -&gt; virtual geometry processor <a rel="nofollow noreferrer" href="https://github.com/bevyengine/bevy/pull/13431">proved to be unfeasible</a>. Once cart is done with BSN and reactivity, I would like to see him go back to this area. I would also like to move away from recommending that users ship their games with glTF/glb scenes, and instead provide some kind of glTF -&gt; BSN + seperate image/mesh assets importer, that we can then run further asset processing on. This is another area that would greatly benefit from having an Editor.</p>
+<p><strong>Animation</strong> isn't something I know a ton about, but after recently trying it out in Bevy, I can definitely say it's lacking. The API is quite clunky, with too many confusingly-named components and amount of entities needed, and not enough features.</p>
+<p><strong>Custom Materials</strong> in Bevy are currently servicable, but not enjoyable. Users have a lot of power, but that's because we don't really provide much in the way of customizable abstractions. Mostly on the shader side, but also partly on the Rust side, with users having to resort to <code>MeshTag</code> and <code>ShaderStorageBuffer</code> to get good performance. The Material API should be completely redesigned, unified across 3d/2d/UI, and made much easier to use for common use-cases. We've been throwing around ideas in the #rendering-dev channel on Discord, but nothing concrete yet. This is a good area to get involved in!</p>
+<p>Overall, I do see paths to improving all of these areas over the next year (or likely two for animations and editor). I am a little disappointed with how long it has taken to land BSN, mostly with the opaqueness of the process (which cart has talked about, so I'm not going to repeat here), but I'm hopeful about the next steps!</p>
+<p>See you next year!</p>
+
+      </article>
+
+      
+      
+
+      
+      
+      <div class="giscus"></div>
+      <script src="https://giscus.app/client.js"
+        data-repo="JMS55/jms55.github.io"
+        data-repo-id="R_kgDOKFxX0Q"
+        data-category="Announcements"
+        data-category-id="DIC_kwDOKFxX0c4Cvqkk"
+        data-mapping="url"
+        data-strict="0"
+        data-reactions-enabled="0"
+        data-emit-metadata="0"
+        data-input-position="top"
+        data-theme="https://jms55.github.io/giscus_light.css"
+        data-lang="en"
+        crossorigin="anonymous"
+        async>
+</script>
+
+      
+    </div>
+
+    
+
+
+<footer>
+  <div class="left">
+    <div class="copyright">
+      © 2025 JMS55
+      
+      <span>|</span>
+      Built with <a href="https://www.getzola.org" rel="noreferrer" target="_blank">zola</a> and <a href="https://github.com/isunjn/serene" rel="noreferrer" target="_blank">serene</a>
+      
+    </div>
+  </div>
+
+  <div class="right">
+    
+    
+      
+    
+    
+    <a id="rss-btn" href="https://jms55.github.io/atom.xml">RSS</a>
+    
+    
+
+    
+  </div>
+</footer>
+
+
+
+
+<dialog id="rss-mask">
+  <div>
+    <a href="https:&#x2F;&#x2F;jms55.github.io&#x2F;atom.xml">https:&#x2F;&#x2F;jms55.github.io&#x2F;atom.xml</a>
+    
+    
+    <button autofocus aria-label="copy" data-link="https:&#x2F;&#x2F;jms55.github.io&#x2F;atom.xml" data-copy-icon="&lt;svg xmlns=&quot;http:&#x2F;&#x2F;www.w3.org&#x2F;2000&#x2F;svg&quot; viewBox=&quot;0 0 24 24&quot; width=&quot;18&quot; height=&quot;18&quot;&gt;&lt;path d=&quot;M6.9998 6V3C6.9998 2.44772 7.44752 2 7.9998 2H19.9998C20.5521 2 20.9998 2.44772 20.9998 3V17C20.9998 17.5523 20.5521 18 19.9998 18H16.9998V20.9991C16.9998 21.5519 16.5499 22 15.993 22H4.00666C3.45059 22 3 21.5554 3 20.9991L3.0026 7.00087C3.0027 6.44811 3.45264 6 4.00942 6H6.9998ZM5.00242 8L5.00019 20H14.9998V8H5.00242ZM8.9998 6H16.9998V16H18.9998V4H8.9998V6Z&quot; fill=&quot;currentColor&quot;&gt;&lt;&#x2F;path&gt;&lt;&#x2F;svg&gt;
+" data-check-icon="&lt;svg xmlns=&quot;http:&#x2F;&#x2F;www.w3.org&#x2F;2000&#x2F;svg&quot; viewBox=&quot;0 0 24 24&quot; width=&quot;18&quot; height=&quot;18&quot;&gt;&lt;path d=&quot;M10.0007 15.1709L19.1931 5.97852L20.6073 7.39273L10.0007 17.9993L3.63672 11.6354L5.05093 10.2212L10.0007 15.1709Z&quot; fill=&quot;currentColor&quot;&gt;&lt;&#x2F;path&gt;&lt;&#x2F;svg&gt;
+" >
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18"><path d="M6.9998 6V3C6.9998 2.44772 7.44752 2 7.9998 2H19.9998C20.5521 2 20.9998 2.44772 20.9998 3V17C20.9998 17.5523 20.5521 18 19.9998 18H16.9998V20.9991C16.9998 21.5519 16.5499 22 15.993 22H4.00666C3.45059 22 3 21.5554 3 20.9991L3.0026 7.00087C3.0027 6.44811 3.45264 6 4.00942 6H6.9998ZM5.00242 8L5.00019 20H14.9998V8H5.00242ZM8.9998 6H16.9998V16H18.9998V4H8.9998V6Z" fill="currentColor"></path></svg>
+
+    </button>
+  </div>
+</dialog>
+
+
+
+  </main>
+</div>
+
+  
+<script src="/js/lightense.min.js"></script>
+
+
+  <script src="https://jms55.github.io/js/main.js"></script>
+</body>
+
+</html>

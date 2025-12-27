@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light dark">
+  
+  
+    
+  
+  <meta name="description" content="Bevy, Rust, Graphics, etc">
+
+  <title>Bevy&#x27;s Third Birthday - Reflections on Rendering</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="https://jms55.github.io/img/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="https://jms55.github.io/img/favicon-16x16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="https://jms55.github.io/img/apple-touch-icon.png">
+  
+  <style>
+
+  /* light mode colors */
+  body {
+    --primary-color: #5871a2;
+    --primary-pale-color: #5871a233;
+    --primary-decoration-color: #5871a210;
+    --bg-color: #ffffff;
+    --text-color: #2f3030;
+    --text-pale-color: #767676;
+    --text-decoration-color: #a9a9a9;
+    --highlight-mark-color: #5f75b020;
+
+    --callout-note-color: #5871a2;
+    --callout-tip-color: #268556;
+    --callout-important-color: #885fc9;
+    --callout-warning-color: #ab6632;
+    --callout-caution-color: #c64e4e;
+  }
+
+  /* dark mode colors */
+  body.dark {
+    --primary-color: #6f8fd1;
+    --primary-pale-color: #6f8fd166;
+    --primary-decoration-color: #6f8fd112;
+    --bg-color: #1c1c1c;
+    --text-color: #c1c1c1;
+    --text-pale-color: #848484;
+    --text-decoration-color: #5f5f5f;
+    --highlight-mark-color: #8296cb3b;
+
+    --callout-note-color: #6f8fd1;
+    --callout-tip-color: #47976f;
+    --callout-important-color: #9776cd;
+    --callout-warning-color: #ad7a52;
+    --callout-caution-color: #d06161;
+  }
+
+  /* typography */
+  body {
+    --main-font: ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+    --code-font: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+    --homepage-max-width: 768px;
+    --main-max-width: 768px;
+    --avatar-size: 60px;
+    --font-size: 16px;
+    --line-height: 1.75;
+    --img-border-radius: 0px;
+    --detail-border-radius: 0px;
+    --dark-mode-img-brightness: 0.75;
+    --dark-mode-chart-brightness: 0.75;
+    --inline-code-border-radius: 2px;
+    --inline-code-bg-color: var(--primary-decoration-color);
+    --block-code-border-radius: 0px;
+    --block-code-border-color: var(--primary-color);
+    --detail-border-color: var(--primary-color);
+  }
+
+</style>
+
+  <link rel="stylesheet" href="https://jms55.github.io/main.css">
+  
+
+
+
+  
+</head>
+
+<body class="post">
+  
+  
+<div id="wrapper">
+  <div id="blank"></div>
+  <aside>
+    
+    
+    <nav>
+      <ul>
+        
+        <li>
+          <a class="h2" href="#introduction">Introduction</a>
+          
+          <ul>
+            
+            <li>
+              <a class="h3" href="#who-am-i">Who am I?</a>
+            </li>
+            
+            <li>
+              <a class="h3" href="#contributing-to-bevy">Contributing to Bevy</a>
+            </li>
+            
+            <li>
+              <a class="h3" href="#post-overview">Post overview</a>
+            </li>
+            
+          </ul>
+          
+        </li>
+        
+        <li>
+          <a class="h2" href="#this-year">This Year</a>
+          
+          <ul>
+            
+            <li>
+              <a class="h3" href="#what-we-achieved">What we achieved</a>
+            </li>
+            
+            <li>
+              <a class="h3" href="#things-i-feel-went-well">Things I feel went well</a>
+            </li>
+            
+            <li>
+              <a class="h3" href="#things-i-feel-we-need-to-work-on">Things I feel we need to work on</a>
+            </li>
+            
+          </ul>
+          
+        </li>
+        
+        <li>
+          <a class="h2" href="#things-i-m-excited-to-work-on-in-the-next-year">Things I&#x27;m excited to work on in the next year(?)</a>
+          
+          <ul>
+            
+            <li>
+              <a class="h3" href="#bevy-solari">Bevy Solari</a>
+            </li>
+            
+          </ul>
+          
+        </li>
+        
+      </ul>
+    </nav>
+    
+    
+    <button id="back-to-top" aria-label="back to top">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-up"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>
+
+    </button>
+    
+  </aside>
+  <main>
+    
+<header>
+  <nav>
+    <a id="back-link" href="https:&#x2F;&#x2F;jms55.github.io&#x2F;posts">← Back</a>
+  </nav>
+</header>
+
+
+    <div>
+      
+      
+      
+      
+      <div id="copy-cfg" style="display: none;" data-copy-icon="&lt;svg xmlns=&quot;http:&#x2F;&#x2F;www.w3.org&#x2F;2000&#x2F;svg&quot; viewBox=&quot;0 0 24 24&quot; width=&quot;18&quot; height=&quot;18&quot;&gt;&lt;path d=&quot;M6.9998 6V3C6.9998 2.44772 7.44752 2 7.9998 2H19.9998C20.5521 2 20.9998 2.44772 20.9998 3V17C20.9998 17.5523 20.5521 18 19.9998 18H16.9998V20.9991C16.9998 21.5519 16.5499 22 15.993 22H4.00666C3.45059 22 3 21.5554 3 20.9991L3.0026 7.00087C3.0027 6.44811 3.45264 6 4.00942 6H6.9998ZM5.00242 8L5.00019 20H14.9998V8H5.00242ZM8.9998 6H16.9998V16H18.9998V4H8.9998V6Z&quot; fill=&quot;currentColor&quot;&gt;&lt;&#x2F;path&gt;&lt;&#x2F;svg&gt;
+" data-check-icon="&lt;svg xmlns=&quot;http:&#x2F;&#x2F;www.w3.org&#x2F;2000&#x2F;svg&quot; viewBox=&quot;0 0 24 24&quot; width=&quot;18&quot; height=&quot;18&quot;&gt;&lt;path d=&quot;M10.0007 15.1709L19.1931 5.97852L20.6073 7.39273L10.0007 17.9993L3.63672 11.6354L5.05093 10.2212L10.0007 15.1709Z&quot; fill=&quot;currentColor&quot;&gt;&lt;&#x2F;path&gt;&lt;&#x2F;svg&gt;
+"></div>
+      
+      <article class="prose">
+        <h1>Bevy&#x27;s Third Birthday - Reflections on Rendering</h1>
+        <div id="post-info">
+          <div id="date">
+            <span id="publish">Sep 12, 2023</span>
+            </div>
+
+          
+          <div id="tags">
+            <a class="instant" href="https://jms55.github.io/tags/bevy"><span>#</span>bevy</a>
+          </div>
+          
+        </div>
+
+        
+        
+
+        
+
+        <blockquote>
+<p>Written in response to <a rel="nofollow noreferrer" href="https://bevyengine.org/news/bevys-third-birthday">Bevy's Third Birthday</a>.</p>
+</blockquote>
+<h1 id="introduction">Introduction<a class="zola-anchor" href="#introduction" aria-label="Anchor link for: introduction" style="visibility: hidden;"></a>
+</h1>
+<blockquote>
+<p>You can skip this section if you're only interested in hearing about Bevy - we'll get to that in a minute.</p>
+</blockquote>
+<h2 id="who-am-i">Who am I?<a class="zola-anchor" href="#who-am-i" aria-label="Anchor link for: who-am-i" style="visibility: hidden;"></a>
+</h2>
+<p>Hi, I'm JMS55, and I've been working on Bevy's 3D renderer for the past ~10 months.</p>
+<p>I've also been involved in the Rust gamedev community for a long time:</p>
+<ul>
+<li>I have been using Rust since pre-1.0 (around ~7 years ago).</li>
+<li>Tried out Piston when it first came out; same with Amythest.</li>
+<li>Contributed a (very tiny) bit to <a rel="nofollow noreferrer" href="https://veloren.net">Veloren</a>.</li>
+<li><a rel="nofollow noreferrer" href="https://github.com/JMS55/botnet#botnet">Wrote a demo</a> for a cool RTS simulation kind of game where you program your units via Rust-compiled-to-WASM (and would love to get back to it at some point), using Wasmtime and Macroquad.</li>
+<li><a rel="nofollow noreferrer" href="https://github.com/JMS55/sandbox#sandbox">Wrote a falling sand game</a> using pixels, wgpu, and imgui-rs (I also tried egui and yakui). I wrote the shaders for it in GLSL - this was before wgpu started using WGSL!</li>
+</ul>
+<p><a rel="nofollow noreferrer" href="https://github.com/parasyte/pixels">Pixels</a> was the first time I ever made a non-trivial contribution to an open source library. Now, I'm working on Bevy pretty much daily!</p>
+<h2 id="contributing-to-bevy">Contributing to Bevy<a class="zola-anchor" href="#contributing-to-bevy" aria-label="Anchor link for: contributing-to-bevy" style="visibility: hidden;"></a>
+</h2>
+<p>First, some overall thoughts on my experience contributing to Bevy.</p>
+<p>It's been exceedingly rewarding to work on an open source project with this kind of community. Before Bevy, I mainly worked on my own projects, and inevitably got burnt out. It's hard to maintain motivation when you're the only one involved. It's been super energizing getting to bounce ideas off of the other amazing developers working on Bevy!</p>
+<p>Additionally, seeing code I write translate directly into real-world use is awesome. Thank you to all the other developers and users of Bevy!</p>
+<p>If you're a user of Bevy, and are thinking about getting involved in Bevy's development, I highly recommended it! One of the great things about Bevy is it's modularity and focus on ECS. "Engine code" and "user code" are not substantially different. If you've used Bevy before, chances are you can write code <em>for</em> Bevy.</p>
+<p>Quoting Cart, "Bevy users <em>are</em> bevy developers, they just don't know it yet". The developers and community are super friendly. Feel free to join our <a rel="nofollow noreferrer" href="https://discord.com/invite/bevy">Discord</a>, pick a topic you find interesting - say, #rendering-dev :) - and starting asking lots of questions!</p>
+<h2 id="post-overview">Post overview<a class="zola-anchor" href="#post-overview" aria-label="Anchor link for: post-overview" style="visibility: hidden;"></a>
+</h2>
+<p>With that out of the way: this blog post will be my reflection on nearly a year of Bevy development (Bevy 0.9-dev to 0.12-dev). Specifically, bevy_pbr, bevy_core_pipeline, and bevy_render, along with some related crates such as wgpu and naga. I (mostly) won't be talking about the ECS, 2D renderer, UI, and other areas of Bevy.</p>
+<p>I'll be covering what I (and others) worked on, what went well, important items we need to spend time developing, and some new features I'm excited to work on in the coming months.</p>
+<h1 id="this-year">This Year<a class="zola-anchor" href="#this-year" aria-label="Anchor link for: this-year" style="visibility: hidden;"></a>
+</h1>
+<h2 id="what-we-achieved">What we achieved<a class="zola-anchor" href="#what-we-achieved" aria-label="Anchor link for: what-we-achieved" style="visibility: hidden;"></a>
+</h2>
+<p>This year, I've worked on and merged the following features:</p>
+<ul>
+<li>Bloom (In collaboration with others) (Bevy 0.9, 0.10)</li>
+<li>EnvironmentMapLight (IBL) (Bevy 0.10)</li>
+<li>Temporal antialiasing (TAA) (Bevy 0.11)</li>
+<li>Screen-space ambient occlusion (SSAO) (Bevy 0.11)</li>
+<li>Skybox (Bevy 0.11)</li>
+</ul>
+<p>I've also worked on, and either didn't end up merging or am still working on:</p>
+<ul>
+<li>Percentage-closer filtering (PCF) for smoothing out the edges of shadows</li>
+<li>Automated EnvironmentMapLight generation (replacing glTF-IBL-Sampler)</li>
+<li>Support for AMD's FSR and Nvidia's DLSS upscalers</li>
+<li>Multithreaded rendering for improved performance</li>
+<li>Clear coat layer for StandardMaterial</li>
+<li>GPU pass timing overlay for profiling the renderer (GPU timestamps)</li>
+<li>Ergonomic improvements for the renderer internals</li>
+<li>Real-time fully dynamic global illumination (more on this later!)</li>
+</ul>
+<p>and many other smaller PRs not interesting enough to mention, new examples contributed, discussion posts and conversations, bug investigations, performance profiling sessions, and reviewing other peoples' PRs.</p>
+<p><img src="https://jms55.github.io/posts/2023-09-12-bevy-third-birthday/ssao.png" alt="ssao" />
+<img src="https://jms55.github.io/posts/2023-09-12-bevy-third-birthday/taa.png" alt="taa" />
+<img src="https://jms55.github.io/posts/2023-09-12-bevy-third-birthday/bloom.png" alt="bloom" /></p>
+<p>Additional major rendering features that we merged, but that I did not directly work on include:</p>
+<ul>
+<li>Fast approximate antialiasing (FXAA)</li>
+<li>Depth and normal prepasses</li>
+<li>Cascaded shadow maps (CSM)</li>
+<li>Fog effects</li>
+<li>Better tonemapping</li>
+<li>Morph targets</li>
+<li>A complete revamp of rendering system sets</li>
+<li>Ergonomic improvements for render node APIs</li>
+<li>Many performance improvements</li>
+</ul>
+<h2 id="things-i-feel-went-well">Things I feel went well<a class="zola-anchor" href="#things-i-feel-went-well" aria-label="Anchor link for: things-i-feel-went-well" style="visibility: hidden;"></a>
+</h2>
+<p>Overall, I'm fairly satisfied both with what Bevy has accomplished, and what I've personally learned and accomplished this year.</p>
+<p>Bevy has gone from "we have some basic PBR shaders with analytic direct lighting" to ~70% of the way to a fully production-ready,
+indie game-usable renderer with much fewer caveats, and much fancier lighting and post processing!</p>
+<p>Take Slime Rancher, a hit indie game from 2017. <a rel="nofollow noreferrer" href="https://pixelalchemy.dev/posts/a-frame-of-slime-rancher">This post</a> goes into
+detail on the tricks and rendering techniques the game used to achieve its graphics. Bevy 0.11 has support for almost all of the listed techniques! The only thing we're missing are decals, and refraction (although there's a PR open that implements screen-space refaction!).</p>
+<p>I would specifically like to note the <em>amount</em> of people working on rendering features, and how it's increased over time. It's a great sign to see that rendering isn't the domain of only 1 or 2 dedicated developers. Rather, we have a fairly large amount of people contributing major rendering features and improvements.</p>
+<p>Too often, I feel rendering is seen as a kind of opaque witchcraft. To some extent, I feel that perception is true. Writing a shader (GPU program) is not like writing a program for the CPU in Rust. The graphics APIs themselves (in our case, wgpu) are not the most intuitive, and are often subject to compatibility or performance constraints that lead to poor ergonomics. Furthermore, even if you can write a shader, and know the graphics APIs, it's not always clear <em>how</em> to assemble all that together into a performant, compatible, ergonomic renderer.</p>
+<p>Here's where the "but" comes: I don't think it's that much worse than programming any other part of a game engine in general. Designing a complete UI system, or an ECS, or a physics library, etc, is rarely a simple one person job. Designing a rendering engine is much the same.</p>
+<p>Bevy has been able to consistently attract new rendering developers, often with little or no professional rendering experience. To me, that's an encouraging sign that we're doing something right. We may not rival Unity's or Godot's renderers <em>now</em>, but in another year, I'm confident that we'll surpass them in a few areas, and at least match them in most of the important ones :)</p>
+<h2 id="things-i-feel-we-need-to-work-on">Things I feel we need to work on<a class="zola-anchor" href="#things-i-feel-we-need-to-work-on" aria-label="Anchor link for: things-i-feel-we-need-to-work-on" style="visibility: hidden;"></a>
+</h2>
+<p>Now that we've covered what I felt went well, it's time to talk about things we need to improve on. These are pain points either I or other developers have consistently faced, or things I've seen users brought up many times.</p>
+<p>In no specific order, here are some things I feel we need to prioritize.</p>
+<h3 id="more-dynamic-comprehensive-and-accessible-test-scenes">More dynamic, comprehensive, and accessible test scenes<a class="zola-anchor" href="#more-dynamic-comprehensive-and-accessible-test-scenes" aria-label="Anchor link for: more-dynamic-comprehensive-and-accessible-test-scenes" style="visibility: hidden;"></a>
+</h3>
+<p>Most rendering development is currently done with either dedicated Bevy example scenes, or Lumberyard's Bistro or Intel's Sponza scenes.
+The former tend to be too simple for more intensive rendering tests, and the latter are difficult to setup, and don't have the dynamism a real game would have. Furthermore, we don't have any scenes that excercise <em>all</em> of Bevy's rendering features at once, and how they might interact.</p>
+<p>It would be great to get more test scenes that are easy to setup and tweak, demonstrate many of Bevy's rendering features working in tandem, and overall provide real-world uses cases that we can test against, rather than toy scenes. Currently, thoroughly exercising a new rendering feature or performance change requires almost as much work as writing the feature itself. To some extent, I'm asking us to develop a small game, focused on polished rendering and animation.</p>
+<h3 id="performance">Performance<a class="zola-anchor" href="#performance" aria-label="Anchor link for: performance" style="visibility: hidden;"></a>
+</h3>
+<p>A fact that is probably surprising to developers without much experience in rendering is that Bevy's renderer performance is currently heavily CPU-limited - not GPU-limited, as you might expect. There's two factor to this:</p>
+<ol>
+<li>Bevy is inefficent with how it stores and uses rendering data</li>
+<li>Bevy makes too many draw calls, and does too much state binding changes between draws</li>
+</ol>
+<p>In order to become a serious renderer, we'll need to dramatically improve our CPU performance. Thankfully, we have a <em>lot</em> of changes in progress towards this goal. Many core parts of the renderer that have been neglected in favor of working on new features are being revamped and improved. Expect large performance gains in Bevy 0.12, and probably 0.13.</p>
+<p>Long-term, we'll want to support GPU-driven rendering, where the GPU handles almost all of the rendering work. An extreme example of this kind of architecture is Unreal Engine's Nanite, which is capable of rendering micro-poly meshes. We (almost certainly) won't go <em>that</em> far, but implementing 60% of the techniques (bindless, draw indirect, compute-based rasterizer, compute-based fustrum culling, two pass occlusion culling, and also asset streaming) should give us 90% of the benefit, and allow complex scenes with many orders of magnitude greater amounts of meshes. This is an exciting area to work on, and there's a lot to do!</p>
+<h3 id="documentation">Documentation<a class="zola-anchor" href="#documentation" aria-label="Anchor link for: documentation" style="visibility: hidden;"></a>
+</h3>
+<p>While performance and new features have been steadily improving, documentation, not so much. The docs for bevy_render, bevy_core_pipeline, and bevy_pbr are, uhh, sparse at best. Frequent questions I see include "how do I do &lt;custom kind of rendering&gt;, which should be a fairly routine kind of extension, but I have no idea where to start integrating it with Bevy", "what shader imports are available", "what does this error mean", and "my rendering looks bad / performance is bad, how do I improve this and understand why?"</p>
+<p>We need to write more API docs, more module docs, and more long-form guides on how Bevy's renderer is structured and how to achieve common tasks. This is something I've been wanting to work on, but much like blogging, I've discovered writing clear, useful docs is quite hard. This is a great area of new Bevy devs to get involved in!</p>
+<blockquote>
+<p>As an aside, this is my first blog post. It's been something I've been meaning to do for many years, but never actually gotten around to doing. Writing a blog post is a <em>lot</em> of work, and there's the temptation to polish the writing until it's perfect. Doing so would leave me no time to actually work on rendering!, so I'm going ahead and publishing this despite the fact that it's not perfect :)</p>
+</blockquote>
+<h3 id="ease-of-use">Ease of use<a class="zola-anchor" href="#ease-of-use" aria-label="Anchor link for: ease-of-use" style="visibility: hidden;"></a>
+</h3>
+<p>Similarly to the above section, while our features may be pretty good, internally, they're not that great to write. The main rendering pass APIs are too abstract, and go through many traits, generic systems, and levels of indirection that greatly complicate understanding the renderer.</p>
+<p>Writing new post processing or lighting passes involves a <em>lot</em> of boilerplate, especially around bind groups and resource/pipeline creation.</p>
+<p>These two things are also a large barrier to entry in getting new contributors to work on rendering.</p>
+<p>Finally, the core Material code is brittle and not very extensible. A Bevy user's options are to either use StandardMaterial, or write a completely custom material from scratch. There's no easy way to do something like take the StandardMaterial, but animate the texture UVs according to this shader fragment, and then pass the result into some other shader fragment. Furthermore, writing the shader for a custom material involves some complicated coordination between vertex and fragment stage input and output types, and data bindings. Mismatched bindings or types is a common source of confusing errors for authors of custom materials. People have floated some ideas on how to improve this, but not a ton of concrete code yet. It's something we'll need to work on going forwards.</p>
+<h3 id="review-speed">Review speed<a class="zola-anchor" href="#review-speed" aria-label="Anchor link for: review-speed" style="visibility: hidden;"></a>
+</h3>
+<p>We have too many open PRs, and not enough reviewers! Reviews take a <em>long</em> time. Part of this is the fact that like I talked about above, rendering boilerplate can get pretty gnarly. Reviewing a rendering PR often involves one session to review the CPU-side code changes, and another entirely to review the GPU-side code. If we can improve rendering boilerplate, we will not only make it easier to write new features, but shorten the (currently fairly substantial) review time each feature has to go through before it can be merged.</p>
+<p>Another issue is testing. Testing rendering does not lend itself well to unit tests. You need a variety of scenes, setups, and specific GPU and OS platforms (platform-specific bugs are sadly common, and feature support and performance widely varies). This all slows down reviews, and often we miss fairly impactful rendering bugs anyways.</p>
+<h3 id="ecosystem-investment">Ecosystem investment<a class="zola-anchor" href="#ecosystem-investment" aria-label="Anchor link for: ecosystem-investment" style="visibility: hidden;"></a>
+</h3>
+<p>First, I'd like to thank the maintainers of the wgpu and naga crates, of which bevy_render sits atop, for their awesome work. Bevy's renderer would not be possible without them!</p>
+<p>These crates, however, form an entirely new graphics API/toolchain, with a focus on wide compatibility and API safety. They don't currently support some of the latest GPU features such as ray tracing, mesh shaders, threadgroup/wave/warp intrinsics, async compute, and mutable binding arrays (bindless textures), or have specific caveats. This is totally understandable after all - not many developers want or need these things, and it's not WebGPU's focus.</p>
+<p>The solution is of course for us to invest more time in writing those features and helping them out ourselves :). I'm not sure how we foster it, but it would be great to see more investment in wgpu, naga, and naga_oil from Bevy's developers.</p>
+<h3 id="bevy-editor">Bevy editor<a class="zola-anchor" href="#bevy-editor" aria-label="Anchor link for: bevy-editor" style="visibility: hidden;"></a>
+</h3>
+<p>This isn't quite rendering related, but like everyone else, I'm eagerly awaiting bevy_editor. It'll be super useful for testing out rendering features, as clicking through GUI buttons is much easier than writing a system to manually toggle several features on and off with keypresses and rendering an in-game UI to show the enabled settings.</p>
+<p>I'm also really looking forward to <em>developing</em> Bevy's editor. I originally joined this project to do just that, and somehow ended up working on rendering instead! I mentioned before my Rust gamedev experience, but I also have a lot of experience with Rust UI dev and UI dev in general.</p>
+<p>The key missing parts are twofold:</p>
+<ul>
+<li>An ergonomic, reactive, pretty, capable, and scalable UI system</li>
+<li>Concrete direction on how the editor will actually operate (as a seperate process with message passing, as a bevy_app plugin to the game process, etc)</li>
+</ul>
+<p>I'm interested in doing the work of designing the UI for the editor and writing all the UI code and features, but not so much figuring out the basic foundations. Hopefully others will take on this task :)</p>
+<h1 id="things-i-m-excited-to-work-on-in-the-next-year">Things I'm excited to work on in the next year(?)<a class="zola-anchor" href="#things-i-m-excited-to-work-on-in-the-next-year" aria-label="Anchor link for: things-i-m-excited-to-work-on-in-the-next-year" style="visibility: hidden;"></a>
+</h1>
+<p>Finally, I'd like to mention some things I'm excited to work on! Some of these I've already talked about, and others less so:</p>
+<ul>
+<li>FSR / DLSS</li>
+<li>Procedural skybox</li>
+<li>Bevy editor</li>
+<li>GPU driven rendering</li>
+<li>Profiling tools and system/entity tracing and statistics</li>
+<li>OpenPBR material</li>
+<li>Raytraced direct lighting (ReSTIR DI / RTX DI)</li>
+<li>Screen-space reflections, indirect lighting, and SSAO improvements</li>
+<li>Global illumination</li>
+</ul>
+<h2 id="bevy-solari">Bevy Solari<a class="zola-anchor" href="#bevy-solari" aria-label="Anchor link for: bevy-solari" style="visibility: hidden;"></a>
+</h2>
+<p>It's not something I've mentioned at all yet, but one of the things I've been spending a <em>lot</em> of time on the past several months is a project I'm calling bevy_solari.</p>
+<p>Bevy currently has support for direct lighting - i.e., simulating the light coming from a light source, and hitting a surface. In real life however, light dosen't just stop at the first surface it hits. Light bounces around a scene, leading to mirror or blurry reflections, color bleeding, micro-shadows, and more. Simulating these many bounces of light is called global illumination (GI), and tends to be very expensive and slow to do in real time. Without GI, however, lighting tends to look kinda off, and a lot less prettier.</p>
+<p>Most games tend to approximate global illumination via baked static lighting methods such as lightmaps, irradiance volumes, and environment maps, as well as very limited dynamic methods such as planar reflections, light/reflection probes, and screen-space raytracing. Of these, Bevy currently only supports environment maps and SSAO, although I know that some people are working on implementing the other methods.</p>
+<p>Thanks to recent advances in GPU hardware and algorithm development, however, fully dynamic, real time global illumination has become feasible. The field is rapidly developing, but there's been many promising approaches including Tomasz Stachowiak's Kajiya, DDGI, Unreal Engine's Lumen (as seen in Unreal's Lumen in the Land of Nanite demo, as well as Fornite), Nvidia's ReSTIR GI / RTX GI (as seen in Cyberpunk 2077), AMD's GI-1.0, and Alexander Sannikov's Radiance Cascades (as seen in the recent Path of Exile 2). It's a <em>super</em> exciting area of research, and something I've been having an absolute (and sometimes frustrating!) blast learning.</p>
+<p>There's too much literature and detail to cover here (it deserves, and may eventually get, its own blog post), but suffice it to say that I've been working on my own GI system for Bevy inspired by many of these techniques. It utilizes GPU hardware-accelerated raytracing, and is targeted at high end GPUs. It's not going to be released any time soon, partially due to wgpu lacking official raytracing support, and partially due to the massive amount of work and experimentation I still need to do. However, it's open source, so feel free to try the <a rel="nofollow noreferrer" href="https://github.com/JMS55/bevy/tree/solari">demo example here</a>. Run <code>cargo run --example solari</code> from the repo root.</p>
+<p>Below are some static screenshots of the renderer, but keep in mind that this is all running in realtime on a Nvidia RTX 3080 GPU, and is fully dynamic with movable camera, lights, and objects :)</p>
+<blockquote>
+<p>Bevy Solari in a cornell box scene - with GI
+<img src="https://jms55.github.io/posts/2023-09-12-bevy-third-birthday/solari.png" alt="bevy_solari in a cornell box scene" /></p>
+</blockquote>
+<blockquote>
+<p>Direct light only - no GI
+<img src="https://jms55.github.io/posts/2023-09-12-bevy-third-birthday/solari_direct_only.png" alt="bevy_solari - direct light only - no GI" /></p>
+</blockquote>
+<blockquote>
+<p>Indirect irradiance debug view
+<img src="https://jms55.github.io/posts/2023-09-12-bevy-third-birthday/solari_indirect.png" alt="bevy_solari - indirect irradiance debug view" /></p>
+</blockquote>
+<blockquote>
+<p>World irradiance cache debug view
+<img src="https://jms55.github.io/posts/2023-09-12-bevy-third-birthday/solari_world_cache.png" alt="bevy_solari - world irradiance cache debug view" /></p>
+</blockquote>
+
+      </article>
+
+      
+      
+
+      
+      
+      <div class="giscus"></div>
+      <script src="https://giscus.app/client.js"
+        data-repo="JMS55/jms55.github.io"
+        data-repo-id="R_kgDOKFxX0Q"
+        data-category="Announcements"
+        data-category-id="DIC_kwDOKFxX0c4Cvqkk"
+        data-mapping="url"
+        data-strict="0"
+        data-reactions-enabled="0"
+        data-emit-metadata="0"
+        data-input-position="top"
+        data-theme="https://jms55.github.io/giscus_light.css"
+        data-lang="en"
+        crossorigin="anonymous"
+        async>
+</script>
+
+      
+    </div>
+
+    
+
+
+<footer>
+  <div class="left">
+    <div class="copyright">
+      © 2025 JMS55
+      
+      <span>|</span>
+      Built with <a href="https://www.getzola.org" rel="noreferrer" target="_blank">zola</a> and <a href="https://github.com/isunjn/serene" rel="noreferrer" target="_blank">serene</a>
+      
+    </div>
+  </div>
+
+  <div class="right">
+    
+    
+      
+    
+    
+    <a id="rss-btn" href="https://jms55.github.io/atom.xml">RSS</a>
+    
+    
+
+    
+  </div>
+</footer>
+
+
+
+
+<dialog id="rss-mask">
+  <div>
+    <a href="https:&#x2F;&#x2F;jms55.github.io&#x2F;atom.xml">https:&#x2F;&#x2F;jms55.github.io&#x2F;atom.xml</a>
+    
+    
+    <button autofocus aria-label="copy" data-link="https:&#x2F;&#x2F;jms55.github.io&#x2F;atom.xml" data-copy-icon="&lt;svg xmlns=&quot;http:&#x2F;&#x2F;www.w3.org&#x2F;2000&#x2F;svg&quot; viewBox=&quot;0 0 24 24&quot; width=&quot;18&quot; height=&quot;18&quot;&gt;&lt;path d=&quot;M6.9998 6V3C6.9998 2.44772 7.44752 2 7.9998 2H19.9998C20.5521 2 20.9998 2.44772 20.9998 3V17C20.9998 17.5523 20.5521 18 19.9998 18H16.9998V20.9991C16.9998 21.5519 16.5499 22 15.993 22H4.00666C3.45059 22 3 21.5554 3 20.9991L3.0026 7.00087C3.0027 6.44811 3.45264 6 4.00942 6H6.9998ZM5.00242 8L5.00019 20H14.9998V8H5.00242ZM8.9998 6H16.9998V16H18.9998V4H8.9998V6Z&quot; fill=&quot;currentColor&quot;&gt;&lt;&#x2F;path&gt;&lt;&#x2F;svg&gt;
+" data-check-icon="&lt;svg xmlns=&quot;http:&#x2F;&#x2F;www.w3.org&#x2F;2000&#x2F;svg&quot; viewBox=&quot;0 0 24 24&quot; width=&quot;18&quot; height=&quot;18&quot;&gt;&lt;path d=&quot;M10.0007 15.1709L19.1931 5.97852L20.6073 7.39273L10.0007 17.9993L3.63672 11.6354L5.05093 10.2212L10.0007 15.1709Z&quot; fill=&quot;currentColor&quot;&gt;&lt;&#x2F;path&gt;&lt;&#x2F;svg&gt;
+" >
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18"><path d="M6.9998 6V3C6.9998 2.44772 7.44752 2 7.9998 2H19.9998C20.5521 2 20.9998 2.44772 20.9998 3V17C20.9998 17.5523 20.5521 18 19.9998 18H16.9998V20.9991C16.9998 21.5519 16.5499 22 15.993 22H4.00666C3.45059 22 3 21.5554 3 20.9991L3.0026 7.00087C3.0027 6.44811 3.45264 6 4.00942 6H6.9998ZM5.00242 8L5.00019 20H14.9998V8H5.00242ZM8.9998 6H16.9998V16H18.9998V4H8.9998V6Z" fill="currentColor"></path></svg>
+
+    </button>
+  </div>
+</dialog>
+
+
+
+  </main>
+</div>
+
+  
+<script src="/js/lightense.min.js"></script>
+
+
+  <script src="https://jms55.github.io/js/main.js"></script>
+</body>
+
+</html>

@@ -1,0 +1,1163 @@
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light dark">
+  
+  
+    
+  
+  <meta name="description" content="Bevy, Rust, Graphics, etc">
+
+  <title>Realtime Raytracing in Bevy 0.18 (Solari)</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="https://jms55.github.io/img/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="https://jms55.github.io/img/favicon-16x16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="https://jms55.github.io/img/apple-touch-icon.png">
+  
+  <style>
+
+  /* light mode colors */
+  body {
+    --primary-color: #5871a2;
+    --primary-pale-color: #5871a233;
+    --primary-decoration-color: #5871a210;
+    --bg-color: #ffffff;
+    --text-color: #2f3030;
+    --text-pale-color: #767676;
+    --text-decoration-color: #a9a9a9;
+    --highlight-mark-color: #5f75b020;
+
+    --callout-note-color: #5871a2;
+    --callout-tip-color: #268556;
+    --callout-important-color: #885fc9;
+    --callout-warning-color: #ab6632;
+    --callout-caution-color: #c64e4e;
+  }
+
+  /* dark mode colors */
+  body.dark {
+    --primary-color: #6f8fd1;
+    --primary-pale-color: #6f8fd166;
+    --primary-decoration-color: #6f8fd112;
+    --bg-color: #1c1c1c;
+    --text-color: #c1c1c1;
+    --text-pale-color: #848484;
+    --text-decoration-color: #5f5f5f;
+    --highlight-mark-color: #8296cb3b;
+
+    --callout-note-color: #6f8fd1;
+    --callout-tip-color: #47976f;
+    --callout-important-color: #9776cd;
+    --callout-warning-color: #ad7a52;
+    --callout-caution-color: #d06161;
+  }
+
+  /* typography */
+  body {
+    --main-font: ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+    --code-font: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+    --homepage-max-width: 768px;
+    --main-max-width: 768px;
+    --avatar-size: 60px;
+    --font-size: 16px;
+    --line-height: 1.75;
+    --img-border-radius: 0px;
+    --detail-border-radius: 0px;
+    --dark-mode-img-brightness: 0.75;
+    --dark-mode-chart-brightness: 0.75;
+    --inline-code-border-radius: 2px;
+    --inline-code-bg-color: var(--primary-decoration-color);
+    --block-code-border-radius: 0px;
+    --block-code-border-color: var(--primary-color);
+    --detail-border-color: var(--primary-color);
+  }
+
+</style>
+
+  <link rel="stylesheet" href="https://jms55.github.io/main.css">
+  
+
+
+
+  
+</head>
+
+<body class="post">
+  
+  
+<div id="wrapper">
+  <div id="blank"></div>
+  <aside>
+    
+    
+    <nav>
+      <ul>
+        
+        <li>
+          <a class="h2" href="#introduction">Introduction</a>
+          
+        </li>
+        
+        <li>
+          <a class="h2" href="#recap-of-0-17">Recap of 0.17</a>
+          
+        </li>
+        
+        <li>
+          <a class="h2" href="#specular-materials">Specular Materials</a>
+          
+          <ul>
+            
+            <li>
+              <a class="h3" href="#brdf-evaluation">BRDF Evaluation</a>
+            </li>
+            
+            <li>
+              <a class="h3" href="#brdf-sampling">BRDF Sampling</a>
+            </li>
+            
+            <li>
+              <a class="h3" href="#specular-di">Specular DI</a>
+            </li>
+            
+            <li>
+              <a class="h3" href="#diffuse-gi-changes">Diffuse GI Changes</a>
+            </li>
+            
+            <li>
+              <a class="h3" href="#specular-gi">Specular GI</a>
+            </li>
+            
+          </ul>
+          
+        </li>
+        
+        <li>
+          <a class="h2" href="#energy-loss-bug">Energy Loss Bug</a>
+          
+        </li>
+        
+        <li>
+          <a class="h2" href="#resampling-correlations-bias">Resampling Correlations&#x2F;Bias</a>
+          
+        </li>
+        
+        <li>
+          <a class="h2" href="#world-cache-improvements">World Cache Improvements</a>
+          
+          <ul>
+            
+            <li>
+              <a class="h3" href="#cache-lag">Cache Lag</a>
+            </li>
+            
+            <li>
+              <a class="h3" href="#cache-lifetimes">Cache Lifetimes</a>
+            </li>
+            
+            <li>
+              <a class="h3" href="#misc-cache-tweaks">Misc Cache Tweaks</a>
+            </li>
+            
+          </ul>
+          
+        </li>
+        
+        <li>
+          <a class="h2" href="#what-s-next">What&#x27;s Next</a>
+          
+          <ul>
+            
+            <li>
+              <a class="h3" href="#general-improvements">General Improvements</a>
+            </li>
+            
+            <li>
+              <a class="h3" href="#sampling-improvements">Sampling Improvements</a>
+            </li>
+            
+          </ul>
+          
+        </li>
+        
+        <li>
+          <a class="h2" href="#results">Results</a>
+          
+          <ul>
+            
+            <li>
+              <a class="h3" href="#pica-pica">PICA PICA</a>
+            </li>
+            
+            <li>
+              <a class="h3" href="#bistro">Bistro</a>
+            </li>
+            
+            <li>
+              <a class="h3" href="#dragons">Dragons</a>
+            </li>
+            
+            <li>
+              <a class="h3" href="#cornell-box">Cornell Box</a>
+            </li>
+            
+            <li>
+              <a class="h3" href="#performance">Performance</a>
+            </li>
+            
+          </ul>
+          
+        </li>
+        
+      </ul>
+    </nav>
+    
+    
+    <button id="back-to-top" aria-label="back to top">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-up"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>
+
+    </button>
+    
+  </aside>
+  <main>
+    
+<header>
+  <nav>
+    <a id="back-link" href="https:&#x2F;&#x2F;jms55.github.io&#x2F;posts">← Back</a>
+  </nav>
+</header>
+
+
+    <div>
+      
+      
+      
+      
+      <div id="copy-cfg" style="display: none;" data-copy-icon="&lt;svg xmlns=&quot;http:&#x2F;&#x2F;www.w3.org&#x2F;2000&#x2F;svg&quot; viewBox=&quot;0 0 24 24&quot; width=&quot;18&quot; height=&quot;18&quot;&gt;&lt;path d=&quot;M6.9998 6V3C6.9998 2.44772 7.44752 2 7.9998 2H19.9998C20.5521 2 20.9998 2.44772 20.9998 3V17C20.9998 17.5523 20.5521 18 19.9998 18H16.9998V20.9991C16.9998 21.5519 16.5499 22 15.993 22H4.00666C3.45059 22 3 21.5554 3 20.9991L3.0026 7.00087C3.0027 6.44811 3.45264 6 4.00942 6H6.9998ZM5.00242 8L5.00019 20H14.9998V8H5.00242ZM8.9998 6H16.9998V16H18.9998V4H8.9998V6Z&quot; fill=&quot;currentColor&quot;&gt;&lt;&#x2F;path&gt;&lt;&#x2F;svg&gt;
+" data-check-icon="&lt;svg xmlns=&quot;http:&#x2F;&#x2F;www.w3.org&#x2F;2000&#x2F;svg&quot; viewBox=&quot;0 0 24 24&quot; width=&quot;18&quot; height=&quot;18&quot;&gt;&lt;path d=&quot;M10.0007 15.1709L19.1931 5.97852L20.6073 7.39273L10.0007 17.9993L3.63672 11.6354L5.05093 10.2212L10.0007 15.1709Z&quot; fill=&quot;currentColor&quot;&gt;&lt;&#x2F;path&gt;&lt;&#x2F;svg&gt;
+"></div>
+      
+      <article class="prose">
+        <h1>Realtime Raytracing in Bevy 0.18 (Solari)</h1>
+        <div id="post-info">
+          <div id="date">
+            <span id="publish">Dec 27, 2025</span>
+            </div>
+
+          
+          <div id="tags">
+            <a class="instant" href="https://jms55.github.io/tags/bevy"><span>#</span>bevy</a><a class="instant" href="https://jms55.github.io/tags/raytracing"><span>#</span>raytracing</a>
+          </div>
+          
+        </div>
+
+        
+        
+
+        
+
+        <h2 id="introduction">Introduction<a class="zola-anchor" href="#introduction" aria-label="Anchor link for: introduction" style="visibility: hidden;"></a>
+</h2>
+<p>It's been approximately three months since <a href="https://jms55.github.io/posts/2025-09-20-solari-bevy-0-17/">my last post</a>, which means it's time to talk about all the work I've been doing for the upcoming release of Bevy 0.18!</p>
+<p>Like last time, this cycle has seen me focused entirely on Solari - Bevy's next-gen, fully dynamic raytraced lighting system, allowing artists and developers to get high quality lighting - without having to spend any time on static baking.</p>
+<figure>
+    <img
+        src="headline.png"
+        
+        
+        
+    >
+    
+    <figcaption><p>PICA PICA using Solari in Bevy 0.18</p>
+</figcaption>
+    
+</figure>
+<p>Before getting into what's changed in this release, let's take a quick look back at where Solari was in Bevy 0.17.</p>
+<h2 id="recap-of-0-17">Recap of 0.17<a class="zola-anchor" href="#recap-of-0-17" aria-label="Anchor link for: recap-of-0-17" style="visibility: hidden;"></a>
+</h2>
+<p>Bevy 0.17 saw the initial release of Solari, with the following components:</p>
+<ul>
+<li>Direct diffuse lighting via <strong>ReSTIR DI</strong></li>
+<li>Indirect diffuse lighting final gather via <strong>ReSTIR GI</strong></li>
+<li>Multi-bounce indirect diffuse lighting via a world-space <strong>irradiance cache</strong> (world cache)</li>
+<li>Denoising, anti-aliasing, and upscaling via <strong>DLSS-RR</strong></li>
+</ul>
+<p>ReSTIR DI handles the first bounce of lighting, ReSTIR GI handles the second bounce of lighting, and the world cache handles all subsequent bounces.</p>
+<p>Summed together and denoised we get full, pathtraced lighting, close to the quality of a offline movie-quality pathtracer - but running much, much faster due to heavy temporal and spatial amortization.</p>
+<p>Or at least, that's the theory.</p>
+<p>In practice, all the amortization and shortcuts gives up some accuracy (making the result biased) in order to improve performance.</p>
+<p>My goal with Solari is to get <em>as close as possible</em> to the offline reference (zero bias), while getting "good enough" performance for realtime. Going into the 0.18 dev cycle, improving quality was my main priority.</p>
+<p>To that end, Bevy 0.18 brings many quality (and some performance!) improvements to Solari:</p>
+<ul>
+<li>Specular material support</li>
+<li>Fixed the loss of brightness in the scene compared to the reference</li>
+<li>Reduced correlations and bias from ReSTIR resampling</li>
+<li>Reduced GI lag</li>
+<li>Improved performance on larger scenes</li>
+</ul>
+<h2 id="specular-materials">Specular Materials<a class="zola-anchor" href="#specular-materials" aria-label="Anchor link for: specular-materials" style="visibility: hidden;"></a>
+</h2>
+<p>In Bevy 0.17, Solari only supported diffuse materials. Diffuse materials were easier to get started with, as they don't depend on the incident light direction - they scatter the same no matter what direction the light is coming from.</p>
+<p>Of course, games want more than just purely diffuse materials. Most PBR materials combine a diffuse lobe (Burley in Bevy's standard renderer, Lambert in Solari) with a specular lobe (usually GGX).</p>
+<p>In Bevy 0.18, Solari now supports specular materials using a multiscattering GGX lobe, which gets added to the diffuse lobe.</p>
+<figure>
+    <img
+        src="dragons_realtime.png"
+        
+        
+        
+    >
+    
+    <figcaption><p>Metallic and non-metallic meshes of varying roughness</p>
+</figcaption>
+    
+</figure>
+<h3 id="brdf-evaluation">BRDF Evaluation<a class="zola-anchor" href="#brdf-evaluation" aria-label="Anchor link for: brdf-evaluation" style="visibility: hidden;"></a>
+</h3>
+<p>First, let's take a look at the material BRDF itself:</p>
+<pre data-lang="rust" style="background-color:#002b36;color:#839496;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#859900;">#</span><span>import bevy_pbr::lighting::</span><span style="color:#657b83;">{</span><span style="color:#cb4b16;">F_AB</span><span>, </span><span style="color:#cb4b16;">D_GGX</span><span>, V_SmithGGXCorrelated, fresnel, specular_multiscatter</span><span style="color:#657b83;">}
+</span><span style="color:#859900;">#</span><span>import bevy_pbr::pbr_functions::</span><span style="color:#657b83;">{</span><span>calculate_diffuse_color, calculate_F0</span><span style="color:#657b83;">}
+</span><span style="color:#859900;">#</span><span>import bevy_render::maths::</span><span style="color:#cb4b16;">PI
+</span><span style="color:#859900;">#</span><span>import bevy_solari::scene_bindings::ResolvedMaterial
+</span><span>
+</span><span style="color:#268bd2;">fn </span><span style="color:#b58900;">evaluate_brdf</span><span style="color:#657b83;">(
+</span><span>    </span><span style="color:#268bd2;">world_normal</span><span>: vec3&lt;</span><span style="color:#268bd2;">f32</span><span>&gt;,
+</span><span>    </span><span style="color:#268bd2;">wo</span><span>: vec3&lt;</span><span style="color:#268bd2;">f32</span><span>&gt;,
+</span><span>    </span><span style="color:#268bd2;">wi</span><span>: vec3&lt;</span><span style="color:#268bd2;">f32</span><span>&gt;,
+</span><span>    </span><span style="color:#268bd2;">material</span><span>: ResolvedMaterial,
+</span><span style="color:#657b83;">) </span><span>-&gt; vec3&lt;</span><span style="color:#268bd2;">f32</span><span>&gt; </span><span style="color:#657b83;">{
+</span><span>    </span><span style="color:#268bd2;">let</span><span> diffuse_brdf </span><span style="color:#657b83;">= </span><span style="color:#859900;">evaluate_diffuse_brdf</span><span style="color:#657b83;">(</span><span>material.base_color, material.metallic</span><span style="color:#657b83;">)</span><span>;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> specular_brdf </span><span style="color:#657b83;">= </span><span style="color:#859900;">evaluate_specular_brdf</span><span style="color:#657b83;">(
+</span><span>        world_normal,
+</span><span>        wo,
+</span><span>        wi,
+</span><span>        material.base_color,
+</span><span>        material.metallic,
+</span><span>        material.reflectance,
+</span><span>        material.perceptual_roughness,
+</span><span>        material.roughness,
+</span><span>    </span><span style="color:#657b83;">)</span><span>;
+</span><span>    </span><span style="color:#859900;">return</span><span> diffuse_brdf </span><span style="color:#657b83;">+</span><span> specular_brdf;
+</span><span style="color:#657b83;">}
+</span><span>
+</span><span style="color:#268bd2;">fn </span><span style="color:#b58900;">evaluate_diffuse_brdf</span><span style="color:#657b83;">(</span><span style="color:#268bd2;">base_color</span><span>: vec3&lt;</span><span style="color:#268bd2;">f32</span><span>&gt;, </span><span style="color:#268bd2;">metallic</span><span>: </span><span style="color:#268bd2;">f32</span><span style="color:#657b83;">) </span><span>-&gt; vec3&lt;</span><span style="color:#268bd2;">f32</span><span>&gt; </span><span style="color:#657b83;">{
+</span><span>    </span><span style="color:#268bd2;">let</span><span> diffuse_color </span><span style="color:#657b83;">= </span><span style="color:#859900;">calculate_diffuse_color</span><span style="color:#657b83;">(</span><span>base_color, metallic, </span><span style="color:#6c71c4;">0.0</span><span>, </span><span style="color:#6c71c4;">0.0</span><span style="color:#657b83;">)</span><span>;
+</span><span>    </span><span style="color:#859900;">return</span><span> diffuse_color </span><span style="color:#657b83;">/ </span><span style="color:#cb4b16;">PI</span><span>;
+</span><span style="color:#657b83;">}
+</span><span>
+</span><span style="color:#268bd2;">fn </span><span style="color:#b58900;">evaluate_specular_brdf</span><span style="color:#657b83;">(
+</span><span>    </span><span style="color:#268bd2;">N</span><span>: vec3&lt;</span><span style="color:#268bd2;">f32</span><span>&gt;,
+</span><span>    </span><span style="color:#268bd2;">V</span><span>: vec3&lt;</span><span style="color:#268bd2;">f32</span><span>&gt;,
+</span><span>    </span><span style="color:#268bd2;">L</span><span>: vec3&lt;</span><span style="color:#268bd2;">f32</span><span>&gt;,
+</span><span>    </span><span style="color:#268bd2;">base_color</span><span>: vec3&lt;</span><span style="color:#268bd2;">f32</span><span>&gt;,
+</span><span>    </span><span style="color:#268bd2;">metallic</span><span>: </span><span style="color:#268bd2;">f32</span><span>,
+</span><span>    </span><span style="color:#268bd2;">reflectance</span><span>: vec3&lt;</span><span style="color:#268bd2;">f32</span><span>&gt;,
+</span><span>    </span><span style="color:#268bd2;">perceptual_roughness</span><span>: </span><span style="color:#268bd2;">f32</span><span>,
+</span><span>    </span><span style="color:#268bd2;">roughness</span><span>: </span><span style="color:#268bd2;">f32</span><span>,
+</span><span style="color:#657b83;">) </span><span>-&gt; vec3&lt;</span><span style="color:#268bd2;">f32</span><span>&gt; </span><span style="color:#657b83;">{
+</span><span>    </span><span style="color:#268bd2;">let</span><span> H </span><span style="color:#657b83;">= </span><span style="color:#859900;">normalize</span><span style="color:#657b83;">(</span><span>L </span><span style="color:#657b83;">+</span><span> V</span><span style="color:#657b83;">)</span><span>;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> NdotL </span><span style="color:#657b83;">= </span><span style="color:#859900;">saturate</span><span style="color:#657b83;">(</span><span style="color:#859900;">dot</span><span style="color:#657b83;">(</span><span>N, L</span><span style="color:#657b83;">))</span><span>;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> NdotH </span><span style="color:#657b83;">= </span><span style="color:#859900;">saturate</span><span style="color:#657b83;">(</span><span style="color:#859900;">dot</span><span style="color:#657b83;">(</span><span>N, H</span><span style="color:#657b83;">))</span><span>;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> LdotH </span><span style="color:#657b83;">= </span><span style="color:#859900;">saturate</span><span style="color:#657b83;">(</span><span style="color:#859900;">dot</span><span style="color:#657b83;">(</span><span>L, H</span><span style="color:#657b83;">))</span><span>;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> NdotV </span><span style="color:#657b83;">= </span><span style="color:#859900;">max</span><span style="color:#657b83;">(</span><span style="color:#859900;">dot</span><span style="color:#657b83;">(</span><span>N, V</span><span style="color:#657b83;">)</span><span>, </span><span style="color:#6c71c4;">0.0001</span><span style="color:#657b83;">)</span><span>;
+</span><span>
+</span><span>    </span><span style="color:#268bd2;">let </span><span style="color:#cb4b16;">F0 </span><span style="color:#657b83;">=</span><span> calculate_F0</span><span style="color:#657b83;">(</span><span>base_color, metallic, reflectance</span><span style="color:#657b83;">)</span><span>;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> F_ab </span><span style="color:#657b83;">= </span><span style="color:#cb4b16;">F_AB</span><span style="color:#657b83;">(</span><span>perceptual_roughness, NdotV</span><span style="color:#657b83;">)</span><span>;
+</span><span>
+</span><span>    </span><span style="color:#268bd2;">let</span><span> D </span><span style="color:#657b83;">= </span><span style="color:#cb4b16;">D_GGX</span><span style="color:#657b83;">(</span><span>roughness, NdotH</span><span style="color:#657b83;">)</span><span>;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> Vs </span><span style="color:#657b83;">=</span><span> V_SmithGGXCorrelated</span><span style="color:#657b83;">(</span><span>roughness, NdotV, NdotL</span><span style="color:#657b83;">)</span><span>;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> F </span><span style="color:#657b83;">= </span><span style="color:#859900;">fresnel</span><span style="color:#657b83;">(</span><span style="color:#cb4b16;">F0</span><span>, LdotH</span><span style="color:#657b83;">)</span><span>;
+</span><span>    </span><span style="color:#859900;">return specular_multiscatter</span><span style="color:#657b83;">(</span><span>D, Vs, F, </span><span style="color:#cb4b16;">F0</span><span>, F_ab, </span><span style="color:#6c71c4;">1.0</span><span style="color:#657b83;">)</span><span>;
+</span><span style="color:#657b83;">}
+</span></code></pre>
+<p>Diffuse is nearly the same as in Solari 0.17, except the diffuse BRDF was changed so that it returns 0 for metallic materials, as metallic materials have no diffuse lobe.</p>
+<p>For specular, a lot of the code can be reused from <code>bevy_pbr</code>, so the BRDF evaluation is only a couple of lines of function calls.</p>
+<p>One thing though that tripped me up is that special care must be taken to avoid NaNs.</p>
+<p>In addition to clamping <code>NdotV</code> in the BRDF, we also limit roughness to 0.001 when loading materials, as zero roughness materials cause NaNs in the visibility function.</p>
+<pre data-lang="rust" style="background-color:#002b36;color:#839496;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#586e75;">// Clamp roughness to prevent NaNs
+</span><span>m.perceptual_roughness </span><span style="color:#657b83;">= </span><span style="color:#859900;">clamp</span><span style="color:#657b83;">(</span><span>m.perceptual_roughness, </span><span style="color:#6c71c4;">0.0316227766</span><span>, </span><span style="color:#6c71c4;">1.0</span><span style="color:#657b83;">)</span><span>; </span><span style="color:#586e75;">// Clamp roughness to 0.001
+</span><span>m.roughness </span><span style="color:#657b83;">=</span><span> m.perceptual_roughness </span><span style="color:#657b83;">*</span><span> m.perceptual_roughness;
+</span></code></pre>
+<h3 id="brdf-sampling">BRDF Sampling<a class="zola-anchor" href="#brdf-sampling" aria-label="Anchor link for: brdf-sampling" style="visibility: hidden;"></a>
+</h3>
+<p>Given this is a pathtracer, we don't just want to evaluate the BRDF; we also want to importance sample it to choose directions that would contribute a lot of outgoing light.</p>
+<p>There are a couple of different methods to sample the overall BRDF for non-metallic materials that have both a diffuse and specular lobe, but let's skip that for now and just discuss sampling each individually.</p>
+<p>Sampling the diffuse (Lambert) BRDF is pretty simple - it's just a cosine-weighted hemisphere (code from Solari 0.17):</p>
+<pre data-lang="rust" style="background-color:#002b36;color:#839496;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#586e75;">// https://www.realtimerendering.com/raytracinggems/unofficial_RayTracingGems_v1.9.pdf#0004286901.INDD%3ASec28%3A303
+</span><span style="color:#268bd2;">fn </span><span style="color:#b58900;">sample_cosine_hemisphere</span><span style="color:#657b83;">(</span><span style="color:#268bd2;">normal</span><span>: vec3&lt;</span><span style="color:#268bd2;">f32</span><span>&gt;, </span><span style="color:#268bd2;">rng</span><span>: ptr&lt;function, </span><span style="color:#268bd2;">u32</span><span>&gt;</span><span style="color:#657b83;">) </span><span>-&gt; vec3&lt;</span><span style="color:#268bd2;">f32</span><span>&gt; </span><span style="color:#657b83;">{
+</span><span>    </span><span style="color:#268bd2;">let</span><span> cos_theta </span><span style="color:#657b83;">= </span><span style="color:#6c71c4;">1.0 </span><span style="color:#657b83;">- </span><span style="color:#6c71c4;">2.0 </span><span style="color:#657b83;">* </span><span style="color:#859900;">rand_f</span><span style="color:#657b83;">(</span><span>rng</span><span style="color:#657b83;">)</span><span>;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> phi </span><span style="color:#657b83;">= </span><span style="color:#cb4b16;">PI_2 </span><span style="color:#657b83;">* </span><span style="color:#859900;">rand_f</span><span style="color:#657b83;">(</span><span>rng</span><span style="color:#657b83;">)</span><span>;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> sin_theta </span><span style="color:#657b83;">= </span><span style="color:#859900;">sqrt</span><span style="color:#657b83;">(</span><span style="color:#859900;">max</span><span style="color:#657b83;">(</span><span style="color:#6c71c4;">1.0 </span><span style="color:#657b83;">-</span><span> cos_theta </span><span style="color:#657b83;">*</span><span> cos_theta, </span><span style="color:#6c71c4;">0.0</span><span style="color:#657b83;">))</span><span>;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> x </span><span style="color:#657b83;">=</span><span> normal.x </span><span style="color:#657b83;">+</span><span> sin_theta </span><span style="color:#657b83;">* </span><span style="color:#859900;">cos</span><span style="color:#657b83;">(</span><span>phi</span><span style="color:#657b83;">)</span><span>;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> y </span><span style="color:#657b83;">=</span><span> normal.y </span><span style="color:#657b83;">+</span><span> sin_theta </span><span style="color:#657b83;">* </span><span style="color:#859900;">sin</span><span style="color:#657b83;">(</span><span>phi</span><span style="color:#657b83;">)</span><span>;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> z </span><span style="color:#657b83;">=</span><span> normal.z </span><span style="color:#657b83;">+</span><span> cos_theta;
+</span><span>    </span><span style="color:#859900;">return vec3</span><span style="color:#657b83;">(</span><span>x, y, z</span><span style="color:#657b83;">)</span><span>;
+</span><span style="color:#657b83;">}
+</span></code></pre>
+<p>With the pdf being <code>cos_theta / PI</code>.</p>
+<p>Sampling the specular (GGX) BRDF, however, is much more complicated.</p>
+<p>The current state of the art paper for sampling a GGX distribution is "Bounded VNDF Sampling for Smith–GGX Reflections" by Kenta Eto and Yusuke Tokuyoshi:</p>
+<pre data-lang="rust" style="background-color:#002b36;color:#839496;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#586e75;">// https://gpuopen.com/download/Bounded_VNDF_Sampling_for_Smith-GGX_Reflections.pdf (Listing 1)
+</span><span style="color:#268bd2;">fn </span><span style="color:#b58900;">sample_ggx_vndf</span><span style="color:#657b83;">(</span><span style="color:#268bd2;">wi_tangent</span><span>: vec3&lt;</span><span style="color:#268bd2;">f32</span><span>&gt;, </span><span style="color:#268bd2;">roughness</span><span>: </span><span style="color:#268bd2;">f32</span><span>, </span><span style="color:#268bd2;">rng</span><span>: ptr&lt;function, </span><span style="color:#268bd2;">u32</span><span>&gt;</span><span style="color:#657b83;">) </span><span>-&gt; vec3&lt;</span><span style="color:#268bd2;">f32</span><span>&gt; </span><span style="color:#657b83;">{
+</span><span>    </span><span style="color:#859900;">if</span><span> roughness </span><span style="color:#657b83;">&lt;= </span><span style="color:#6c71c4;">0.001 </span><span style="color:#657b83;">{
+</span><span>        </span><span style="color:#859900;">return vec3</span><span style="color:#657b83;">(-</span><span>wi_tangent.xy, wi_tangent.z</span><span style="color:#657b83;">)</span><span>;
+</span><span>    </span><span style="color:#657b83;">}
+</span><span>
+</span><span>    </span><span style="color:#268bd2;">let</span><span> i </span><span style="color:#657b83;">=</span><span> wi_tangent;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> rand </span><span style="color:#657b83;">= </span><span style="color:#859900;">rand_vec2f</span><span style="color:#657b83;">(</span><span>rng</span><span style="color:#657b83;">)</span><span>;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> i_std </span><span style="color:#657b83;">= </span><span style="color:#859900;">normalize</span><span style="color:#657b83;">(</span><span style="color:#859900;">vec3</span><span style="color:#657b83;">(</span><span>i.xy </span><span style="color:#657b83;">*</span><span> roughness, i.z</span><span style="color:#657b83;">))</span><span>;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> phi </span><span style="color:#657b83;">= </span><span style="color:#cb4b16;">PI_2 </span><span style="color:#657b83;">*</span><span> rand.x;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> a </span><span style="color:#657b83;">=</span><span> roughness;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> s </span><span style="color:#657b83;">= </span><span style="color:#6c71c4;">1.0 </span><span style="color:#657b83;">+ </span><span style="color:#859900;">length</span><span style="color:#657b83;">(</span><span style="color:#859900;">vec2</span><span style="color:#657b83;">(</span><span>i.xy</span><span style="color:#657b83;">))</span><span>;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> a2 </span><span style="color:#657b83;">=</span><span> a </span><span style="color:#657b83;">*</span><span> a;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> s2 </span><span style="color:#657b83;">=</span><span> s </span><span style="color:#657b83;">*</span><span> s;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> k </span><span style="color:#657b83;">= (</span><span style="color:#6c71c4;">1.0 </span><span style="color:#657b83;">-</span><span> a2</span><span style="color:#657b83;">) *</span><span> s2 </span><span style="color:#657b83;">/ (</span><span>s2 </span><span style="color:#657b83;">+</span><span> a2 </span><span style="color:#657b83;">*</span><span> i.z </span><span style="color:#657b83;">*</span><span> i.z</span><span style="color:#657b83;">)</span><span>;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> b </span><span style="color:#657b83;">= </span><span style="color:#859900;">select</span><span style="color:#657b83;">(</span><span>i_std.z, k </span><span style="color:#657b83;">*</span><span> i_std.z, i.z </span><span style="color:#657b83;">&gt; </span><span style="color:#6c71c4;">0.0</span><span style="color:#657b83;">)</span><span>;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> z </span><span style="color:#657b83;">= </span><span style="color:#859900;">fma</span><span style="color:#657b83;">(</span><span style="color:#6c71c4;">1.0 </span><span style="color:#657b83;">-</span><span> rand.y, </span><span style="color:#6c71c4;">1.0 </span><span style="color:#657b83;">+</span><span> b, </span><span style="color:#657b83;">-</span><span>b</span><span style="color:#657b83;">)</span><span>;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> sin_theta </span><span style="color:#657b83;">= </span><span style="color:#859900;">sqrt</span><span style="color:#657b83;">(</span><span style="color:#859900;">saturate</span><span style="color:#657b83;">(</span><span style="color:#6c71c4;">1.0 </span><span style="color:#657b83;">-</span><span> z </span><span style="color:#657b83;">*</span><span> z</span><span style="color:#657b83;">))</span><span>;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> o_std </span><span style="color:#657b83;">= </span><span style="color:#859900;">vec3</span><span style="color:#657b83;">(</span><span>sin_theta </span><span style="color:#657b83;">* </span><span style="color:#859900;">cos</span><span style="color:#657b83;">(</span><span>phi</span><span style="color:#657b83;">)</span><span>, sin_theta </span><span style="color:#657b83;">* </span><span style="color:#859900;">sin</span><span style="color:#657b83;">(</span><span>phi</span><span style="color:#657b83;">)</span><span>, z</span><span style="color:#657b83;">)</span><span>;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> m_std </span><span style="color:#657b83;">=</span><span> i_std </span><span style="color:#657b83;">+</span><span> o_std;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> m </span><span style="color:#657b83;">= </span><span style="color:#859900;">normalize</span><span style="color:#657b83;">(</span><span style="color:#859900;">vec3</span><span style="color:#657b83;">(</span><span>m_std.xy </span><span style="color:#657b83;">*</span><span> roughness, m_std.z</span><span style="color:#657b83;">))</span><span>;
+</span><span>    </span><span style="color:#859900;">return </span><span style="color:#6c71c4;">2.0 </span><span style="color:#657b83;">* </span><span style="color:#859900;">dot</span><span style="color:#657b83;">(</span><span>i, m</span><span style="color:#657b83;">) *</span><span> m </span><span style="color:#657b83;">-</span><span> i;
+</span><span style="color:#657b83;">}
+</span><span>
+</span><span style="color:#586e75;">// https://gpuopen.com/download/Bounded_VNDF_Sampling_for_Smith-GGX_Reflections.pdf (Listing 2)
+</span><span style="color:#268bd2;">fn </span><span style="color:#b58900;">ggx_vndf_pdf</span><span style="color:#657b83;">(</span><span style="color:#268bd2;">wi_tangent</span><span>: vec3&lt;</span><span style="color:#268bd2;">f32</span><span>&gt;, </span><span style="color:#268bd2;">wo_tangent</span><span>: vec3&lt;</span><span style="color:#268bd2;">f32</span><span>&gt;, </span><span style="color:#268bd2;">roughness</span><span>: </span><span style="color:#268bd2;">f32</span><span style="color:#657b83;">) </span><span>-&gt; </span><span style="color:#268bd2;">f32 </span><span style="color:#657b83;">{
+</span><span>    </span><span style="color:#268bd2;">let</span><span> i </span><span style="color:#657b83;">=</span><span> wi_tangent;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> o </span><span style="color:#657b83;">=</span><span> wo_tangent;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> m </span><span style="color:#657b83;">= </span><span style="color:#859900;">normalize</span><span style="color:#657b83;">(</span><span>i </span><span style="color:#657b83;">+</span><span> o</span><span style="color:#657b83;">)</span><span>;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> ndf </span><span style="color:#657b83;">= </span><span style="color:#cb4b16;">D_GGX</span><span style="color:#657b83;">(</span><span>roughness, </span><span style="color:#859900;">saturate</span><span style="color:#657b83;">(</span><span>m.z</span><span style="color:#657b83;">))</span><span>;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> ai </span><span style="color:#657b83;">=</span><span> roughness </span><span style="color:#657b83;">*</span><span> i.xy;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> len2 </span><span style="color:#657b83;">= </span><span style="color:#859900;">dot</span><span style="color:#657b83;">(</span><span>ai, ai</span><span style="color:#657b83;">)</span><span>;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> t </span><span style="color:#657b83;">= </span><span style="color:#859900;">sqrt</span><span style="color:#657b83;">(</span><span>len2 </span><span style="color:#657b83;">+</span><span> i.z </span><span style="color:#657b83;">*</span><span> i.z</span><span style="color:#657b83;">)</span><span>;
+</span><span>    </span><span style="color:#859900;">if</span><span> i.z </span><span style="color:#657b83;">&gt;= </span><span style="color:#6c71c4;">0.0 </span><span style="color:#657b83;">{
+</span><span>        </span><span style="color:#268bd2;">let</span><span> a </span><span style="color:#657b83;">=</span><span> roughness;
+</span><span>        </span><span style="color:#268bd2;">let</span><span> s </span><span style="color:#657b83;">= </span><span style="color:#6c71c4;">1.0 </span><span style="color:#657b83;">+ </span><span style="color:#859900;">length</span><span style="color:#657b83;">(</span><span>i.xy</span><span style="color:#657b83;">)</span><span>;
+</span><span>        </span><span style="color:#268bd2;">let</span><span> a2 </span><span style="color:#657b83;">=</span><span> a </span><span style="color:#657b83;">*</span><span> a;
+</span><span>        </span><span style="color:#268bd2;">let</span><span> s2 </span><span style="color:#657b83;">=</span><span> s </span><span style="color:#657b83;">*</span><span> s;
+</span><span>        </span><span style="color:#268bd2;">let</span><span> k </span><span style="color:#657b83;">= (</span><span style="color:#6c71c4;">1.0 </span><span style="color:#657b83;">-</span><span> a2</span><span style="color:#657b83;">) *</span><span> s2 </span><span style="color:#657b83;">/ (</span><span>s2 </span><span style="color:#657b83;">+</span><span> a2 </span><span style="color:#657b83;">*</span><span> i.z </span><span style="color:#657b83;">*</span><span> i.z</span><span style="color:#657b83;">)</span><span>;
+</span><span>        </span><span style="color:#859900;">return</span><span> ndf </span><span style="color:#657b83;">/ (</span><span style="color:#6c71c4;">2.0 </span><span style="color:#657b83;">* (</span><span>k </span><span style="color:#657b83;">*</span><span> i.z </span><span style="color:#657b83;">+</span><span> t</span><span style="color:#657b83;">))</span><span>;
+</span><span>    </span><span style="color:#657b83;">}
+</span><span>    </span><span style="color:#859900;">return</span><span> ndf </span><span style="color:#657b83;">* (</span><span>t </span><span style="color:#657b83;">-</span><span> i.z</span><span style="color:#657b83;">) / (</span><span style="color:#6c71c4;">2.0 </span><span style="color:#657b83;">*</span><span> len2</span><span style="color:#657b83;">)</span><span>;
+</span><span style="color:#657b83;">}
+</span></code></pre>
+<p>There are two tricky things to note with these functions:</p>
+<ul>
+<li>Inputs and outputs are in tangent space, and not world space</li>
+<li><code>wo</code> and <code>wi</code> are defined from the BRDF's perspective, which is typically opposite to how you think about it in a pathtracer</li>
+</ul>
+<p>So in practice you call them like so:</p>
+<pre data-lang="rust" style="background-color:#002b36;color:#839496;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#586e75;">// https://jcgt.org/published/0006/01/01/paper.pdf
+</span><span style="color:#268bd2;">let </span><span style="color:#cb4b16;">TBN </span><span style="color:#657b83;">= </span><span style="color:#859900;">orthonormalize</span><span style="color:#657b83;">(</span><span>surface.world_normal</span><span style="color:#657b83;">)</span><span>;
+</span><span style="color:#268bd2;">let</span><span> T </span><span style="color:#657b83;">= </span><span style="color:#cb4b16;">TBN</span><span style="color:#657b83;">[</span><span style="color:#6c71c4;">0</span><span style="color:#657b83;">]</span><span>;
+</span><span style="color:#268bd2;">let</span><span> B </span><span style="color:#657b83;">= </span><span style="color:#cb4b16;">TBN</span><span style="color:#657b83;">[</span><span style="color:#6c71c4;">1</span><span style="color:#657b83;">]</span><span>;
+</span><span style="color:#268bd2;">let</span><span> N </span><span style="color:#657b83;">= </span><span style="color:#cb4b16;">TBN</span><span style="color:#657b83;">[</span><span style="color:#6c71c4;">2</span><span style="color:#657b83;">]</span><span>;
+</span><span>
+</span><span style="color:#586e75;">// Convert input from world space to tangent space
+</span><span style="color:#268bd2;">let</span><span> wo_tangent </span><span style="color:#657b83;">= </span><span style="color:#859900;">vec3</span><span style="color:#657b83;">(</span><span style="color:#859900;">dot</span><span style="color:#657b83;">(</span><span>wo, T</span><span style="color:#657b83;">)</span><span>, </span><span style="color:#859900;">dot</span><span style="color:#657b83;">(</span><span>wo, B</span><span style="color:#657b83;">)</span><span>, </span><span style="color:#859900;">dot</span><span style="color:#657b83;">(</span><span>wo, N</span><span style="color:#657b83;">))</span><span>;
+</span><span style="color:#586e75;">// Swapped wo and wi
+</span><span style="color:#268bd2;">let</span><span> wi_tangent </span><span style="color:#657b83;">= </span><span style="color:#859900;">sample_ggx_vndf</span><span style="color:#657b83;">(</span><span>wo_tangent, surface.material.roughness, </span><span style="color:#859900;">&amp;</span><span>rng</span><span style="color:#657b83;">)</span><span>;
+</span><span style="color:#586e75;">// Convert output from tangent space to world space
+</span><span style="color:#268bd2;">let</span><span> wi </span><span style="color:#657b83;">=</span><span> wi_tangent.x </span><span style="color:#657b83;">*</span><span> T </span><span style="color:#657b83;">+</span><span> wi_tangent.y </span><span style="color:#657b83;">*</span><span> B </span><span style="color:#657b83;">+</span><span> wi_tangent.z </span><span style="color:#657b83;">*</span><span> N;
+</span><span>
+</span><span style="color:#586e75;">// Swapped wo and wi
+</span><span style="color:#268bd2;">let</span><span> pdf </span><span style="color:#657b83;">= </span><span style="color:#859900;">ggx_vndf_pdf</span><span style="color:#657b83;">(</span><span>wo_tangent, wi_tangent, surface.material.roughness</span><span style="color:#657b83;">)</span><span>;
+</span></code></pre>
+<p>One final thing to note is this line of code I added to <code>sample_ggx_vndf</code>, which doesn't appear in the paper:</p>
+<pre data-lang="rust" style="background-color:#002b36;color:#839496;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#859900;">if</span><span> roughness </span><span style="color:#657b83;">&lt;= </span><span style="color:#6c71c4;">0.001 </span><span style="color:#657b83;">{
+</span><span>    </span><span style="color:#859900;">return vec3</span><span style="color:#657b83;">(-</span><span>wi_tangent.xy, wi_tangent.z</span><span style="color:#657b83;">)</span><span>;
+</span><span style="color:#657b83;">}
+</span></code></pre>
+<p>Remember how earlier we clamped roughness to 0.001? Well that means we can no longer render perfect mirrors.</p>
+<p>To get around this, when importance sampling the specular BRDF for a material with a roughness of 0.001, we just treat it like a perfect mirror and reflect the incident light direction around the Z axis.</p>
+<p>This restores mirror-like behavior, while still preventing NaNs in BRDF evaluation.</p>
+<p><figure>
+    <img
+        src="without_mirror_fix.png"
+        
+        
+        
+    >
+    
+    <figcaption><p>Without the fix - a little blurry</p>
+</figcaption>
+    
+</figure>
+
+<figure>
+    <img
+        src="with_mirror_fix.png"
+        
+        
+        
+    >
+    
+    <figcaption><p>With the fix - perfect mirror!</p>
+</figcaption>
+    
+</figure>
+</p>
+<h3 id="specular-di">Specular DI<a class="zola-anchor" href="#specular-di" aria-label="Anchor link for: specular-di" style="visibility: hidden;"></a>
+</h3>
+<p>Now that we've covered Solari's updated material BRDF, let's talk about how lighting has changed.</p>
+<p>First up - specular direct lighting.</p>
+<h4 id="status-quo">Status Quo<a class="zola-anchor" href="#status-quo" aria-label="Anchor link for: status-quo" style="visibility: hidden;"></a>
+</h4>
+<p>To recap: For direct lighting, Solari is using ReSTIR DI.</p>
+<p>We take a series of random initial samples from light sources, and use RIS to choose the best one. This is essentially fancy next event estimation (NEE).</p>
+<p>We then do some temporal and spatial resampling to share good samples between frames/pixels.</p>
+<p>Finally, we shade using the final selected sample (which in Bevy 0.17 used only the diffuse BRDF).</p>
+<h4 id="changes">Changes<a class="zola-anchor" href="#changes" aria-label="Anchor link for: changes" style="visibility: hidden;"></a>
+</h4>
+<p>To add support for specular materials, there's a couple of different places that we should modify:</p>
+<ol>
+<li>Account for the specular BRDF in the target function during initial resampling</li>
+<li>Account for the specular BRDF in the target functions during temporal and spatial resampling</li>
+<li>Trace a BRDF ray during initial sampling and combine it with the NEE samples using multiple importance sampling (MIS)
+<ul>
+<li>This is the only way to sample DI for zero-roughness mirror surfaces</li>
+<li>Improves quality for glossy (mid-roughness) surfaces</li>
+<li>Improves quality for area lights that are very close to the surface</li>
+</ul>
+</li>
+<li>Account for the specular BRDF during shading of the final selected sample</li>
+</ol>
+<p>For Bevy 0.18, I ended up spending most of my time on GI, so for DI I only did #4.</p>
+<p>#1 and #2 are tricky because the whole point of ReSTIR is to share samples across pixels. But for specular, samples are not (easily) shareable, as unlike the diffuse lobe, a strong source of light for pixel A might be outside the specular lobe of pixel B and have zero contribution.</p>
+<p>Maybe in practice it's not a big deal, or maybe using a second set of reservoirs for specular would help, but for now I've chosen to skip these, and treat all surfaces (including metallic ones) as purely diffuse during resampling.</p>
+<p>#3 requires an extra raytrace, which costs a lot of performance, and so again I've skipped it.</p>
+<p>When I get more time to experiment, I'll play around with these and see if any of them work well.</p>
+<p>So to sum it up, for DI, all I did was swap <code>albedo / PI</code> with a call to <code>evaluate_brdf()</code> during the final shading step.</p>
+<h3 id="diffuse-gi-changes">Diffuse GI Changes<a class="zola-anchor" href="#diffuse-gi-changes" aria-label="Anchor link for: diffuse-gi-changes" style="visibility: hidden;"></a>
+</h3>
+<p>Indirect lighting is where specular gets much more interesting.</p>
+<p>First off, as far as the world cache is concerned, all surfaces are diffuse only, with no specular lobe. This means that when you query the cache, you treat the query point as a diffuse surface. When updating cache entries, you also treat the cache point as a diffuse surface.</p>
+<p>For per-pixel GI, Solari splits the lighting calculations into two seperate passes - one for the diffuse lobe, and one for the specular lobe.</p>
+<p>The diffuse lobe is handled by the existing ReSTIR GI pass. ReSTIR GI resampling is exactly the same as in Bevy 0.17 - like DI, only the final shading changes.</p>
+<p>For the ReSTIR GI final shading step, we're still shading using only the diffuse lobe, but now we need to skip shading metallic pixels that don't have a diffuse lobe.</p>
+<figure>
+    <img
+        src="diffuse_gi.png"
+        
+        
+        
+    >
+    
+    <figcaption><p>Diffuse GI only - metallic surfaces are black because they don't have any diffuse contribution</p>
+</figcaption>
+    
+</figure>
+<h3 id="specular-gi">Specular GI<a class="zola-anchor" href="#specular-gi" aria-label="Anchor link for: specular-gi" style="visibility: hidden;"></a>
+</h3>
+<p>The specular lobe, on the other hand, is handled by an entirely new dedicated specular GI pass.</p>
+<p>The basic structure of the pass looks like this (simplified):</p>
+<pre data-lang="rust" style="background-color:#002b36;color:#839496;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#268bd2;">let</span><span> surface </span><span style="color:#657b83;">= </span><span style="color:#859900;">load_from_gbuffer</span><span style="color:#657b83;">(</span><span>pixel_id</span><span style="color:#657b83;">)</span><span>;
+</span><span style="color:#268bd2;">let</span><span> wo </span><span style="color:#657b83;">= </span><span style="color:#859900;">normalize</span><span style="color:#657b83;">(</span><span>view.world_position </span><span style="color:#657b83;">-</span><span> surface.world_position</span><span style="color:#657b83;">)</span><span>;
+</span><span>
+</span><span>var radiance: vec3&lt;</span><span style="color:#268bd2;">f32</span><span>&gt;;
+</span><span>var wi: vec3&lt;</span><span style="color:#268bd2;">f32</span><span>&gt;;
+</span><span style="color:#859900;">if</span><span> surface.material.roughness </span><span style="color:#657b83;">&gt; </span><span style="color:#6c71c4;">0.4 </span><span style="color:#657b83;">{
+</span><span>    </span><span style="color:#586e75;">// Surface is very rough, reuse the ReSTIR GI reservoir
+</span><span>    </span><span style="color:#268bd2;">let</span><span> gi_reservoir </span><span style="color:#657b83;">=</span><span> gi_reservoirs_a</span><span style="color:#657b83;">[</span><span>pixel_index</span><span style="color:#657b83;">]</span><span>;
+</span><span>    wi </span><span style="color:#657b83;">= </span><span style="color:#859900;">normalize</span><span style="color:#657b83;">(</span><span>gi_reservoir.sample_point_world_position </span><span style="color:#657b83;">-</span><span> surface.world_position</span><span style="color:#657b83;">)</span><span>;
+</span><span>
+</span><span>    radiance </span><span style="color:#657b83;">=</span><span> gi_reservoir.radiance </span><span style="color:#657b83;">*</span><span> gi_reservoir.unbiased_contribution_weight;
+</span><span style="color:#657b83;">} </span><span style="color:#859900;">else </span><span style="color:#657b83;">{
+</span><span>    </span><span style="color:#586e75;">// Surface is glossy or mirror-like, trace a new path
+</span><span>    </span><span style="color:#268bd2;">let</span><span> wi_tangent </span><span style="color:#657b83;">= </span><span style="color:#859900;">sample_ggx_vndf</span><span style="color:#657b83;">(</span><span>wo_tangent, surface.material.roughness, </span><span style="color:#859900;">&amp;</span><span>rng</span><span style="color:#657b83;">)</span><span>;
+</span><span>    wi </span><span style="color:#657b83;">=</span><span> wi_tangent.x </span><span style="color:#657b83;">*</span><span> T </span><span style="color:#657b83;">+</span><span> wi_tangent.y </span><span style="color:#657b83;">*</span><span> B </span><span style="color:#657b83;">+</span><span> wi_tangent.z </span><span style="color:#657b83;">*</span><span> N;
+</span><span>
+</span><span>    </span><span style="color:#268bd2;">let</span><span> pdf </span><span style="color:#657b83;">= </span><span style="color:#859900;">ggx_vndf_pdf</span><span style="color:#657b83;">(</span><span>wo_tangent, wi_tangent, surface.material.roughness</span><span style="color:#657b83;">)</span><span>;
+</span><span>    radiance </span><span style="color:#657b83;">= </span><span style="color:#859900;">trace_glossy_path</span><span style="color:#657b83;">(</span><span>surface.world_position, wi, </span><span style="color:#859900;">&amp;</span><span>rng</span><span style="color:#657b83;">) /</span><span> pdf;
+</span><span style="color:#657b83;">}
+</span><span>
+</span><span style="color:#586e75;">// Final shading
+</span><span style="color:#268bd2;">let</span><span> brdf </span><span style="color:#657b83;">= </span><span style="color:#859900;">evaluate_specular_brdf</span><span style="color:#657b83;">(</span><span>surface.world_normal, wo, wi, surface.material</span><span style="color:#859900;">...</span><span style="color:#657b83;">)</span><span>;
+</span><span style="color:#268bd2;">let</span><span> cos_theta </span><span style="color:#657b83;">= </span><span style="color:#859900;">saturate</span><span style="color:#657b83;">(</span><span style="color:#859900;">dot</span><span style="color:#657b83;">(</span><span>wi, surface.world_normal</span><span style="color:#657b83;">))</span><span>;
+</span><span>radiance </span><span style="color:#657b83;">*=</span><span> brdf </span><span style="color:#657b83;">*</span><span> cos_theta </span><span style="color:#657b83;">*</span><span> view.exposure;
+</span></code></pre>
+<p>For rough surfaces, the specular lobe is wide enough to approximate the diffuse lobe. We can just skip tracing any new rays, and reuse the ReSTIR GI sample directly. This saves a lot of performance, with minimal quality loss.</p>
+<p>For glossy or mirror surfaces, we need to trace a new path, following the best direction from importance sampling the GGX distribution.</p>
+<p>The full code for <code>trace_glossy_path</code> is a bit long, so I'm just going to link to the <a rel="nofollow noreferrer" href="https://github.com/bevyengine/bevy/blob/64c7bec4068aa063bfaa2cddcb90733f0e081cf8/crates/bevy_solari/src/realtime/specular_gi.wgsl#L71-L150">source on GitHub</a>.</p>
+<figure>
+    <img
+        src="specular_gi.png"
+        
+        
+        
+    >
+    
+    <figcaption><p>Specular GI only</p>
+</figcaption>
+    
+</figure>
+<p>The basic outline is:</p>
+<ul>
+<li>We trace up to three bounces (after three bounces, the quality loss from skipping further bounces is minimal)</li>
+<li>Lighting comes from any of: hitting an emissive surface, NEE, or terminating in the world cache</li>
+<li>Each bounce samples the GGX distribution to find the next bounce direction (if the surface was rough enough, we would have terminated in the world cache - more on this in a second)</li>
+</ul>
+<p>It's essentially just a standard pathtracer, except with theortically higher coherence from always following the specular lobe.</p>
+<p>However, there are many subtle details that took me some time to figure out:</p>
+<ul>
+<li>Emissive contributions are skipped on the first bounce, as ReSTIR DI handles those paths</li>
+<li>We only query the world cache when hitting a rough surface (otherwise reflections would show the grid-like world cache)</li>
+<li>We skip NEE for mirror surfaces</li>
+<li>We apply MIS between the emissive contribution and the NEE contribution</li>
+</ul>
+<p>And there are still some large remaining issues:</p>
+<ul>
+<li>NEE is using entirely random samples, which leads to noisy reflections</li>
+<li>Glossy surfaces don't have any sort of path guiding to choose good directions, which also leads to noisy reflections</li>
+<li>No specular motion vectors to aid the denoiser leads to ghosting when objects in reflections move around</li>
+<li>Terminating in the world cache still leads to quality issues sometimes, especially on curved surfaces</li>
+</ul>
+<p>Specular motion vectors are something I plan to work on. I just need to spend some more time understanding the theory.</p>
+<p>As for improving sampling during the path trace, this is technically what ReSTIR PT was invented to solve. However, ReSTIR PT is also very performance intensive. I'm not convinced it's the path we should go down for Solari.</p>
+<p>I have some other ideas in mind for improving sampling, which I'll talk about at the end of this post.</p>
+<h2 id="energy-loss-bug">Energy Loss Bug<a class="zola-anchor" href="#energy-loss-bug" aria-label="Anchor link for: energy-loss-bug" style="visibility: hidden;"></a>
+</h2>
+<p>One of the big problems Solari had in 0.17 was overall energy loss compared to a pathtraced reference.</p>
+<p>At the time, I chalked it up to an inherent limitation of the world cache and moved on.</p>
+<p>However, while experimenting with various things this cycle, I realized that not only was it not due to the world cache, but DI also was losing energy, and not just GI!</p>
+<p>After many painful days of narrowing down the issue, I tracked it down to the <a href="https://jms55.github.io/posts/2025-12-27-solari-bevy-0-18/@posts/2025-09-20-solari-bevy-0-17/#light-tile-presampling">light tile code</a>, which was shared between DI and the world cache.</p>
+<p>The rgb9e5 packing of the light radiance I was doing did not have enough bits to encode the light, and so energy was being lost.</p>
+<p>The fix (thanks to @SparkyPotato) was to apply a log2-based encoding to the radiance before packing. This allocates more bits towards the values that human perception cares about, and less bits towards the values that we have a harder time seeing.</p>
+<pre data-lang="rust" style="background-color:#002b36;color:#839496;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#268bd2;">fn </span><span style="color:#b58900;">pack_resolved_light_sample</span><span style="color:#657b83;">(</span><span style="color:#268bd2;">sample</span><span>: ResolvedLightSample</span><span style="color:#657b83;">) </span><span>-&gt; ResolvedLightSamplePacked </span><span style="color:#657b83;">{
+</span><span>    </span><span style="color:#859900;">return</span><span> ResolvedLightSamplePacked</span><span style="color:#657b83;">(
+</span><span>        </span><span style="color:#586e75;">// ...
+</span><span>        </span><span style="color:#859900;">vec3_to_rgb9e5_</span><span style="color:#657b83;">(</span><span style="color:#859900;">log2</span><span style="color:#657b83;">(</span><span>sample.radiance </span><span style="color:#657b83;">*</span><span> view.exposure </span><span style="color:#657b83;">+ </span><span style="color:#6c71c4;">1.0</span><span style="color:#657b83;">))</span><span>,
+</span><span>        </span><span style="color:#586e75;">// ...
+</span><span>    </span><span style="color:#657b83;">)</span><span>;
+</span><span style="color:#657b83;">}
+</span><span>
+</span><span style="color:#268bd2;">fn </span><span style="color:#b58900;">unpack_resolved_light_sample</span><span style="color:#657b83;">(</span><span style="color:#268bd2;">packed</span><span>: ResolvedLightSamplePacked, </span><span style="color:#268bd2;">exposure</span><span>: </span><span style="color:#268bd2;">f32</span><span style="color:#657b83;">) </span><span>-&gt; ResolvedLightSample </span><span style="color:#657b83;">{
+</span><span>    </span><span style="color:#859900;">return</span><span> ResolvedLightSample</span><span style="color:#657b83;">(
+</span><span>        </span><span style="color:#586e75;">// ...
+</span><span>        </span><span style="color:#657b83;">(</span><span style="color:#859900;">exp2</span><span style="color:#657b83;">(</span><span style="color:#859900;">rgb9e5_to_vec3_</span><span style="color:#657b83;">(</span><span>packed.radiance</span><span style="color:#657b83;">)) - </span><span style="color:#6c71c4;">1.0</span><span style="color:#657b83;">) /</span><span> exposure,
+</span><span>        </span><span style="color:#586e75;">// ...
+</span><span>    </span><span style="color:#657b83;">)</span><span>;
+</span><span style="color:#657b83;">}
+</span></code></pre>
+<p>With this fix, we're much closer to matching the reference.</p>
+<p><figure>
+    <img
+        src="energy_loss.png"
+        
+        
+        
+    >
+    
+    <figcaption><p>Energy loss due to poor encoding of radiance in light tiles</p>
+</figcaption>
+    
+</figure>
+
+<figure>
+    <img
+        src="energy_loss_fixed.png"
+        
+        
+        
+    >
+    
+    <figcaption><p>Correct energy due to a better encoding</p>
+</figcaption>
+    
+</figure>
+</p>
+<h2 id="resampling-correlations-bias">Resampling Correlations/Bias<a class="zola-anchor" href="#resampling-correlations-bias" aria-label="Anchor link for: resampling-correlations-bias" style="visibility: hidden;"></a>
+</h2>
+<p>One of the problems I wasn't able to solve in Bevy 0.17 was ReSTIR DI correlations introducing artifacts when denoising with DLSS-RR.</p>
+<figure>
+    <img
+        src="di_correlations.png"
+        
+        
+        
+    >
+    
+    <figcaption><p>Correlations from ReSTIR DI confusing the denoiser</p>
+</figcaption>
+    
+</figure>
+<p>For ReSTIR GI, I was able to solve this with permutation sampling during temporal reuse. But for ReSTIR DI, trying to use permutation sampling lead to artifacts on shadow penumbras due to the way I was doing visibility reuse.</p>
+<figure>
+    <img
+        src="di_permutation_artifacts.png"
+        
+        
+        
+    >
+    
+    <figcaption><p>Visibility reuse messing up shadows when using permutation sampling</p>
+</figcaption>
+    
+</figure>
+<p>I played with resampling ordering a bit more this cycle, and was able to come up with a solution.</p>
+<p>In Bevy 0.17, the whole ReSTIR DI algorithm looked like this:</p>
+<ol>
+<li>Initial sampling</li>
+<li>Test visibility of initial sample</li>
+<li>Temporal resampling</li>
+<li>Choose spatial sample</li>
+<li>Test visibility of spatial sample</li>
+<li>Spatial resampling</li>
+<li>Store final reservoir for next frame temporal reuse</li>
+<li>Final shading</li>
+</ol>
+<p>In Bevy 0.18, it now looks like this:</p>
+<ol>
+<li>Initial sampling</li>
+<li>Test visibility of initial sample</li>
+<li>Temporal resampling</li>
+<li>Choose spatial sample</li>
+<li>Spatial resampling</li>
+<li>Store final reservoir for next frame temporal reuse</li>
+<li>Test visibility of final reservoir</li>
+<li>Final shading</li>
+</ol>
+<p>The two big differences are:</p>
+<ul>
+<li>The second visibility test was moved from the spatial sample, to the final sample after all resampling steps</li>
+<li>The second visibility test is performed for the final shading, but is <em>not</em> fed forward for next frame's temporal resampling</li>
+</ul>
+<p>Moving the second visibility test from the spatial sample only to after all resampling was the key change.</p>
+<p>Before permutation sampling, it was ok to not re-test visibility for the temporal sample. The the light was visible to the pixel last frame, it's probably still visible this frame. Same for if the light was not visible last frame. When this assumption is wrong, e.g. for moving objects, it just led to a 1-frame lag in shadows that's almost unnoticable - an acceptable tradeoff.</p>
+<p>With permutation sampling, we can no longer trust that the visibility of the temporal sample is correct to reuse. The temporal sample now may come from a neighboring pixel, and at shadow pneumbras, the visibility is changing very frequently. It's no longer safe to reuse visibility, even on static scenes - we must retest visibility.</p>
+<p>The best way to test visibility without using extra ray traces is to move it right before shading of the final sample, where incorrect visibility would show up on screen</p>
+<p>The second change (not feeding forward the second visibility test to the next frame) is not strictly necessary, but keeps direct lighting unbiased.</p>
+<p>If you were to feed forward the second visibility test, the following might happen:</p>
+<ol>
+<li>A pixel checks visibility and finds that the light is occluded, setting the reservoir's contribution to 0</li>
+<li>The reservoir is stored for reuse next frame</li>
+<li>&lt;Next frame&gt;</li>
+<li>The reservoir is reused temporally for the same pixel (say that the initial sample happened to also be 0 contribution)</li>
+<li>The reservoir is reused spatially by a different pixel, which sees that it has zero contribution, and does not choose it via resampling
+<ul>
+<li>Except since this is a different pixel, the light is not occluded, and the sample should have had non-zero contribution!</li>
+</ul>
+</li>
+</ol>
+<p>Reusing visibility like this leads to bias in the form of shadows that "halo" objects, expanding further out than they should.</p>
+<figure>
+    <img
+        src="di_feed_forward_bad.png"
+        
+        
+        
+    >
+    
+    <figcaption><p>Feeding forward final visibility leads to over-shadowing artifacts</p>
+</figcaption>
+    
+</figure>
+<p>While so far I've only talked about DI resampling, these changes actually apply to GI resampling too. Solari's ReSTIR GI pass now uses the same modified ordering as the DI resampling, which fixes indirect shadow artifacts. It's just that incorrect shadow edges are not as obvious with GI as they are for DI, so it's less important.</p>
+<p>One final note on DI resampling: like we were doing with ReSTIR GI, we now use the balance heuristic for ReSTIR DI resampling, instead of constant MIS weights. This makes a small difference (hence why I never noticed it until now), but it <em>does</em> slightly increase emissive light brightness, matching the pathtraced reference better.</p>
+<figure>
+    <img
+        src="di_good_018.png"
+        
+        
+        
+    >
+    
+    <figcaption><p>Final ReSTIR DI output after all the changes</p>
+</figcaption>
+    
+</figure>
+<h2 id="world-cache-improvements">World Cache Improvements<a class="zola-anchor" href="#world-cache-improvements" aria-label="Anchor link for: world-cache-improvements" style="visibility: hidden;"></a>
+</h2>
+<p>The world cache is the oldest part of Solari - it was copied nearly wholesale from my original prototype three years ago, without any real changes in Bevy 0.17 except for the addition of the LOD system.</p>
+<p>Because of this, it was also the jankiest part of Solari.</p>
+<p>As I started testing on more complex scenes, it became clear that there were significant problems:</p>
+<ul>
+<li>On the cornell box scene, it worked fine.</li>
+<li>On the PICA PICA scene, it worked ok when conditions were static, but under dynamic conditions the GI was fairly laggy.</li>
+<li>On Bistro, performance wasn't good, especially as you started moving around the scene.</li>
+</ul>
+<p>In Bevy 0.18, I spent a large amount of time fixing these issues.</p>
+<h3 id="cache-lag">Cache Lag<a class="zola-anchor" href="#cache-lag" aria-label="Anchor link for: cache-lag" style="visibility: hidden;"></a>
+</h3>
+<p>In the PICA PICA scene, if you turn off all the lights, it would take a good while for the light to completely fade. The reason being that: A) the world cache samples itself, recursively propagating light around the scene for a while, and B) the exponential blend between new and current radiance samples keeps the old radiance around for a decent amount of time.</p>
+<video style="max-width: 100%; margin: var(--gap) var(--gap) 0 var(--gap); border-radius: 6px;" controls>
+  <source src="gi_lag.mp4" type="video/mp4">
+</video>
+<center>
+<p><em>Laggy GI with fixed blend factor</em></p>
+</center>
+<p>To combat this, we could increase the blend factor, to keep the lighting responsive. However that would lead to way more noise and instability under static lighting conditions.</p>
+<p>What we really need is an adaptive blend factor, which <a rel="nofollow noreferrer" href="https://bsky.app/profile/gboisse.bsky.social/post/3m5blga3ftk2a">Guillaume Boissé</a> was kind enough to share with me.</p>
+<p>We keep track of the change in luminance between frames, and use that to compute an adaptive blend factor.</p>
+<pre data-lang="rust" style="background-color:#002b36;color:#839496;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#268bd2;">let</span><span> old_radiance </span><span style="color:#657b83;">=</span><span> world_cache_radiance</span><span style="color:#657b83;">[</span><span>cell_index</span><span style="color:#657b83;">]</span><span>;
+</span><span style="color:#268bd2;">let</span><span> new_radiance </span><span style="color:#657b83;">=</span><span> world_cache_active_cells_new_radiance</span><span style="color:#657b83;">[</span><span>active_cell_id.x</span><span style="color:#657b83;">]</span><span>;
+</span><span style="color:#268bd2;">let</span><span> luminance_delta </span><span style="color:#657b83;">=</span><span> world_cache_luminance_deltas</span><span style="color:#657b83;">[</span><span>cell_index</span><span style="color:#657b83;">]</span><span>;
+</span><span>
+</span><span style="color:#586e75;">// https://bsky.app/profile/gboisse.bsky.social/post/3m5blga3ftk2a
+</span><span style="color:#268bd2;">let</span><span> sample_count </span><span style="color:#657b83;">= </span><span style="color:#859900;">min</span><span style="color:#657b83;">(</span><span>old_radiance.a </span><span style="color:#657b83;">+ </span><span style="color:#6c71c4;">1.0</span><span>, </span><span style="color:#cb4b16;">WORLD_CACHE_MAX_TEMPORAL_SAMPLES</span><span style="color:#657b83;">)</span><span>;
+</span><span style="color:#268bd2;">let</span><span> alpha </span><span style="color:#657b83;">= </span><span style="color:#859900;">abs</span><span style="color:#657b83;">(</span><span>luminance_delta</span><span style="color:#657b83;">) / </span><span style="color:#859900;">max</span><span style="color:#657b83;">(</span><span style="color:#859900;">luminance</span><span style="color:#657b83;">(</span><span>old_radiance.rgb</span><span style="color:#657b83;">)</span><span>, </span><span style="color:#6c71c4;">0.001</span><span style="color:#657b83;">)</span><span>;
+</span><span style="color:#268bd2;">let</span><span> max_sample_count </span><span style="color:#657b83;">= </span><span style="color:#859900;">mix</span><span style="color:#657b83;">(</span><span style="color:#cb4b16;">WORLD_CACHE_MAX_TEMPORAL_SAMPLES</span><span>, </span><span style="color:#6c71c4;">1.0</span><span>, </span><span style="color:#859900;">pow</span><span style="color:#657b83;">(</span><span style="color:#859900;">saturate</span><span style="color:#657b83;">(</span><span>alpha</span><span style="color:#657b83;">)</span><span>, </span><span style="color:#6c71c4;">1.0 </span><span style="color:#657b83;">/ </span><span style="color:#6c71c4;">8.0</span><span style="color:#657b83;">))</span><span>;
+</span><span style="color:#268bd2;">let</span><span> blend_amount </span><span style="color:#657b83;">= </span><span style="color:#6c71c4;">1.0 </span><span style="color:#657b83;">/ </span><span style="color:#859900;">min</span><span style="color:#657b83;">(</span><span>sample_count, max_sample_count</span><span style="color:#657b83;">)</span><span>;
+</span><span>
+</span><span style="color:#268bd2;">let</span><span> blended_radiance </span><span style="color:#657b83;">= </span><span style="color:#859900;">mix</span><span style="color:#657b83;">(</span><span>old_radiance.rgb, new_radiance, blend_amount</span><span style="color:#657b83;">)</span><span>;
+</span><span style="color:#268bd2;">let</span><span> blended_luminance_delta </span><span style="color:#657b83;">= </span><span style="color:#859900;">mix</span><span style="color:#657b83;">(</span><span>luminance_delta, </span><span style="color:#859900;">luminance</span><span style="color:#657b83;">(</span><span>blended_radiance</span><span style="color:#657b83;">) - </span><span style="color:#859900;">luminance</span><span style="color:#657b83;">(</span><span>old_radiance.rgb</span><span style="color:#657b83;">)</span><span>, </span><span style="color:#6c71c4;">1.0 </span><span style="color:#657b83;">/ </span><span style="color:#6c71c4;">8.0</span><span style="color:#657b83;">)</span><span>;
+</span><span>
+</span><span>world_cache_radiance</span><span style="color:#657b83;">[</span><span>cell_index</span><span style="color:#657b83;">] = </span><span style="color:#859900;">vec4</span><span style="color:#657b83;">(</span><span>blended_radiance, sample_count</span><span style="color:#657b83;">)</span><span>;
+</span><span>world_cache_luminance_deltas</span><span style="color:#657b83;">[</span><span>cell_index</span><span style="color:#657b83;">] =</span><span> blended_luminance_delta;
+</span></code></pre>
+<p>Now GI is stable under static conditions, but reacts pretty fast under dynamic conditions. It's not perfect - we're still heavily relying on temporal accumulation and denoising - but it's a heck of a lot better.</p>
+<video style="max-width: 100%; margin: var(--gap) var(--gap) 0 var(--gap); border-radius: 6px;" controls>
+  <source src="gi_less_lag.mp4" type="video/mp4">
+</video>
+<center>
+<p><em>Less-laggy GI with adaptive blend factor</em></p>
+</center>
+<p>Once again, thanks a ton to Guillaume Boissé for this code! I was struggling to come up with something myself, and this perfectly solved my problem!</p>
+<h3 id="cache-lifetimes">Cache Lifetimes<a class="zola-anchor" href="#cache-lifetimes" aria-label="Anchor link for: cache-lifetimes" style="visibility: hidden;"></a>
+</h3>
+<p>While Solari was working great on smaller scenes, on larger scenes like Bistro, performance was much worse.</p>
+<p>The world cache update pass was taking way too long, and worse, as I moved around the scene, it got worse and worse.</p>
+<p>The reason is that since cache entries sample each other (in order to get multibounce lighting), they were keeping each other alive forever. So once you stepped into an area, it would forever be present in the world cache, even when you left the area.</p>
+<p>The solution (thanks to @IsaacSM and @NthTensor) ended up being pretty simple!</p>
+<pre data-lang="rust" style="background-color:#002b36;color:#839496;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#268bd2;">fn </span><span style="color:#b58900;">query_world_cache</span><span style="color:#657b83;">(</span><span style="color:#268bd2;">world_position</span><span>: vec3&lt;</span><span style="color:#268bd2;">f32</span><span>&gt;, </span><span style="color:#268bd2;">world_normal</span><span>: vec3&lt;</span><span style="color:#268bd2;">f32</span><span>&gt;, </span><span style="color:#268bd2;">view_position</span><span>: vec3&lt;</span><span style="color:#268bd2;">f32</span><span>&gt;, </span><span style="color:#268bd2;">cell_lifetime</span><span>: </span><span style="color:#268bd2;">u32</span><span>, </span><span style="color:#268bd2;">rng</span><span>: ptr&lt;function, </span><span style="color:#268bd2;">u32</span><span>&gt;</span><span style="color:#657b83;">) </span><span>-&gt; vec3&lt;</span><span style="color:#268bd2;">f32</span><span>&gt; </span><span style="color:#657b83;">{
+</span><span>    </span><span style="color:#268bd2;">let</span><span> cell_size </span><span style="color:#657b83;">= </span><span style="color:#859900;">get_cell_size</span><span style="color:#657b83;">(</span><span>world_position, view_position</span><span style="color:#657b83;">)</span><span>;
+</span><span>
+</span><span>    </span><span style="color:#268bd2;">let</span><span> world_position_quantized </span><span style="color:#657b83;">= </span><span>bitcast&lt;vec3&lt;</span><span style="color:#268bd2;">u32</span><span>&gt;&gt;</span><span style="color:#657b83;">(</span><span style="color:#859900;">quantize_position</span><span style="color:#657b83;">(</span><span>world_position, cell_size</span><span style="color:#657b83;">))</span><span>;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> world_normal_quantized </span><span style="color:#657b83;">= </span><span>bitcast&lt;vec3&lt;</span><span style="color:#268bd2;">u32</span><span>&gt;&gt;</span><span style="color:#657b83;">(</span><span style="color:#859900;">quantize_normal</span><span style="color:#657b83;">(</span><span>world_normal</span><span style="color:#657b83;">))</span><span>;
+</span><span>    var key </span><span style="color:#657b83;">= </span><span style="color:#859900;">compute_key</span><span style="color:#657b83;">(</span><span>world_position_quantized, world_normal_quantized</span><span style="color:#657b83;">)</span><span>;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> checksum </span><span style="color:#657b83;">= </span><span style="color:#859900;">compute_checksum</span><span style="color:#657b83;">(</span><span>world_position_quantized, world_normal_quantized</span><span style="color:#657b83;">)</span><span>;
+</span><span>
+</span><span>    </span><span style="color:#859900;">for </span><span style="color:#657b83;">(</span><span>var i </span><span style="color:#657b83;">=</span><span> 0u; i </span><span style="color:#657b83;">&lt; </span><span style="color:#cb4b16;">WORLD_CACHE_MAX_SEARCH_STEPS</span><span>; i</span><span style="color:#657b83;">++) {
+</span><span>        </span><span style="color:#268bd2;">let</span><span> existing_checksum </span><span style="color:#657b83;">=</span><span> atomicCompareExchangeWeak</span><span style="color:#657b83;">(</span><span style="color:#859900;">&amp;</span><span>world_cache_checksums</span><span style="color:#657b83;">[</span><span>key</span><span style="color:#657b83;">]</span><span>, </span><span style="color:#cb4b16;">WORLD_CACHE_EMPTY_CELL</span><span>, checksum</span><span style="color:#657b83;">)</span><span>.old_value;
+</span><span>
+</span><span>        </span><span style="color:#586e75;">// Cell already exists or is empty - reset lifetime
+</span><span>        </span><span style="color:#859900;">if</span><span> existing_checksum </span><span style="color:#657b83;">==</span><span> checksum </span><span style="color:#859900;">||</span><span> existing_checksum </span><span style="color:#657b83;">== </span><span style="color:#cb4b16;">WORLD_CACHE_EMPTY_CELL </span><span style="color:#657b83;">{
+</span><span style="color:#859900;">#</span><span>ifndef </span><span style="color:#cb4b16;">WORLD_CACHE_QUERY_ATOMIC_MAX_LIFETIME
+</span><span>            atomicStore</span><span style="color:#657b83;">(</span><span style="color:#859900;">&amp;</span><span>world_cache_life</span><span style="color:#657b83;">[</span><span>key</span><span style="color:#657b83;">]</span><span>, cell_lifetime</span><span style="color:#657b83;">)</span><span>;
+</span><span style="color:#859900;">#else
+</span><span>            atomicMax</span><span style="color:#657b83;">(</span><span style="color:#859900;">&amp;</span><span>world_cache_life</span><span style="color:#657b83;">[</span><span>key</span><span style="color:#657b83;">]</span><span>, cell_lifetime</span><span style="color:#657b83;">)</span><span>;
+</span><span style="color:#859900;">#</span><span>endif
+</span><span>        </span><span style="color:#657b83;">}
+</span><span>
+</span><span>        </span><span style="color:#859900;">if</span><span> existing_checksum </span><span style="color:#657b83;">==</span><span> checksum </span><span style="color:#657b83;">{
+</span><span>            </span><span style="color:#586e75;">// Cache entry already exists - get radiance
+</span><span>            </span><span style="color:#859900;">return</span><span> world_cache_radiance</span><span style="color:#657b83;">[</span><span>key</span><span style="color:#657b83;">]</span><span>.rgb;
+</span><span>        </span><span style="color:#657b83;">} </span><span style="color:#859900;">else if</span><span> existing_checksum </span><span style="color:#657b83;">== </span><span style="color:#cb4b16;">WORLD_CACHE_EMPTY_CELL </span><span style="color:#657b83;">{
+</span><span>            </span><span style="color:#586e75;">// Cell is empty - initialize it
+</span><span>            world_cache_geometry_data</span><span style="color:#657b83;">[</span><span>key</span><span style="color:#657b83;">]</span><span>.world_position </span><span style="color:#657b83;">=</span><span> world_position;
+</span><span>            world_cache_geometry_data</span><span style="color:#657b83;">[</span><span>key</span><span style="color:#657b83;">]</span><span>.world_normal </span><span style="color:#657b83;">=</span><span> world_normal;
+</span><span>            </span><span style="color:#859900;">return vec3</span><span style="color:#657b83;">(</span><span style="color:#6c71c4;">0.0</span><span style="color:#657b83;">)</span><span>;
+</span><span>        </span><span style="color:#657b83;">} </span><span style="color:#859900;">else </span><span style="color:#657b83;">{
+</span><span>            </span><span style="color:#586e75;">// Collision - linear probe to next entry
+</span><span>            key </span><span style="color:#657b83;">+=</span><span> 1u;
+</span><span>        </span><span style="color:#657b83;">}
+</span><span>    </span><span style="color:#657b83;">}
+</span><span>
+</span><span>    </span><span style="color:#859900;">return vec3</span><span style="color:#657b83;">(</span><span style="color:#6c71c4;">0.0</span><span style="color:#657b83;">)</span><span>;
+</span><span style="color:#657b83;">}
+</span></code></pre>
+<p>When a ReSTIR GI or specular GI pixel is querying the world cache, nothing has changed. We still perform <code>atomicStore(&amp;world_cache_life[key], WORLD_CACHE_CELL_LIFETIME)</code>, resetting the lifetime of the queried cache entry.</p>
+<p>However when a world cache entry is querying another entry during the world cache update pass, the algorithm changes.</p>
+<p>Now we're instead doing <code>atomicMax(&amp;world_cache_life[key], cell_lifetime_of_querier)</code>.</p>
+<p>When the camera is in a given area, ReSTIR GI and specular GI pixels will reset world cache entries to their max lifetime. Then during world cache update the next frame, those world cache entries will copy their max lifetime to other entries nearby.</p>
+<p>However once the camera moves away from the area, there will be no more pixels querying the world cache. When world cache entries go to query each other, they'll copy over their current lifetimes (which are decaying each frame). After a couple of frames, all the world cache entries in the area will go dead.</p>
+<p>No more performance wasted on areas the camera will never see!</p>
+<h3 id="misc-cache-tweaks">Misc Cache Tweaks<a class="zola-anchor" href="#misc-cache-tweaks" aria-label="Anchor link for: misc-cache-tweaks" style="visibility: hidden;"></a>
+</h3>
+<figure>
+    <img
+        src="bistro_trace.png"
+        
+        
+        
+    >
+    
+    <figcaption><p>NSight trace of Bistro showing an expensive and spiky world cache update</p>
+</figcaption>
+    
+</figure>
+<p>Finally, I tweaked a bunch of other things based on my testing in Bistro:</p>
+<ul>
+<li>Limited indirect rays sent from cache entries during the world cache update step to a max of 50 meters - This prevents long raytraces from holding up the whole threadgroup, improving performance, and prevents far-away samples from influencing the cache, reducing variance.</li>
+<li>Switched the world cache update workgroup size from 1024 to 64 threads - Much more appropriate for raytracing workloads. This fixed some really weird GPU usage traces I was seeing in NSight.</li>
+<li>Make the world cache transition LODs faster - In a large scene like Bistro, we had way too many cache entries for far-away areas.</li>
+</ul>
+<p>Combined, these changes brought the world cache update step from 1.42ms to a much more reasonable 0.09ms in Bistro.</p>
+<h2 id="what-s-next">What's Next<a class="zola-anchor" href="#what-s-next" aria-label="Anchor link for: what-s-next" style="visibility: hidden;"></a>
+</h2>
+<p>This blog post just scratched the surface of the past three months. I didn't even cover stuff I tried that didn't work out; but I'm a little sick of writing this and want to get something posted rather than spend a month perfecting it.</p>
+<p>So with that, let's talk about the future!</p>
+<p>Solari has improved a ton in these past three months, but of course there's still more work to be done!</p>
+<h3 id="general-improvements">General Improvements<a class="zola-anchor" href="#general-improvements" aria-label="Anchor link for: general-improvements" style="visibility: hidden;"></a>
+</h3>
+<p>First, some general issues carrying over from my last blog post:</p>
+<ul>
+<li>Feature parity for things like skinned and morphed meshes, alpha masks, transparent materials, support for more types of light sources, etc still need implementing.</li>
+<li>Solari is still NVIDIA only in practice due to relying on DLSS-RR (FSR-RR <em>did</em> release since my last blog post, but to my immense sadness is currently DirectX 12 only - no Vulkan support. AMD employees - please reach out!)</li>
+<li>Shader execution reordering (blocked on wgpu support) and half-resolution GI (on top of DLSS upscaling) would bring major performance improvements.</li>
+</ul>
+<h3 id="sampling-improvements">Sampling Improvements<a class="zola-anchor" href="#sampling-improvements" aria-label="Anchor link for: sampling-improvements" style="visibility: hidden;"></a>
+</h3>
+<p>The other major improvements I want to make are to sampling quality. There are a bunch of different papers and techniques I want to experiment with.</p>
+<h4 id="di-sampling">DI Sampling<a class="zola-anchor" href="#di-sampling" aria-label="Anchor link for: di-sampling" style="visibility: hidden;"></a>
+</h4>
+<p>For DI, our initial sampling is totally random, which is pretty terrible. The minimal improvement would be to build a <a rel="nofollow noreferrer" href="https://blog.traverseresearch.nl/fast-cdf-generation-on-the-gpu-for-light-picking-5c50b97c552b">global CDF</a> of lights in the scene. A better, but much more complex and expensive method would be to build the <a rel="nofollow noreferrer" href="https://gpuopen.com/download/Hierarchical_Light_Sampling_with_Accurate_Spherical_Gaussian_Lighting.pdf">spherical gaussian light tree</a> I mentioned in my last post.</p>
+<p>However, we can get even better results by building and caching a <em>local</em> distribution of lights at discrete points in the scene.</p>
+<p><a rel="nofollow noreferrer" href="https://www.yiningkarlli.com/projects/cachepoints.html">Disney's Hyperion renderer</a> uses a set of randomly traced candidate paths to pick cache points in the scene, and estimates both the unshadowed light contribution and visibility of a light at each cache point, stored as a small CDF table.</p>
+<p>Unreal Engine's <a rel="nofollow noreferrer" href="https://advances.realtimerendering.com/s2025/content/MegaLights_Stochastic_Direct_Lighting_2025.pdf">MegaLights</a> uses a similar idea in screen space. @SparkyPotato has been <a rel="nofollow noreferrer" href="https://github.com/bevyengine/bevy/pull/21366">experimenting with a world-space equivalent</a> of the idea in Solari.</p>
+<p>Unlike Disney's cache points, we already have a good way to discretize the scene - the spatial hashing we use for the GI world cache. We're already sampling DI at each world cache cell - why not additionally build up a CDF, and use that to improve light sampling for ReSTIR DI and Specular GI NEE? Or, we could go the other way, and splat each per-pixel sample from ReSTIR DI and Specular GI NEE back into the world cache. Or... both? Lots of things to experiment with (and not enough time!)</p>
+<p>Lastly, <a rel="nofollow noreferrer" href="https://ishaanshah.xyz/risltc">linearly-transformed cosines</a> (LTCs) are a promising avenue to explore to improve resampling quality.</p>
+<h4 id="gi-sampling">GI Sampling<a class="zola-anchor" href="#gi-sampling" aria-label="Anchor link for: gi-sampling" style="visibility: hidden;"></a>
+</h4>
+<p>Like DI, we can also improve our GI sampling.</p>
+<p>Recently, realtime pathtracing research has been retracing (pun intended) the steps that offline pathtracing took, and researching path guiding techniques. There are several promising avenues to explore:</p>
+<ul>
+<li><a rel="nofollow noreferrer" href="https://www.lalber.org/2025/04/markov-chain-path-guiding">Markov chain resampling</a></li>
+<li><a rel="nofollow noreferrer" href="https://research.nvidia.com/labs/rtr/publication/zeng2025restirpg">ReSTIR PT splatting</a></li>
+<li><a rel="nofollow noreferrer" href="https://uni-tuebingen.de/fakultaeten/mathematisch-naturwissenschaftliche-fakultaet/fachbereiche/informatik/lehrstuehle/computergrafik/lehrstuhl/veroeffentlichungen/robust-fitting-of-parallax-aware-mixtures-for-path-guiding">Parallax-aware vMF mixtures</a></li>
+</ul>
+<p>All three techniques share the same basic idea: build a local distribution of incident light in world-space, stored as a combination of several vMF lobes. The main differences are how samples get fed into the distribution, and the exact steps used to update the distribution.</p>
+<p>It's the same exact idea as improving DI sampling - discretize to world space, estimate a local distribution, use for sampling. And again the same questions arise - using a small set of candidate paths traced from the camera and splatting into the cache; build on top of the existing cache update pass; both?</p>
+<p>The same questions also apply to the world irradiance cache itself. Currently the cache is updated in a dedicated pass at the start of the frame, sampling from a fixed point for each active cache cell. Other caches like NVIDIA's <a rel="nofollow noreferrer" href="https://github.com/NVIDIA-RTX/SHARC">SHARC</a>, NVIDIA's <a rel="nofollow noreferrer" href="https://research.nvidia.com/publication/2021-06_real-time-neural-radiance-caching-path-tracing">NRC</a> and AMD's <a rel="nofollow noreferrer" href="https://gpuopen.com/manuals/fsr_sdk/techniques/radiance-cache/#training-the-cache">FSR Radiance Caching</a> all splat candidate paths traced from the camera.</p>
+<p>Lots of room for experimentation.</p>
+<p>Additionally as a final note on GI quality, currently one of Solari's worst form of artifacts is GI light leaks on the edges of objects. While hashing the surface normal helps, on curved surfaces and corners, it's not a perfect solution.</p>
+<p>And it's actually very easy to identify the cases where this happens. Light leaks tend to occur when the length of the ray querying the cache is less than the size of the cache cell.</p>
+<p>I tried both sampling last frame's screen-space texture, and <a rel="nofollow noreferrer" href="https://gboisse.github.io/posts/this-is-us">hashing <code>ray_t &lt; cell_size</code></a>, but unfortunately neither helped. More experimentation is needed.</p>
+<h4 id="specular">Specular<a class="zola-anchor" href="#specular" aria-label="Anchor link for: specular" style="visibility: hidden;"></a>
+</h4>
+<p>Specular DI and GI in Solari 0.18 was a pretty initial implementation, and as I've mentioned throughout the post, there's a lot that could be improved.</p>
+<ul>
+<li>Specular motion vectors are not implemented, so mirror and glossy indirect reflections can have ghosting.
+<ul>
+<li>I need to implement either <a rel="nofollow noreferrer" href="https://developer.nvidia.com/blog/rendering-perfect-reflections-and-refractions-in-path-traced-games">"Rendering Perfect Reflections and Refractions in Path-Traced Games"</a> or <a rel="nofollow noreferrer" href="https://zheng95z.github.io/publications/trmv21">"Temporally Reliable Motion Vectors for Real-time Ray Tracing"</a>.</li>
+</ul>
+</li>
+<li>Local light sampling would greatly help NEE quality for specular GI. Currently, NEE is heavily undersampled. DLSS-RR does its best, but you can see some cross-stitch patterns on glossy reflections where the denoiser is struggling.</li>
+<li>Path guiding for GI would help with tracing glossy paths.</li>
+<li>Experimenting with ReSTIR for both specular DI and specular GI.</li>
+<li>Potentially terminating a specular GI path into the world cache sooner based on total roughness/cone-spread of the path.</li>
+</ul>
+<h2 id="results">Results<a class="zola-anchor" href="#results" aria-label="Anchor link for: results" style="visibility: hidden;"></a>
+</h2>
+<p>All results were captured on an RTX 3080 locked to base clocks in NSight, at 1600x900 upscaled to 3200x1800 via DLSS-RR.</p>
+<h3 id="pica-pica">PICA PICA<a class="zola-anchor" href="#pica-pica" aria-label="Anchor link for: pica-pica" style="visibility: hidden;"></a>
+</h3>
+<p><figure>
+    <img
+        src="pica_pica_realtime.png"
+        
+        
+        
+    >
+    
+    <figcaption><p>PICA PICA - Solari realtime</p>
+</figcaption>
+    
+</figure>
+
+<figure>
+    <img
+        src="pica_pica_reference.png"
+        
+        
+        
+    >
+    
+    <figcaption><p>PICA PICA - Pathraced reference (ignore the black noise - it's a bug)</p>
+</figcaption>
+    
+</figure>
+</p>
+<h3 id="bistro">Bistro<a class="zola-anchor" href="#bistro" aria-label="Anchor link for: bistro" style="visibility: hidden;"></a>
+</h3>
+<p><figure>
+    <img
+        src="bistro_realtime.png"
+        
+        
+        
+    >
+    
+    <figcaption><p>Bistro - Solari realtime (ignore the foilage - Solari doesn't support alpha masks yet)</p>
+</figcaption>
+    
+</figure>
+
+<figure>
+    <img
+        src="bistro_reference.png"
+        
+        
+        
+    >
+    
+    <figcaption><p>Bistro - Pathraced reference</p>
+</figcaption>
+    
+</figure>
+</p>
+<h3 id="dragons">Dragons<a class="zola-anchor" href="#dragons" aria-label="Anchor link for: dragons" style="visibility: hidden;"></a>
+</h3>
+<p><figure>
+    <img
+        src="dragons_realtime.png"
+        
+        
+        
+    >
+    
+    <figcaption><p>Dragons - Solari realtime</p>
+</figcaption>
+    
+</figure>
+
+<figure>
+    <img
+        src="dragons_reference.png"
+        
+        
+        
+    >
+    
+    <figcaption><p>Dragons - Pathraced reference</p>
+</figcaption>
+    
+</figure>
+</p>
+<h3 id="cornell-box">Cornell Box<a class="zola-anchor" href="#cornell-box" aria-label="Anchor link for: cornell-box" style="visibility: hidden;"></a>
+</h3>
+<p><figure>
+    <img
+        src="cornell_box_realtime.png"
+        
+        
+        
+    >
+    
+    <figcaption><p>Cornell Box - Solari realtime</p>
+</figcaption>
+    
+</figure>
+
+<figure>
+    <img
+        src="cornell_box_reference.png"
+        
+        
+        
+    >
+    
+    <figcaption><p>Cornell Box - Pathraced reference</p>
+</figcaption>
+    
+</figure>
+</p>
+<h3 id="performance">Performance<a class="zola-anchor" href="#performance" aria-label="Anchor link for: performance" style="visibility: hidden;"></a>
+</h3>
+<table><thead><tr><th style="text-align: center">Pass</th><th style="text-align: center">PICA PICA (ms)</th><th style="text-align: center">Bistro (ms)</th><th style="text-align: center">Dragons (ms)</th><th style="text-align: center">Cornell Box (ms)</th></tr></thead><tbody>
+<tr><td style="text-align: center">Presample Light Tiles</td><td style="text-align: center">0.03</td><td style="text-align: center">0.09</td><td style="text-align: center">0.02</td><td style="text-align: center">0.02</td></tr>
+<tr><td style="text-align: center">World Cache: Decay Cells</td><td style="text-align: center">0.01</td><td style="text-align: center">0.02</td><td style="text-align: center">0.02</td><td style="text-align: center">0.01</td></tr>
+<tr><td style="text-align: center">World Cache: Compaction P1</td><td style="text-align: center">0.04</td><td style="text-align: center">0.04</td><td style="text-align: center">0.04</td><td style="text-align: center">0.04</td></tr>
+<tr><td style="text-align: center">World Cache: Compaction P2</td><td style="text-align: center">0.01</td><td style="text-align: center">0.01</td><td style="text-align: center">0.01</td><td style="text-align: center">0.01</td></tr>
+<tr><td style="text-align: center">World Cache: Write Active Cells</td><td style="text-align: center">0.01</td><td style="text-align: center">0.02</td><td style="text-align: center">0.01</td><td style="text-align: center">0.01</td></tr>
+<tr><td style="text-align: center">World Cache: Sample Lighting</td><td style="text-align: center">0.03</td><td style="text-align: center">0.66</td><td style="text-align: center">0.05</td><td style="text-align: center">0.03</td></tr>
+<tr><td style="text-align: center">World Cache: Blend New Samples</td><td style="text-align: center">0.01</td><td style="text-align: center">0.03</td><td style="text-align: center">0.01</td><td style="text-align: center">0.01</td></tr>
+<tr><td style="text-align: center">ReSTIR DI: Initial + Temporal</td><td style="text-align: center">0.28</td><td style="text-align: center">1.89</td><td style="text-align: center">0.39</td><td style="text-align: center">0.22</td></tr>
+<tr><td style="text-align: center">ReSTIR DI: Spatial + Shade</td><td style="text-align: center">0.18</td><td style="text-align: center">1.06</td><td style="text-align: center">0.23</td><td style="text-align: center">0.16</td></tr>
+<tr><td style="text-align: center">ReSTIR GI: Initial + Temporal</td><td style="text-align: center">0.30</td><td style="text-align: center">2.28</td><td style="text-align: center">0.80</td><td style="text-align: center">0.29</td></tr>
+<tr><td style="text-align: center">ReSTIR GI: Spatial + Shade</td><td style="text-align: center">0.31</td><td style="text-align: center">1.37</td><td style="text-align: center">0.56</td><td style="text-align: center">0.27</td></tr>
+<tr><td style="text-align: center">Specular GI</td><td style="text-align: center">0.61</td><td style="text-align: center">0.35</td><td style="text-align: center">0.31</td><td style="text-align: center">0.09</td></tr>
+<tr><td style="text-align: center">DLSS-RR: Copy Inputs From GBuffer</td><td style="text-align: center">0.04</td><td style="text-align: center">0.08</td><td style="text-align: center">0.05</td><td style="text-align: center">0.04</td></tr>
+<tr><td style="text-align: center">DLSS-RR</td><td style="text-align: center">6.10</td><td style="text-align: center">6.16</td><td style="text-align: center">6.08</td><td style="text-align: center">6.07</td></tr>
+<tr><td style="text-align: center"><strong>Total</strong></td><td style="text-align: center"><strong>7.96</strong></td><td style="text-align: center"><strong>14.06</strong></td><td style="text-align: center"><strong>8.58</strong></td><td style="text-align: center"><strong>7.27</strong></td></tr>
+</tbody></table>
+
+      </article>
+
+      
+      
+
+      
+      
+      <div class="giscus"></div>
+      <script src="https://giscus.app/client.js"
+        data-repo="JMS55/jms55.github.io"
+        data-repo-id="R_kgDOKFxX0Q"
+        data-category="Announcements"
+        data-category-id="DIC_kwDOKFxX0c4Cvqkk"
+        data-mapping="url"
+        data-strict="0"
+        data-reactions-enabled="0"
+        data-emit-metadata="0"
+        data-input-position="top"
+        data-theme="https://jms55.github.io/giscus_light.css"
+        data-lang="en"
+        crossorigin="anonymous"
+        async>
+</script>
+
+      
+    </div>
+
+    
+
+
+<footer>
+  <div class="left">
+    <div class="copyright">
+      © 2025 JMS55
+      
+      <span>|</span>
+      Built with <a href="https://www.getzola.org" rel="noreferrer" target="_blank">zola</a> and <a href="https://github.com/isunjn/serene" rel="noreferrer" target="_blank">serene</a>
+      
+    </div>
+  </div>
+
+  <div class="right">
+    
+    
+      
+    
+    
+    <a id="rss-btn" href="https://jms55.github.io/atom.xml">RSS</a>
+    
+    
+
+    
+  </div>
+</footer>
+
+
+
+
+<dialog id="rss-mask">
+  <div>
+    <a href="https:&#x2F;&#x2F;jms55.github.io&#x2F;atom.xml">https:&#x2F;&#x2F;jms55.github.io&#x2F;atom.xml</a>
+    
+    
+    <button autofocus aria-label="copy" data-link="https:&#x2F;&#x2F;jms55.github.io&#x2F;atom.xml" data-copy-icon="&lt;svg xmlns=&quot;http:&#x2F;&#x2F;www.w3.org&#x2F;2000&#x2F;svg&quot; viewBox=&quot;0 0 24 24&quot; width=&quot;18&quot; height=&quot;18&quot;&gt;&lt;path d=&quot;M6.9998 6V3C6.9998 2.44772 7.44752 2 7.9998 2H19.9998C20.5521 2 20.9998 2.44772 20.9998 3V17C20.9998 17.5523 20.5521 18 19.9998 18H16.9998V20.9991C16.9998 21.5519 16.5499 22 15.993 22H4.00666C3.45059 22 3 21.5554 3 20.9991L3.0026 7.00087C3.0027 6.44811 3.45264 6 4.00942 6H6.9998ZM5.00242 8L5.00019 20H14.9998V8H5.00242ZM8.9998 6H16.9998V16H18.9998V4H8.9998V6Z&quot; fill=&quot;currentColor&quot;&gt;&lt;&#x2F;path&gt;&lt;&#x2F;svg&gt;
+" data-check-icon="&lt;svg xmlns=&quot;http:&#x2F;&#x2F;www.w3.org&#x2F;2000&#x2F;svg&quot; viewBox=&quot;0 0 24 24&quot; width=&quot;18&quot; height=&quot;18&quot;&gt;&lt;path d=&quot;M10.0007 15.1709L19.1931 5.97852L20.6073 7.39273L10.0007 17.9993L3.63672 11.6354L5.05093 10.2212L10.0007 15.1709Z&quot; fill=&quot;currentColor&quot;&gt;&lt;&#x2F;path&gt;&lt;&#x2F;svg&gt;
+" >
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18"><path d="M6.9998 6V3C6.9998 2.44772 7.44752 2 7.9998 2H19.9998C20.5521 2 20.9998 2.44772 20.9998 3V17C20.9998 17.5523 20.5521 18 19.9998 18H16.9998V20.9991C16.9998 21.5519 16.5499 22 15.993 22H4.00666C3.45059 22 3 21.5554 3 20.9991L3.0026 7.00087C3.0027 6.44811 3.45264 6 4.00942 6H6.9998ZM5.00242 8L5.00019 20H14.9998V8H5.00242ZM8.9998 6H16.9998V16H18.9998V4H8.9998V6Z" fill="currentColor"></path></svg>
+
+    </button>
+  </div>
+</dialog>
+
+
+
+  </main>
+</div>
+
+  
+<script src="/js/lightense.min.js"></script>
+
+
+  <script src="https://jms55.github.io/js/main.js"></script>
+</body>
+
+</html>
