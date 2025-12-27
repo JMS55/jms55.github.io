@@ -655,7 +655,7 @@ Specular DI and GI in Solari 0.18 was a pretty initial implementation, and as I'
 * Experimenting with ReSTIR for both specular DI and specular GI.
 * Potentially terminating a specular GI path into the world cache sooner based on total roughness/cone-spread of the path.
 
-## Performance and Quality Results
+## Results
 
 All results were captured on an RTX 3080 locked to base clocks in NSight, at 1600x900 upscaled to 3200x1800 via DLSS-RR.
 
@@ -678,3 +678,23 @@ All results were captured on an RTX 3080 locked to base clocks in NSight, at 160
 
 {{ figure(src="cornell_box_realtime.png", caption="Cornell Box - Solari realtime") }}
 {{ figure(src="cornell_box_reference.png", caption="Cornell Box - Pathraced reference") }}
+
+### Performance
+
+|                Pass               | PICA PICA (ms) | Bistro (ms) | Dragons (ms) | Cornell Box (ms) |
+|:---------------------------------:|:--------------:|:-----------:|:------------:|:----------------:|
+| Presample Light Tiles             | 0.03           | 0.09        | 0.02         | 0.02             |
+| World Cache: Decay Cells          | 0.01           | 0.02        | 0.02         | 0.01             |
+| World Cache: Compaction P1        | 0.04           | 0.04        | 0.04         | 0.04             |
+| World Cache: Compaction P2        | 0.01           | 0.01        | 0.01         | 0.01             |
+| World Cache: Write Active Cells   | 0.01           | 0.02        | 0.01         | 0.01             |
+| World Cache: Sample Lighting      | 0.03           | 0.66        | 0.05         | 0.03             |
+| World Cache: Blend New Samples    | 0.01           | 0.03        | 0.01         | 0.01             |
+| ReSTIR DI: Initial + Temporal     | 0.28           | 1.89        | 0.39         | 0.22             |
+| ReSTIR DI: Spatial + Shade        | 0.18           | 1.06        | 0.23         | 0.16             |
+| ReSTIR GI: Initial + Temporal     | 0.30           | 2.28        | 0.80         | 0.29             |
+| ReSTIR GI: Spatial + Shade        | 0.31           | 1.37        | 0.56         | 0.27             |
+| Specular GI                       | 0.61           | 0.35        | 0.31         | 0.09             |
+| DLSS-RR: Copy Inputs From GBuffer | 0.04           | 0.08        | 0.05         | 0.04             |
+| DLSS-RR                           | 6.10           | 6.16        | 6.08         | 6.07             |
+| **Total**                         | **7.96**       | **14.06**   | **8.58**     | **7.27**         |
