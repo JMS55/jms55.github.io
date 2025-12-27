@@ -480,7 +480,7 @@ In Bevy 0.18, I spent a large amount of time fixing these issues.
 
 ### Cache Lag
 
-In the PICA PICA scene, if you turn off all the lights, it would take a good while for the light to completely fade. The reason being that: A) the world cache samples itself, recursively propogating light around the scene for a while, and B) the exponential blend between new and current radiance samples keeps the old radiance around for a decent amount of time.
+In the PICA PICA scene, if you turn off all the lights, it would take a good while for the light to completely fade. The reason being that: A) the world cache samples itself, recursively propagating light around the scene for a while, and B) the exponential blend between new and current radiance samples keeps the old radiance around for a decent amount of time.
 
 TODO: Video of GI lag
 
@@ -618,7 +618,7 @@ Unreal Engine's [MegaLights](https://advances.realtimerendering.com/s2025/conten
 
 Unlike Disney's cache points, we already have a good way to discretize the scene - the spatial hashing we use for the GI world cache. We're already sampling DI at each world cache cell - why not additionally build up a CDF, and use that to improve light sampling for ReSTIR DI and Specular GI NEE? Or, we could go the other way, and splat each per-pixel sample from ReSTIR DI and Specular GI NEE back into the world cache. Or... both? Lots of things to experiment with (and not enough time!)
 
-Lastly, [lineraly-transformed cosines](https://ishaanshah.xyz/risltc) (LTCs) are a promising avenue to explore to improve resampling quality.
+Lastly, [linearly-transformed cosines](https://ishaanshah.xyz/risltc) (LTCs) are a promising avenue to explore to improve resampling quality.
 
 #### GI Sampling
 
@@ -650,7 +650,7 @@ Specular DI and GI in Solari 0.18 was a pretty initial implementation, and as I'
 
 * Specular motion vectors are not implemented, so mirror and glossy indirect reflections can have ghosting.
     * I need to implement either ["Rendering Perfect Reflections and Refractions in Path-Traced Games"](https://developer.nvidia.com/blog/rendering-perfect-reflections-and-refractions-in-path-traced-games) or ["Temporally Reliable Motion Vectors for Real-time Ray Tracing"](https://zheng95z.github.io/publications/trmv21).
-* Local light sampling would greatly help NEE quality for specular GI. Currently, NEE is heavily undersampled. DLSS-RR does its best, but you can see some cross-stich patterns on glossy reflections where the denoiser is struggling.
+* Local light sampling would greatly help NEE quality for specular GI. Currently, NEE is heavily undersampled. DLSS-RR does its best, but you can see some cross-stitch patterns on glossy reflections where the denoiser is struggling.
 * Path guiding for GI would help with tracing glossy paths.
 * Experimenting with ReSTIR for both specular DI and specular GI.
 * Potentially terminating a specular GI path into the world cache sooner based on total roughness/cone-spread of the path.
