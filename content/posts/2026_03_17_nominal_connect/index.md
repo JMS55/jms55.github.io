@@ -1,6 +1,6 @@
 +++
 title = "Nominal Connect: Shipping Realtime Desktop Software With Rust, Bevy, and egui"
-date = "2026-03-18"
+date = "2026-03-17"
 +++
 
 A little different than my usual graphics-related posts, but I've written about how my company uses Bevy/egui/Rust in production.
