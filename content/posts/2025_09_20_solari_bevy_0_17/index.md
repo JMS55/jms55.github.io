@@ -787,7 +787,7 @@ For GI specifically though, there _is_ a way I have thought of to do less work, 
 
 For the world cache, rather than trace rays for every active cell, we could do it for a random subset of cells each frame (up to some maximum), to help limit the cost of updating many cache entries.
 
-For the ReSTIR GI passes, we could perform them at quarter resolution (half the pixels along each axis). GI is not particuarly important to have exactly per-pixel data, so we can calculate it at a lower resolution, and then [upscale](https://www.nvidia.com/en-us/on-demand/session/gdc25-gdc1002) (timestamp 17:22). This upscaling would be in addition to the the DLSS-RR upscaling.
+For the ReSTIR GI passes, we could perform them at quarter resolution (half the pixels along each axis). GI is not particuarly important to have exactly per-pixel data, so we can calculate it at a lower resolution, and then [upscale](https://www.nvidia.com/en-us/on-demand/session/gdc25-gdc1002) (timestamp 17:22). This upscaling would be in addition to the DLSS-RR upscaling.
 
 ## Future Work
 

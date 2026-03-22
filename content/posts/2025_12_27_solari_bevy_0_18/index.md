@@ -439,7 +439,7 @@ The two big differences are:
 
 Moving the second visibility test from the spatial sample only to after all resampling was the key change.
 
-Before permutation sampling, it was ok to not re-test visibility for the temporal sample. The the light was visible to the pixel last frame, it's probably still visible this frame. Same for if the light was not visible last frame. When this assumption is wrong, e.g. for moving objects, it just led to a 1-frame lag in shadows that's almost unnoticable - an acceptable tradeoff.
+Before permutation sampling, it was ok to not re-test visibility for the temporal sample. The light was visible to the pixel last frame, it's probably still visible this frame. Same for if the light was not visible last frame. When this assumption is wrong, e.g. for moving objects, it just led to a 1-frame lag in shadows that's almost unnoticable - an acceptable tradeoff.
 
 With permutation sampling, we can no longer trust that the visibility of the temporal sample is correct to reuse. The temporal sample now may come from a neighboring pixel, and at shadow pneumbras, the visibility is changing very frequently. It's no longer safe to reuse visibility, even on static scenes - we must retest visibility.
 

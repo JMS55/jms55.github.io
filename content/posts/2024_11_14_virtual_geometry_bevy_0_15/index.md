@@ -150,7 +150,7 @@ render_device.create_buffer_with_data(&BufferInitDescriptor {
 });
 ```
 
-In the culling pass, after LOD selection and culling, we're going to replace the the triangle buffer writeout code with something new.
+In the culling pass, after LOD selection and culling, we're going to replace the triangle buffer writeout code with something new.
 
 First we need to decide if the cluster is going to be software rasterized, or hardware rasterized. For this, my current heuristic is to take the cluster's screen-space AABB size we already calculated for occlusion culling, and check how big it is. If it's small (currently < 64 pixels on both axis), then it should be software rasterized. If it's large, then it gets hardware rasterized.
 
