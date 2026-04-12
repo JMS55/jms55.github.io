@@ -315,3 +315,4 @@ Speaking of research — to wrap up, here are some recent publications related t
 * [Real-Time Path Tracing in RE ENGINE for Resident Evil Requiem and PRAGMATA](https://www.youtube.com/watch?v=Gq1QdlQSzn0)
 * [The Future of Path Tracing | Best Practices, Optimizations & Future Standards](https://www.youtube.com/watch?v=0IrzX4LDIx8) (includes a great walkthrough of writing a pathtracer)
 * [Path Tracing Nanite in NVIDIA Zorah](https://www.youtube.com/watch?v=8AnVpcIczyk)
+* [Surfel-based global illumination on the web](https://juretriglav.si/surfel-based-global-illumination-on-the-web/)
