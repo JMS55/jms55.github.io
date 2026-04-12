@@ -202,6 +202,8 @@ Invalid samples now get discarded at every call site — returning zero radiance
 
 After all these changes, we're still not passing the [white furnace test](https://lousodrome.net/blog/light/2023/10/21/the-white-furnace-test), but we're [getting closer](https://github.com/bevyengine/bevy/pull/23737)!
 
+If you find BRDF math fun to read about, [OpenPBR](https://academysoftwarefoundation.github.io/OpenPBR/) and [Unreal's Substrate](https://advances.realtimerendering.com/s2023/2023%20Siggraph%20-%20Substrate.pdf) have a ton of detailed info on practical layered PBR models.
+
 ## World Cache Improvements
 
 ### Light Leak Reduction
