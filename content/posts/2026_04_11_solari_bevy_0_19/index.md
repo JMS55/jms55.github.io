@@ -208,8 +208,6 @@ After all these changes, we're still not passing the [white furnace test](https:
 
 Light leaks near corners of objects have been one of Solari's most visible artifacts. They occur when a world cache cell spans across a surface boundary — the cell contains irradiance from the other side of the wall, which bleeds through.
 
-{{ figure(src="light_leaks_before.png", caption="Light leaks near corners") }}
-
 The key insight is that light leaks tend to happen when the ray querying the cache is shorter than the cache cell size. In those cases, the queried cell is likely spanning across geometry.
 
 The fix is to force the finest LOD when `ray_t < cell_size`:
@@ -229,8 +227,6 @@ As an optimization, I only apply this to the first bounce of ReSTIR GI. Queries 
 {% end %}
 
 Combined with making LOD transitions less aggressive and reducing the finest LOD cell size (from 0.25m to 0.15m), this greatly reduces light leaks near corners. It doesn't fix light leaks entirely (especially since I turned world cache jitter back on this cycle), but it helps.
-
-{{ figure(src="light_leaks_after.png", caption="Reduced light leaks with finest-LOD forcing") }}
 
 ### Stochastic Updates
 
@@ -294,7 +290,7 @@ It's not quite as good as algorithms that store the importance of each light lik
 
 The results are pretty good!
 
-{{ figure(src="32_sample_ris.png", caption="Many lights scene, direct lighting only, no denoising, 32 sample RIS from the light grid") }}
+{{ figure(src="32_sample_grid_ris.png", caption="Many lights scene, direct lighting only, no denoising, 32 sample RIS from the light grid") }}
 
 However, there are still some unsolved problems:
 
