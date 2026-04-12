@@ -230,7 +230,11 @@ Combined with making LOD transitions less aggressive and reducing the finest LOD
 
 ### Stochastic Updates
 
-The finer resolution helps with quality, but it also means more active cells, which hurts performance a fair amount. To compensate, we now randomly skip updating cells once the count exceeds 40,000:
+The finer resolution helps with quality, but it also means more active cells, which hurts performance a fair amount.
+
+{{ figure(src="bistro_all_cells_update.png", caption="2.65ms to update every world cache cell in Bistro") }}
+
+To compensate, we now randomly skip updating cells once the count exceeds 40,000:
 
 ```rust
 if rand_f(&rng) >= f32(WORLD_CACHE_CELL_UPDATES_SOFT_CAP) / f32(world_cache_active_cells_count) {
@@ -239,6 +243,8 @@ if rand_f(&rng) >= f32(WORLD_CACHE_CELL_UPDATES_SOFT_CAP) / f32(world_cache_acti
 ```
 
 Stochastic world cache updates keeps the performance hit down in larger scenes, at the cost of less reactive lighting.
+
+{{ figure(src="bistro_stochastic_cells_update.png", caption="0.47ms to update a random 40,000 world cache cells in Bistro") }}
 
 I'm overall not super happy with the world cache, and plan to continue iterating on it, or explore alternative solutions.
 
