@@ -1,6 +1,6 @@
 +++
 title = "Realtime Raytracing in Bevy 0.19 (Solari)"
-date = "2026-04-11"
+date = "2026-04-12"
 
 [taxonomies]
 tags = ["bevy", "raytracing"]
