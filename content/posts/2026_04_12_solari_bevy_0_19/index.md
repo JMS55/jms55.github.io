@@ -270,7 +270,7 @@ Finally, a simple optimization: smooth metallic surfaces have zero diffuse contr
 
 ## Light Sampling Research
 
-Besides the BRDF work, the other major time sink this cycle was researching better light sampling. Currently, Solari's light sampling is brute force — we take completely random samples from the scene's lightsm and use RIS to pick one that is likely to contribute the most (not counting visibility). This works, but it's very inefficient, especially for large scenes with many lights, where most of them don't contribute to a given pixel.
+Besides the BRDF work, the other major time sink this cycle was researching better light sampling. Currently, Solari's light sampling is brute force — we take completely random samples from the scene's lights and use RIS to pick one that is likely to contribute the most (not counting visibility). This works, but it's very inefficient, especially for large scenes with many lights, where most of them don't contribute to a given pixel.
 
 {{ figure(src="32_sample_ris.png", caption="Many lights scene, direct lighting only, no denoising, 32 random sample RIS") }}
 
