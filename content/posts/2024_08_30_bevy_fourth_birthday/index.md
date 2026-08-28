@@ -3,7 +3,7 @@ title = "Bevy's Fourth Birthday - A Year of Meshlets"
 date = "2024-08-30"
 
 [taxonomies]
-tags = ["bevy"]
+tags = ["bevy", "bevy birthday"]
 +++
 
 > Written in response to [Bevy's Fourth Birthday](https://bevyengine.org/news/bevys-fourth-birthday).

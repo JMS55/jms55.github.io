@@ -3,7 +3,7 @@ title = "Bevy's Fifth Birthday - Progress and Production Readiness"
 date = "2025-09-03"
 
 [taxonomies]
-tags = ["bevy"]
+tags = ["bevy", "bevy birthday"]
 +++
 
 > Written in response to [Bevy's Fifth Birthday](https://bevy.org/news/bevys-fifth-birthday).
