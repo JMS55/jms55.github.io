@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light dark">
+  
+  
+    
+  
+  <meta name="description" content="Bevy, Rust, Graphics, etc">
+
+  <title>Realtime Raytracing in Bevy 0.19 (Solari)</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="https://jms55.github.io/img/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="https://jms55.github.io/img/favicon-16x16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="https://jms55.github.io/img/apple-touch-icon.png">
+  
+  <style>
+
+  /* light mode colors */
+  body {
+    --primary-color: #5871a2;
+    --primary-pale-color: #5871a233;
+    --primary-decoration-color: #5871a210;
+    --bg-color: #ffffff;
+    --text-color: #2f3030;
+    --text-pale-color: #767676;
+    --text-decoration-color: #a9a9a9;
+    --highlight-mark-color: #5f75b020;
+
+    --callout-note-color: #5871a2;
+    --callout-tip-color: #268556;
+    --callout-important-color: #885fc9;
+    --callout-warning-color: #ab6632;
+    --callout-caution-color: #c64e4e;
+  }
+
+  /* dark mode colors */
+  body.dark {
+    --primary-color: #6f8fd1;
+    --primary-pale-color: #6f8fd166;
+    --primary-decoration-color: #6f8fd112;
+    --bg-color: #1c1c1c;
+    --text-color: #c1c1c1;
+    --text-pale-color: #848484;
+    --text-decoration-color: #5f5f5f;
+    --highlight-mark-color: #8296cb3b;
+
+    --callout-note-color: #6f8fd1;
+    --callout-tip-color: #47976f;
+    --callout-important-color: #9776cd;
+    --callout-warning-color: #ad7a52;
+    --callout-caution-color: #d06161;
+  }
+
+  /* typography */
+  body {
+    --main-font: ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+    --code-font: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+    --homepage-max-width: 768px;
+    --main-max-width: 768px;
+    --avatar-size: 60px;
+    --font-size: 16px;
+    --line-height: 1.75;
+    --img-border-radius: 0px;
+    --detail-border-radius: 0px;
+    --dark-mode-img-brightness: 0.75;
+    --dark-mode-chart-brightness: 0.75;
+    --inline-code-border-radius: 2px;
+    --inline-code-bg-color: var(--primary-decoration-color);
+    --block-code-border-radius: 0px;
+    --block-code-border-color: var(--primary-color);
+    --detail-border-color: var(--primary-color);
+  }
+
+</style>
+
+  <link rel="stylesheet" href="https://jms55.github.io/main.css">
+  
+
+
+
+  
+</head>
+
+<body class="post">
+  
+  
+<div id="wrapper">
+  <div id="blank"></div>
+  <aside>
+    
+    
+    <nav>
+      <ul>
+        
+        <li>
+          <a class="h2" href="#introduction">Introduction</a>
+          
+        </li>
+        
+        <li>
+          <a class="h2" href="#recap-of-0-18">Recap of 0.18</a>
+          
+        </li>
+        
+        <li>
+          <a class="h2" href="#specular-improvements">Specular Improvements</a>
+          
+          <ul>
+            
+            <li>
+              <a class="h3" href="#mirror-brdf">Mirror BRDF</a>
+            </li>
+            
+            <li>
+              <a class="h3" href="#primary-surface-replacement">Primary Surface Replacement</a>
+            </li>
+            
+            <li>
+              <a class="h3" href="#path-termination">Path Termination</a>
+            </li>
+            
+          </ul>
+          
+        </li>
+        
+        <li>
+          <a class="h2" href="#brdf-correctness">BRDF Correctness</a>
+          
+          <ul>
+            
+            <li>
+              <a class="h3" href="#non-metal-layering">Non-Metal Layering</a>
+            </li>
+            
+            <li>
+              <a class="h3" href="#lobe-selection-in-the-pathtracer">Lobe Selection in the Pathtracer</a>
+            </li>
+            
+            <li>
+              <a class="h3" href="#vndf-sample-validation">VNDF Sample Validation</a>
+            </li>
+            
+          </ul>
+          
+        </li>
+        
+        <li>
+          <a class="h2" href="#world-cache-improvements">World Cache Improvements</a>
+          
+          <ul>
+            
+            <li>
+              <a class="h3" href="#light-leak-reduction">Light Leak Reduction</a>
+            </li>
+            
+            <li>
+              <a class="h3" href="#stochastic-updates">Stochastic Updates</a>
+            </li>
+            
+          </ul>
+          
+        </li>
+        
+        <li>
+          <a class="h2" href="#restir-improvements">ReSTIR Improvements</a>
+          
+          <ul>
+            
+            <li>
+              <a class="h3" href="#improved-spatial-sampling">Improved Spatial Sampling</a>
+            </li>
+            
+            <li>
+              <a class="h3" href="#skip-restir-gi-for-smooth-metals">Skip ReSTIR GI for Smooth Metals</a>
+            </li>
+            
+          </ul>
+          
+        </li>
+        
+        <li>
+          <a class="h2" href="#light-sampling-research">Light Sampling Research</a>
+          
+          <ul>
+            
+            <li>
+              <a class="h3" href="#what-didn-t-work">What Didn&#x27;t Work</a>
+            </li>
+            
+            <li>
+              <a class="h3" href="#light-grids">Light Grids</a>
+            </li>
+            
+          </ul>
+          
+        </li>
+        
+        <li>
+          <a class="h2" href="#recent-interesting-research">Recent Interesting Research</a>
+          
+        </li>
+        
+      </ul>
+    </nav>
+    
+    
+    <button id="back-to-top" aria-label="back to top">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-up"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>
+
+    </button>
+    
+  </aside>
+  <main>
+    
+<header>
+  <nav>
+    <a id="back-link" href="https:&#x2F;&#x2F;jms55.github.io&#x2F;posts">← Back</a>
+  </nav>
+</header>
+
+
+    <div>
+      
+      
+      
+      
+      <div id="copy-cfg" style="display: none;" data-copy-icon="&lt;svg xmlns=&quot;http:&#x2F;&#x2F;www.w3.org&#x2F;2000&#x2F;svg&quot; viewBox=&quot;0 0 24 24&quot; width=&quot;18&quot; height=&quot;18&quot;&gt;&lt;path d=&quot;M6.9998 6V3C6.9998 2.44772 7.44752 2 7.9998 2H19.9998C20.5521 2 20.9998 2.44772 20.9998 3V17C20.9998 17.5523 20.5521 18 19.9998 18H16.9998V20.9991C16.9998 21.5519 16.5499 22 15.993 22H4.00666C3.45059 22 3 21.5554 3 20.9991L3.0026 7.00087C3.0027 6.44811 3.45264 6 4.00942 6H6.9998ZM5.00242 8L5.00019 20H14.9998V8H5.00242ZM8.9998 6H16.9998V16H18.9998V4H8.9998V6Z&quot; fill=&quot;currentColor&quot;&gt;&lt;&#x2F;path&gt;&lt;&#x2F;svg&gt;
+" data-check-icon="&lt;svg xmlns=&quot;http:&#x2F;&#x2F;www.w3.org&#x2F;2000&#x2F;svg&quot; viewBox=&quot;0 0 24 24&quot; width=&quot;18&quot; height=&quot;18&quot;&gt;&lt;path d=&quot;M10.0007 15.1709L19.1931 5.97852L20.6073 7.39273L10.0007 17.9993L3.63672 11.6354L5.05093 10.2212L10.0007 15.1709Z&quot; fill=&quot;currentColor&quot;&gt;&lt;&#x2F;path&gt;&lt;&#x2F;svg&gt;
+"></div>
+      
+      <article class="prose">
+        <h1>Realtime Raytracing in Bevy 0.19 (Solari)</h1>
+        <div id="post-info">
+          <div id="date">
+            <span id="publish">Apr 12, 2026</span>
+            </div>
+
+          
+          <div id="tags">
+            <a class="instant" href="https://jms55.github.io/tags/bevy"><span>#</span>bevy</a><a class="instant" href="https://jms55.github.io/tags/raytracing"><span>#</span>raytracing</a>
+          </div>
+          
+        </div>
+
+        
+        
+
+        
+
+        <h2 id="introduction">Introduction<a class="zola-anchor" href="#introduction" aria-label="Anchor link for: introduction" style="visibility: hidden;"></a>
+</h2>
+<p>Welcome back to the third installment of <a href="/tags/raytracing">my series</a> on the development of Solari, Bevy's realtime pathtraced renderer! Bevy 0.19 is fast approaching, so let's talk about what I've been working on.</p>
+<p>Compared to 0.18, this cycle was lighter on big features. Most of my time went into polishing existing aspects of the renderer, rather than writing new techniques. I spent a lot of time fixing Solari's material BRDF, improving specular quality, and yet again improving the world cache.</p>
+<p>I also spent a significant chunk of this cycle researching light sampling techniques to improve NEE, though that work is still ongoing, and hasn't produced any concrete PRs yet. More on that later.</p>
+<figure>
+    <img
+        src="headline_many_lights.png"
+        
+        
+        
+    >
+    
+    <figcaption><p>A scene lit purely by 441 emissive sphere meshes, stress testing light sampling.</p>
+</figcaption>
+    
+</figure>
+<p>Here's a summary of what's changed in Solari for Bevy 0.19:</p>
+<ul>
+<li><strong>Specular improvements</strong>: dedicated mirror BRDF, primary surface replacement, better path termination</li>
+<li><strong>BRDF correctness</strong>: proper layering for non-metals, Fresnel-based lobe selection, invalid sample rejection</li>
+<li><strong>World cache</strong>: light leak reduction and stochastic updates</li>
+<li><strong>ReSTIR</strong>: better spatial sample finding, skip GI for smooth metals</li>
+</ul>
+<p>Before getting into the details, let's recap where we left off.</p>
+<h2 id="recap-of-0-18">Recap of 0.18<a class="zola-anchor" href="#recap-of-0-18" aria-label="Anchor link for: recap-of-0-18" style="visibility: hidden;"></a>
+</h2>
+<p>The major feature of Solari 0.18 was added support for specular materials. We added a separate specular GI pass that does 0-3 bounce pathtracing by sampling the GGX lobe of the BRDF via bounded VNDF sampling. We also fixed a major energy loss bug in light tile packing, reduced ReSTIR resampling bias, and made the world cache more reactive and much more performant on large scenes like Bistro.</p>
+<p>However, the initial specular implementation was rough around the edges. During the 0.19 cycle I noticed that mirrors had artifacts, and our BRDF had correctness issues with non-metals. The world cache also still had light leak problems.</p>
+<p>This cycle, I spent a lot of time fixing or mitigating these issues.</p>
+<h2 id="specular-improvements">Specular Improvements<a class="zola-anchor" href="#specular-improvements" aria-label="Anchor link for: specular-improvements" style="visibility: hidden;"></a>
+</h2>
+<h3 id="mirror-brdf">Mirror BRDF<a class="zola-anchor" href="#mirror-brdf" aria-label="Anchor link for: mirror-brdf" style="visibility: hidden;"></a>
+</h3>
+<p>In Bevy 0.18, perfect mirrors were handled by clamping roughness to 0.001, and then special-casing the GGX VNDF sampling to reflect perfectly at that threshold. This worked for sampling, but the microfacet BRDF evaluation was never designed to handle near-zero roughness — it produced black line artifacts on mirror surfaces.</p>
+<p><figure>
+    <img
+        src="mirror_artifacts_before.png"
+        
+        
+        
+    >
+    
+    <figcaption><p>Black line artifacts (bottom right) from the hacked microfacet BRDF</p>
+</figcaption>
+    
+</figure>
+
+<figure>
+    <img
+        src="mirror_artifacts_after.png"
+        
+        
+        
+    >
+    
+    <figcaption><p>Fixed mirrors with the dedicated mirror BRDF</p>
+</figcaption>
+    
+</figure>
+</p>
+<p>The fix was to stop trying to hack the microfacet BRDF, and instead introduce a proper mirror BRDF. Roughness is no longer clamped to a minimum — true zero-roughness materials are now allowed.</p>
+<p>The mirror BRDF is simple in theory, but a little tricky to implement correctly: it evaluates to the Fresnel term when the half-vector is aligned with the normal, and zero otherwise. Its PDF is INF (a delta distribution) when aligned, and zero otherwise.</p>
+<p>When sampling the mirror BRDF for importance sampling a direction for the next bounce, you need to avoid dividing by the INF PDF. But when doing MIS for NEE/emissive hits, you <em>do</em> want to use the INF PDF. I also had to change my balance heuristic code to handle infinite values correctly:</p>
+<pre data-lang="rust" style="background-color:#002b36;color:#839496;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#586e75;">// Old balance heuristic
+</span><span style="color:#268bd2;">fn </span><span style="color:#b58900;">balance_heuristic</span><span style="color:#657b83;">(</span><span style="color:#268bd2;">f</span><span>: </span><span style="color:#268bd2;">f32</span><span>, </span><span style="color:#268bd2;">g</span><span>: </span><span style="color:#268bd2;">f32</span><span style="color:#657b83;">) </span><span>-&gt; </span><span style="color:#268bd2;">f32 </span><span style="color:#657b83;">{
+</span><span>    </span><span style="color:#268bd2;">let</span><span> sum </span><span style="color:#657b83;">=</span><span> f </span><span style="color:#657b83;">+</span><span> g;
+</span><span>    </span><span style="color:#859900;">if</span><span> sum </span><span style="color:#657b83;">== </span><span style="color:#6c71c4;">0.0 </span><span style="color:#657b83;">{
+</span><span>        </span><span style="color:#859900;">return </span><span style="color:#6c71c4;">0.0</span><span>;
+</span><span>    </span><span style="color:#657b83;">}
+</span><span>    </span><span style="color:#859900;">return max</span><span style="color:#657b83;">(</span><span style="color:#6c71c4;">0.0</span><span>, f </span><span style="color:#657b83;">/</span><span> sum</span><span style="color:#657b83;">)</span><span>;
+</span><span style="color:#657b83;">}
+</span><span>
+</span><span style="color:#586e75;">// New balance heuristic - handles INF
+</span><span style="color:#268bd2;">fn </span><span style="color:#b58900;">balance_heuristic</span><span style="color:#657b83;">(</span><span style="color:#268bd2;">f</span><span>: </span><span style="color:#268bd2;">f32</span><span>, </span><span style="color:#268bd2;">g</span><span>: </span><span style="color:#268bd2;">f32</span><span style="color:#657b83;">) </span><span>-&gt; </span><span style="color:#268bd2;">f32 </span><span style="color:#657b83;">{
+</span><span>    </span><span style="color:#586e75;">// ReSTIR reservoirs can have UCW=0, but you can remove this if you&#39;re not doing ReSTIR
+</span><span>    </span><span style="color:#859900;">if</span><span> f </span><span style="color:#657b83;">== </span><span style="color:#6c71c4;">0.0 </span><span style="color:#657b83;">{
+</span><span>        </span><span style="color:#859900;">return </span><span style="color:#6c71c4;">0.0</span><span>;
+</span><span>    </span><span style="color:#657b83;">}
+</span><span>    </span><span style="color:#859900;">return max</span><span style="color:#657b83;">(</span><span style="color:#6c71c4;">0.0</span><span>, </span><span style="color:#6c71c4;">1.0 </span><span style="color:#657b83;">/ (</span><span style="color:#6c71c4;">1.0 </span><span style="color:#657b83;">+ (</span><span>g </span><span style="color:#657b83;">/</span><span> f</span><span style="color:#657b83;">)))</span><span>;
+</span><span style="color:#657b83;">}
+</span></code></pre>
+<p>As part of this change, cos_theta (the <code>NdotL</code> term from the rendering equation) was also moved into the BRDF evaluation functions themselves. The mirror BRDF doesn't use cos_theta (it cancels out for a perfect reflection), so having it outside the BRDF was causing incorrect results. The diffuse and specular BRDF functions now each include their own cos_theta handling internally.</p>
+<h3 id="primary-surface-replacement">Primary Surface Replacement<a class="zola-anchor" href="#primary-surface-replacement" aria-label="Anchor link for: primary-surface-replacement" style="visibility: hidden;"></a>
+</h3>
+<p>One of the open issues from 0.18 was that mirror reflections had denoising artifacts — cross-hatching patterns when the camera was static, and ghosting when objects in reflections moved.</p>
+<figure>
+    <img
+        src="mirror_denoising_before.png"
+        
+        
+        
+    >
+    
+    <figcaption><p>Cross-hatching artifacts without PSR</p>
+</figcaption>
+    
+</figure>
+<p>The root cause is that DLSS Ray Reconstruction uses guide buffers (normals, depth, motion vectors) from the primary surface to denoise. But for a mirror, the primary surface is just a flat reflective plane — the denoiser has no information about the geometry visible <em>in</em> the reflection.</p>
+<p>To fix this, I implemented primary surface replacement (PSR), a technique described in NVIDIA's <a rel="nofollow noreferrer" href="https://developer.nvidia.com/blog/rendering-perfect-reflections-and-refractions-in-path-traced-games">"Rendering Perfect Reflections and Refractions in Path-Traced Games"</a>.</p>
+<p>The idea is to trace through mirror bounces until we hit a non-mirror surface, then replace the primary surface's guide buffer data with that surface's data. The denoiser then sees the actual reflected geometry instead of the flat mirror.</p>
+
+<blockquote class="callout note no-title">
+  
+  
+  <div class="icon">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18"><path d="M12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2C17.5228 2 22 6.47715 22 12C22 17.5228 17.5228 22 12 22ZM12 20C16.4183 20 20 16.4183 20 12C20 7.58172 16.4183 4 12 4C7.58172 4 4 7.58172 4 12C4 16.4183 7.58172 20 12 20ZM11 7H13V9H11V7ZM11 11H13V17H11V11Z" fill="currentColor"></path></svg>
+
+  </div>
+  <div class="content">
+    <p>Currently, I only apply PSR to smooth metals. I didn't get great results from applying it to smooth non-metals.</p>
+
+  </div>
+  
+</blockquote>
+
+<p>The tricky part is computing correct motion vectors for the reflected surface. We need to account for the mirror transformations, which means chaining <a rel="nofollow noreferrer" href="https://en.wikipedia.org/wiki/Householder_transformation">Householder reflection matrices</a> across each mirror bounce:</p>
+<pre data-lang="rust" style="background-color:#002b36;color:#839496;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#268bd2;">fn </span><span style="color:#b58900;">reflection_matrix</span><span style="color:#657b83;">(</span><span style="color:#268bd2;">plane_normal</span><span>: vec3f</span><span style="color:#657b83;">) </span><span>-&gt; mat3x3&lt;</span><span style="color:#268bd2;">f32</span><span>&gt; </span><span style="color:#657b83;">{
+</span><span>    </span><span style="color:#268bd2;">let</span><span> n_nt </span><span style="color:#657b83;">= </span><span>mat3x3&lt;</span><span style="color:#268bd2;">f32</span><span>&gt;</span><span style="color:#657b83;">(
+</span><span>        plane_normal </span><span style="color:#657b83;">*</span><span> plane_normal.x,
+</span><span>        plane_normal </span><span style="color:#657b83;">*</span><span> plane_normal.y,
+</span><span>        plane_normal </span><span style="color:#657b83;">*</span><span> plane_normal.z,
+</span><span>    </span><span style="color:#657b83;">)</span><span>;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> identity_matrix </span><span style="color:#657b83;">= </span><span>mat3x3&lt;</span><span style="color:#268bd2;">f32</span><span>&gt;</span><span style="color:#657b83;">(</span><span style="color:#6c71c4;">1.0</span><span>, </span><span style="color:#6c71c4;">0.0</span><span>, </span><span style="color:#6c71c4;">0.0</span><span>, </span><span style="color:#6c71c4;">0.0</span><span>, </span><span style="color:#6c71c4;">1.0</span><span>, </span><span style="color:#6c71c4;">0.0</span><span>, </span><span style="color:#6c71c4;">0.0</span><span>, </span><span style="color:#6c71c4;">0.0</span><span>, </span><span style="color:#6c71c4;">1.0</span><span style="color:#657b83;">)</span><span>;
+</span><span>    </span><span style="color:#859900;">return</span><span> identity_matrix </span><span style="color:#657b83;">-</span><span> n_nt </span><span style="color:#657b83;">* </span><span style="color:#6c71c4;">2.0</span><span>;
+</span><span style="color:#657b83;">}
+</span></code></pre>
+<p>For each mirror bounce, we multiply the accumulated rotation matrix by the reflection matrix of that surface's normal. When we finally hit a non-mirror surface, we use this accumulated matrix to transform the hit position into a "virtual" position as seen through the mirror chain, and compute motion vectors from that.</p>
+
+<blockquote class="callout note no-title">
+  
+  
+  <div class="icon">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18"><path d="M12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2C17.5228 2 22 6.47715 22 12C22 17.5228 17.5228 22 12 22ZM12 20C16.4183 20 20 16.4183 20 12C20 7.58172 16.4183 4 12 4C7.58172 4 4 7.58172 4 12C4 16.4183 7.58172 20 12 20ZM11 7H13V9H11V7ZM11 11H13V17H11V11Z" fill="currentColor"></path></svg>
+
+  </div>
+  <div class="content">
+    <p>This technique assumes a flat surface, and is incorrect for curved mirrors like a sphere.</p>
+
+  </div>
+  
+</blockquote>
+
+<figure>
+    <img
+        src="mirror_denoising_after.png"
+        
+        
+        
+    >
+    
+    <figcaption><p>Improved mirror reflections with PSR</p>
+</figcaption>
+    
+</figure>
+<p>In practice, while PSR itself gave massive improvements, I haven't really noticed any benefit from implementing specular motion vectors. More testing is needed; DLSS-RR is a little picky, and expects guide buffers to be calculated in the same way it was trained on — I could just be implementing things in a way DLSS-RR does not like.</p>
+<h3 id="path-termination">Path Termination<a class="zola-anchor" href="#path-termination" aria-label="Anchor link for: path-termination" style="visibility: hidden;"></a>
+</h3>
+<p>In 0.18, the specular GI pass decided when to terminate a path in the world cache based on the roughness of the current surface. If the surface was rough enough, we'd query the cache instead of tracing further.</p>
+<p>While this works, it's a little naive. A series of semi-rough bounces is basically equivalent to one very rough bounce.</p>
+<p>The fix was to switch to a path termination heuristic inspired by <a rel="nofollow noreferrer" href="https://github.com/NVIDIAGameWorks/RTXGI">RTXGI</a>, which accounts for the cumulative spread of the full path. Path spread can be approximated by a cone based on the roughness of the surface a ray is coming from, and the distance the ray traveled. When the base of the cone is larger than the size of the world cache cell we're sampling from, it's safe to terminate into the world cache.</p>
+<figure>
+    <img
+        src="path_spread.svg"
+        
+        
+        
+    >
+    
+    <figcaption><p>Cumulative path spread grows with each bounce until it exceeds the world cache cell size, triggering termination</p>
+</figcaption>
+    
+</figure>
+<p>This improves performance by terminating paths sooner when appropriate. However, there are still visible artifacts when transitioning between LOD levels of the world cache — the lighting can pop or shift as the path termination crosses a LOD boundry. Unlike ReSTIR GI for diffuse, there's no temporal reservioirs to hide the transition. Smoothing out these transitions is still an open problem.</p>
+<h2 id="brdf-correctness">BRDF Correctness<a class="zola-anchor" href="#brdf-correctness" aria-label="Anchor link for: brdf-correctness" style="visibility: hidden;"></a>
+</h2>
+<p>In 0.18, Solari's BRDF for non-metals simply added the diffuse and specular lobe contributions together. I assumed that's all there was to it — evaluate each lobe independently, sum the results, done.</p>
+<p>This is what <a rel="nofollow noreferrer" href="https://google.github.io/filament/main/filament.html">Filament</a> does (which is what Bevy's BRDF is based on), but it's wrong. In reality, the specular lobe sits <em>on top of</em> the diffuse lobe as a separate layer. Light has to pass through the specular layer to reach the diffuse layer, and then pass through it again on the way out. The Fresnel equations govern how much light is reflected vs transmitted at each crossing. Ignoring this means the BRDF produces too much energy — both lobes claim the full incoming light, when they should be sharing it.</p>
+<figure>
+    <img
+        src="brdf_before.png"
+        
+        
+        
+    >
+    
+    <figcaption><p>Incorrect BRDF code rendered via Solari's pathtracer</p>
+</figcaption>
+    
+</figure>
+<p>Fixing this was the biggest correctness change of the cycle, and I owe a big thanks to <a rel="nofollow noreferrer" href="https://www.linkedin.com/in/matt-kielan-9b054a165">Matt Kielan</a> for guiding me through this (I spent a <em>lot</em> of time trying to figure out what I was doing wrong before I learned about this), along with the INF-handling MIS code from earlier.</p>
+<h3 id="non-metal-layering">Non-Metal Layering<a class="zola-anchor" href="#non-metal-layering" aria-label="Anchor link for: non-metal-layering" style="visibility: hidden;"></a>
+</h3>
+<p>The fix is two Fresnel weighings — one for light entering the specular layer, and one for light exiting back out:</p>
+<pre data-lang="rust" style="background-color:#002b36;color:#839496;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#268bd2;">fn </span><span style="color:#b58900;">evaluate_diffuse_brdf</span><span style="color:#657b83;">(
+</span><span>    </span><span style="color:#268bd2;">wo</span><span>: vec3&lt;</span><span style="color:#268bd2;">f32</span><span>&gt;,
+</span><span>    </span><span style="color:#268bd2;">wi</span><span>: vec3&lt;</span><span style="color:#268bd2;">f32</span><span>&gt;,
+</span><span>    </span><span style="color:#268bd2;">world_normal</span><span>: vec3&lt;</span><span style="color:#268bd2;">f32</span><span>&gt;,
+</span><span>    </span><span style="color:#268bd2;">material</span><span>: ResolvedMaterial,
+</span><span style="color:#657b83;">) </span><span>-&gt; vec3&lt;</span><span style="color:#268bd2;">f32</span><span>&gt; </span><span style="color:#657b83;">{
+</span><span>    </span><span style="color:#268bd2;">let</span><span> diffuse_color </span><span style="color:#657b83;">= </span><span style="color:#859900;">calculate_diffuse_color</span><span style="color:#657b83;">(
+</span><span>        material.base_color, material.metallic, </span><span style="color:#6c71c4;">0.0</span><span>, </span><span style="color:#6c71c4;">0.0</span><span>,
+</span><span>    </span><span style="color:#657b83;">) / </span><span style="color:#cb4b16;">PI</span><span>;
+</span><span>
+</span><span>    </span><span style="color:#268bd2;">let</span><span> NdotL </span><span style="color:#657b83;">= </span><span style="color:#859900;">dot</span><span style="color:#657b83;">(</span><span>world_normal, wi</span><span style="color:#657b83;">)</span><span>;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> NdotV </span><span style="color:#657b83;">= </span><span style="color:#859900;">dot</span><span style="color:#657b83;">(</span><span>world_normal, wo</span><span style="color:#657b83;">)</span><span>;
+</span><span>    </span><span style="color:#859900;">if</span><span> NdotL </span><span style="color:#657b83;">&lt; </span><span style="color:#6c71c4;">0.0001 </span><span style="color:#859900;">||</span><span> NdotV </span><span style="color:#657b83;">&lt; </span><span style="color:#6c71c4;">0.0001 </span><span style="color:#657b83;">{ </span><span style="color:#859900;">return vec3</span><span style="color:#657b83;">(</span><span style="color:#6c71c4;">0.0</span><span style="color:#657b83;">)</span><span>; </span><span style="color:#657b83;">}
+</span><span>
+</span><span>    </span><span style="color:#268bd2;">let </span><span style="color:#cb4b16;">F0 </span><span style="color:#657b83;">=</span><span> calculate_F0</span><span style="color:#657b83;">(
+</span><span>        material.base_color, material.metallic, </span><span style="color:#859900;">vec3</span><span style="color:#657b83;">(</span><span>material.reflectance</span><span style="color:#657b83;">)</span><span>,
+</span><span>    </span><span style="color:#657b83;">)</span><span>;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> layering </span><span style="color:#657b83;">= (</span><span style="color:#6c71c4;">1.0 </span><span style="color:#657b83;">- </span><span style="color:#859900;">fresnel</span><span style="color:#657b83;">(</span><span style="color:#cb4b16;">F0</span><span>, NdotL</span><span style="color:#657b83;">)) * (</span><span style="color:#6c71c4;">1.0 </span><span style="color:#657b83;">- </span><span style="color:#859900;">fresnel</span><span style="color:#657b83;">(</span><span style="color:#cb4b16;">F0</span><span>, NdotV</span><span style="color:#657b83;">))</span><span>;
+</span><span>
+</span><span>    </span><span style="color:#859900;">return</span><span> diffuse_color </span><span style="color:#657b83;">*</span><span> layering </span><span style="color:#657b83;">*</span><span> NdotL;
+</span><span style="color:#657b83;">}
+</span></code></pre>
+<p>The <code>(1 - F)</code> terms ensure that energy reflected by the specular layer doesn't also contribute to the diffuse layer. At grazing angles, where Fresnel reflection is strong, the diffuse contribution naturally darkens.</p>
+<p>Note the <code>fresnel()</code> call — previously Solari imported this from <code>bevy_pbr</code>, but Bevy's standard PBR pipeline does some non-physical things with f90 for ambient occlusion purposes. For a pathtracer, we want the straightforward Schlick approximation, so Solari now has its own:</p>
+<pre data-lang="rust" style="background-color:#002b36;color:#839496;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#268bd2;">fn </span><span style="color:#b58900;">fresnel</span><span style="color:#657b83;">(</span><span style="color:#268bd2;">f0</span><span>: vec3&lt;</span><span style="color:#268bd2;">f32</span><span>&gt;, </span><span style="color:#268bd2;">LdotH</span><span>: </span><span style="color:#268bd2;">f32</span><span style="color:#657b83;">) </span><span>-&gt; vec3&lt;</span><span style="color:#268bd2;">f32</span><span>&gt; </span><span style="color:#657b83;">{
+</span><span>    </span><span style="color:#859900;">return</span><span> f0 </span><span style="color:#657b83;">+ (</span><span style="color:#6c71c4;">1.0 </span><span style="color:#657b83;">-</span><span> f0</span><span style="color:#657b83;">) * </span><span style="color:#859900;">pow</span><span style="color:#657b83;">(</span><span style="color:#6c71c4;">1.0 </span><span style="color:#657b83;">-</span><span> LdotH, </span><span style="color:#6c71c4;">5.0</span><span style="color:#657b83;">)</span><span>;
+</span><span style="color:#657b83;">}
+</span></code></pre>
+<h3 id="lobe-selection-in-the-pathtracer">Lobe Selection in the Pathtracer<a class="zola-anchor" href="#lobe-selection-in-the-pathtracer" aria-label="Anchor link for: lobe-selection-in-the-pathtracer" style="visibility: hidden;"></a>
+</h3>
+<p>The same Fresnel logic also applies to importance sampling. The reference pathtracer now picks between the diffuse and specular lobes based on how much energy Fresnel reflects at the current viewing angle:</p>
+<pre data-lang="rust" style="background-color:#002b36;color:#839496;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#268bd2;">let </span><span style="color:#cb4b16;">F0 </span><span style="color:#657b83;">=</span><span> calculate_F0</span><span style="color:#657b83;">(</span><span>material.base_color, material.metallic, </span><span style="color:#859900;">vec3</span><span style="color:#657b83;">(</span><span>material.reflectance</span><span style="color:#657b83;">))</span><span>;
+</span><span style="color:#268bd2;">let</span><span> df </span><span style="color:#657b83;">= </span><span style="color:#6c71c4;">1.0 </span><span style="color:#657b83;">- </span><span style="color:#859900;">luminance</span><span style="color:#657b83;">(</span><span style="color:#859900;">fresnel</span><span style="color:#657b83;">(</span><span style="color:#cb4b16;">F0</span><span>, NdotV</span><span style="color:#657b83;">))</span><span>;
+</span><span style="color:#268bd2;">let</span><span> diffuse_weight </span><span style="color:#657b83;">= </span><span style="color:#859900;">mix</span><span style="color:#657b83;">(</span><span>df, </span><span style="color:#6c71c4;">0.0</span><span>, material.metallic</span><span style="color:#657b83;">)</span><span>;
+</span><span style="color:#268bd2;">let</span><span> specular_weight </span><span style="color:#657b83;">= </span><span style="color:#6c71c4;">1.0 </span><span style="color:#657b83;">-</span><span> diffuse_weight;
+</span></code></pre>
+<p>At grazing angles, most energy goes to the specular lobe, so the pathtracer samples it more often. At normal incidence, more energy goes to the diffuse lobe.</p>
+<figure>
+    <img
+        src="brdf_after.png"
+        
+        
+        
+    >
+    
+    <figcaption><p>Correct BRDF code rendered via Solari's pathtracer</p>
+</figcaption>
+    
+</figure>
+<h3 id="vndf-sample-validation">VNDF Sample Validation<a class="zola-anchor" href="#vndf-sample-validation" aria-label="Anchor link for: vndf-sample-validation" style="visibility: hidden;"></a>
+</h3>
+<p>I also discovered that the bounded VNDF sampling code could produce invalid samples — directions below the surface hemisphere. I hadn't read the paper thoroughly enough to realize this was even possible, and was blindly using whatever direction it gave back.</p>
+<p>The fix is a simple validity check:</p>
+<pre data-lang="rust" style="background-color:#002b36;color:#839496;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#586e75;">// Result is invalid when output.z &lt;= 0.0 or is NaN, and must be discarded
+</span><span style="color:#268bd2;">fn </span><span style="color:#b58900;">ggx_vndf_sample_invalid</span><span style="color:#657b83;">(</span><span style="color:#268bd2;">ray_tangent</span><span>: vec3&lt;</span><span style="color:#268bd2;">f32</span><span>&gt;</span><span style="color:#657b83;">) </span><span>-&gt; </span><span style="color:#268bd2;">bool </span><span style="color:#657b83;">{
+</span><span>    </span><span style="color:#859900;">return !</span><span style="color:#657b83;">(</span><span>ray_tangent.z </span><span style="color:#657b83;">&gt; </span><span style="color:#6c71c4;">0.0</span><span style="color:#657b83;">)</span><span>;
+</span><span style="color:#657b83;">}
+</span></code></pre>
+<p>Invalid samples now get discarded at every call site — returning zero radiance in specular GI, breaking out of multi-bounce loops, and so on. NaN guards were also added to the PDF calculation (used for MIS).</p>
+<p>After all these changes, we're still not passing the <a rel="nofollow noreferrer" href="https://lousodrome.net/blog/light/2023/10/21/the-white-furnace-test">white furnace test</a>, but we're <a rel="nofollow noreferrer" href="https://github.com/bevyengine/bevy/pull/23737">getting closer</a>!</p>
+<p>If you find BRDF math fun to read about, <a rel="nofollow noreferrer" href="https://academysoftwarefoundation.github.io/OpenPBR/">OpenPBR</a> and <a rel="nofollow noreferrer" href="https://advances.realtimerendering.com/s2023/2023%20Siggraph%20-%20Substrate.pdf">Unreal's Substrate</a> have a ton of detailed info on practical layered PBR models.</p>
+<h2 id="world-cache-improvements">World Cache Improvements<a class="zola-anchor" href="#world-cache-improvements" aria-label="Anchor link for: world-cache-improvements" style="visibility: hidden;"></a>
+</h2>
+<h3 id="light-leak-reduction">Light Leak Reduction<a class="zola-anchor" href="#light-leak-reduction" aria-label="Anchor link for: light-leak-reduction" style="visibility: hidden;"></a>
+</h3>
+<p>Light leaks near corners of objects have been one of Solari's most visible artifacts. They occur when a world cache cell spans across a surface boundary — the cell contains irradiance from the other side of the wall, which bleeds through.</p>
+<p>The key insight is that light leaks tend to happen when the ray querying the cache is shorter than the cache cell size. In those cases, the queried cell is likely spanning across geometry.</p>
+<p>The fix is to force the finest LOD when <code>ray_t &lt; cell_size</code>:</p>
+<pre data-lang="rust" style="background-color:#002b36;color:#839496;" class="language-rust "><code class="language-rust" data-lang="rust"><span>var cell_size </span><span style="color:#657b83;">= </span><span style="color:#859900;">get_cell_size</span><span style="color:#657b83;">(</span><span>world_position, view_position</span><span style="color:#657b83;">)</span><span>;
+</span><span>
+</span><span style="color:#859900;">#</span><span>ifdef </span><span style="color:#cb4b16;">WORLD_CACHE_FIRST_BOUNCE_LIGHT_LEAK_PREVENTION
+</span><span>    </span><span style="color:#859900;">if </span><span style="color:#268bd2;">ray_t </span><span style="color:#657b83;">&lt;</span><span> cell_size </span><span style="color:#657b83;">{
+</span><span>        cell_size </span><span style="color:#657b83;">= </span><span style="color:#cb4b16;">WORLD_CACHE_POSITION_BASE_CELL_SIZE</span><span>;
+</span><span>    </span><span style="color:#657b83;">}
+</span><span style="color:#859900;">#</span><span>endif
+</span></code></pre>
+
+<blockquote class="callout note no-title">
+  
+  
+  <div class="icon">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18"><path d="M12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2C17.5228 2 22 6.47715 22 12C22 17.5228 17.5228 22 12 22ZM12 20C16.4183 20 20 16.4183 20 12C20 7.58172 16.4183 4 12 4C7.58172 4 4 7.58172 4 12C4 16.4183 7.58172 20 12 20ZM11 7H13V9H11V7ZM11 11H13V17H11V11Z" fill="currentColor"></path></svg>
+
+  </div>
+  <div class="content">
+    <p>As an optimization, I only apply this to the first bounce of ReSTIR GI. Queries as part of world cache update continue to use a coarser LOD.</p>
+
+  </div>
+  
+</blockquote>
+
+<p>Combined with making LOD transitions less aggressive and reducing the finest LOD cell size (from 0.25m to 0.15m), this greatly reduces light leaks near corners. It doesn't fix light leaks entirely (especially since I turned world cache jitter back on this cycle), but it helps.</p>
+<h3 id="stochastic-updates">Stochastic Updates<a class="zola-anchor" href="#stochastic-updates" aria-label="Anchor link for: stochastic-updates" style="visibility: hidden;"></a>
+</h3>
+<p>The finer resolution helps with quality, but it also means more active cells, which hurts performance a fair amount.</p>
+<figure>
+    <img
+        src="bistro_all_cells_update.png"
+        
+        
+        
+    >
+    
+    <figcaption><p>2.65ms to update every world cache cell in Bistro</p>
+</figcaption>
+    
+</figure>
+<p>To compensate, we now randomly skip updating cells once the count exceeds 40,000:</p>
+<pre data-lang="rust" style="background-color:#002b36;color:#839496;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#859900;">if rand_f</span><span style="color:#657b83;">(</span><span style="color:#859900;">&amp;</span><span>rng</span><span style="color:#657b83;">) &gt;= </span><span style="color:#268bd2;">f32</span><span style="color:#657b83;">(</span><span style="color:#cb4b16;">WORLD_CACHE_CELL_UPDATES_SOFT_CAP</span><span style="color:#657b83;">) / </span><span style="color:#268bd2;">f32</span><span style="color:#657b83;">(</span><span>world_cache_active_cells_count</span><span style="color:#657b83;">) {
+</span><span>    </span><span style="color:#859900;">return</span><span>;
+</span><span style="color:#657b83;">}
+</span></code></pre>
+<p>Stochastic world cache updates keeps the performance hit down in larger scenes, at the cost of less reactive lighting.</p>
+<figure>
+    <img
+        src="bistro_stochastic_cells_update.png"
+        
+        
+        
+    >
+    
+    <figcaption><p>0.47ms to update a random 40,000 world cache cells in Bistro</p>
+</figcaption>
+    
+</figure>
+<p>I'm overall not super happy with the world cache, and plan to continue iterating on it, or explore alternative solutions.</p>
+<p>As part of this change I also split the DI and GI world cache sampling steps into separate compute dispatches, which gave a small performance win.</p>
+<h2 id="restir-improvements">ReSTIR Improvements<a class="zola-anchor" href="#restir-improvements" aria-label="Anchor link for: restir-improvements" style="visibility: hidden;"></a>
+</h2>
+<h3 id="improved-spatial-sampling">Improved Spatial Sampling<a class="zola-anchor" href="#improved-spatial-sampling" aria-label="Anchor link for: improved-spatial-sampling" style="visibility: hidden;"></a>
+</h3>
+<p>This cycle I also improved the algorithm for finding valid spatial samples from neighboring pixels during ReSTIR DI and GI spatial resampling. In areas with challenging geometry like curved surfaces or cracks between meshes, pixels were unable to find a valid neighbor, hurting quality.</p>
+<figure>
+    <img
+        src="old_spatial_resampling.png"
+        
+        
+        
+    >
+    
+    <figcaption><p>Pink pixels have no valid spatial sample (before)</p>
+</figcaption>
+    
+</figure>
+<p>The fix was pretty simple: Although we only pick 1 spatial sample, we attempt to find a valid neighbor up to 5 times. Before we were using a fixed sampling radius, but now after every failed attempt, we halve the sampling radius.</p>
+<figure>
+    <img
+        src="new_spatial_resampling.png"
+        
+        
+        
+    >
+    
+    <figcaption><p>Far fewer pixels missing spatial samples (after)</p>
+</figcaption>
+    
+</figure>
+<h3 id="skip-restir-gi-for-smooth-metals">Skip ReSTIR GI for Smooth Metals<a class="zola-anchor" href="#skip-restir-gi-for-smooth-metals" aria-label="Anchor link for: skip-restir-gi-for-smooth-metals" style="visibility: hidden;"></a>
+</h3>
+<p>Finally, a simple optimization: smooth metallic surfaces have zero diffuse contribution, so there's no point running ReSTIR GI for those pixels. We now skip these pixels entirely during the ReSTIR GI pass, saving performance on scenes with lots of metallic materials.</p>
+<h2 id="light-sampling-research">Light Sampling Research<a class="zola-anchor" href="#light-sampling-research" aria-label="Anchor link for: light-sampling-research" style="visibility: hidden;"></a>
+</h2>
+<p>Besides the BRDF work, the other major time sink this cycle was researching better light sampling. Currently, Solari's light sampling is brute force — we take completely random samples from the scene's lights and use RIS to pick one that is likely to contribute the most (not counting visibility). This works, but it's very inefficient, especially for large scenes with many lights, where most of them don't contribute to a given pixel.</p>
+<figure>
+    <img
+        src="32_sample_ris.png"
+        
+        
+        
+    >
+    
+    <figcaption><p>Many lights scene, direct lighting only, no denoising, 32 random sample RIS</p>
+</figcaption>
+    
+</figure>
+<p>The obvious question is: can we do better by precomputing which lights matter <em>where</em>?</p>
+<h3 id="what-didn-t-work">What Didn't Work<a class="zola-anchor" href="#what-didn-t-work" aria-label="Anchor link for: what-didn-t-work" style="visibility: hidden;"></a>
+</h3>
+<p>A bit ago, @SparkyPotato experimented with <a rel="nofollow noreferrer" href="https://gpuopen.com/download/Hierarchical_Light_Sampling_with_Accurate_Spherical_Gaussian_Lighting.pdf">light trees</a> — hierarchical acceleration structures that let you importance sample lights based on their estimated contribution. While theoretically sound (light trees are used a lot in the film industry), the overhead of constructing and traversing the tree ended up being too high for our use case.</p>
+<p>I explored building alias tables over light CDFs, built on top of Solari's existing world cache, which would give O(1) sampling from an theoretically high quality distribution. But building the alias table for every cell each frame turned out to be expensive, and the quality gains didn't justify the cost.</p>
+<p>I also wanted to avoid methods like <a rel="nofollow noreferrer" href="https://research.nvidia.com/labs/rtr/publication/boksansky2021rendering">ReGIR</a>, which requires a lot of storage and computation to get good results, and relies heavily on temporal reuse.</p>
+<p>A key finding from my early experiments is that stochastic methods are best left to screen-space, where multiple pixels (samples) can contribute towards the same distribution (e.g. by splatting per-pixel contributions into world-space). Otherwise, each world-space cell requires quite a lot of computation per-frame to get usable results.</p>
+<h3 id="light-grids">Light Grids<a class="zola-anchor" href="#light-grids" aria-label="Anchor link for: light-grids" style="visibility: hidden;"></a>
+</h3>
+<p>The approach I've been exploring instead is world-space light grids — essentially the raytracing equivalent of the froxel light binning that traditional rasterized renderers use (including Bevy's standard renderer). The idea is straightforward: divide the world into cells, figure out which lights contribute to each cell, and then only sample from those lights in a given cell when shading.</p>
+<p>This is the same general approach used by recently shipped titles like <a rel="nofollow noreferrer" href="https://advances.realtimerendering.com/s2025/content/SOUSA_SIGGRAPH_2025_Final.pdf">DOOM: The Dark Ages</a> and <a rel="nofollow noreferrer" href="https://www.youtube.com/watch?v=Gq1QdlQSzn0">Resident Evil Requiem</a>.</p>
+<p>I have a working prototype where a fixed grid covers the world, with a compute shader that runs one thread per cell to iterate over every light, and determine if it contributes.</p>
+<p>It's not quite as good as algorithms that store the importance of each light like ReGIR, but it's quite cheap to build, and does not rely on any temporal reuse or stochastic evaluation.</p>
+<p>The results are pretty good!</p>
+<figure>
+    <img
+        src="32_sample_grid_ris.png"
+        
+        
+        
+    >
+    
+    <figcaption><p>Many lights scene, direct lighting only, no denoising, 32 sample RIS from the light grid</p>
+</figcaption>
+    
+</figure>
+<p>However, there are still some unsolved problems:</p>
+<ol>
+<li>Each cell has a fixed amount of storage for lights, so users need to be very careful not to exceed the limit — too many overlapping lights in one area, and things break.</li>
+<li>The grid requires manual setup with a fixed world-space extent. Tying it to the camera doesn't work well, as it's very hard to maintain coverage of the full scene as the camera moves around. I haven't figured out the right solution here yet — maybe a spatial hashmap like we use for the GI world cache would work, but that brings its own complexity.</li>
+</ol>
+<p>None of this has shipped yet, but I think light grids are the most promising path forward for Solari's light sampling. Hopefully I'll have more info to share next time.</p>
+<h2 id="recent-interesting-research">Recent Interesting Research<a class="zola-anchor" href="#recent-interesting-research" aria-label="Anchor link for: recent-interesting-research" style="visibility: hidden;"></a>
+</h2>
+<p>Speaking of research — to wrap up, here are some recent publications related to realtime raytracing that I've found interesting. If you enjoyed this post, give them a look!</p>
+<ul>
+<li><a rel="nofollow noreferrer" href="https://www.youtube.com/watch?v=VTrdeqMMMK0">Fast as Hell: idTech8 Global Illumination</a></li>
+<li><a rel="nofollow noreferrer" href="https://www.youtube.com/watch?v=Gq1QdlQSzn0">Real-Time Path Tracing in RE ENGINE for Resident Evil Requiem and PRAGMATA</a></li>
+<li><a rel="nofollow noreferrer" href="https://www.youtube.com/watch?v=0IrzX4LDIx8">The Future of Path Tracing | Best Practices, Optimizations &amp; Future Standards</a> (includes a great walkthrough of writing a pathtracer)</li>
+<li><a rel="nofollow noreferrer" href="https://www.youtube.com/watch?v=8AnVpcIczyk">Path Tracing Nanite in NVIDIA Zorah</a></li>
+<li><a rel="nofollow noreferrer" href="https://juretriglav.si/surfel-based-global-illumination-on-the-web/">Surfel-based global illumination on the web</a></li>
+</ul>
+
+      </article>
+
+      
+      
+
+      
+      
+      <div class="giscus"></div>
+      <script src="https://giscus.app/client.js"
+        data-repo="JMS55/jms55.github.io"
+        data-repo-id="R_kgDOKFxX0Q"
+        data-category="Announcements"
+        data-category-id="DIC_kwDOKFxX0c4Cvqkk"
+        data-mapping="url"
+        data-strict="0"
+        data-reactions-enabled="0"
+        data-emit-metadata="0"
+        data-input-position="top"
+        data-theme="https://jms55.github.io/giscus_light.css"
+        data-lang="en"
+        crossorigin="anonymous"
+        async>
+</script>
+
+      
+    </div>
+
+    
+
+
+<footer>
+  <div class="left">
+    <div class="copyright">
+      © 2025 JMS55
+      
+      <span>|</span>
+      Built with <a href="https://www.getzola.org" rel="noreferrer" target="_blank">zola</a> and <a href="https://github.com/isunjn/serene" rel="noreferrer" target="_blank">serene</a>
+      
+    </div>
+  </div>
+
+  <div class="right">
+    
+    
+      
+    
+    
+    <a id="rss-btn" href="https://jms55.github.io/atom.xml">RSS</a>
+    
+    
+
+    
+  </div>
+</footer>
+
+
+
+
+<dialog id="rss-mask">
+  <div>
+    <a href="https:&#x2F;&#x2F;jms55.github.io&#x2F;atom.xml">https:&#x2F;&#x2F;jms55.github.io&#x2F;atom.xml</a>
+    
+    
+    <button autofocus aria-label="copy" data-link="https:&#x2F;&#x2F;jms55.github.io&#x2F;atom.xml" data-copy-icon="&lt;svg xmlns=&quot;http:&#x2F;&#x2F;www.w3.org&#x2F;2000&#x2F;svg&quot; viewBox=&quot;0 0 24 24&quot; width=&quot;18&quot; height=&quot;18&quot;&gt;&lt;path d=&quot;M6.9998 6V3C6.9998 2.44772 7.44752 2 7.9998 2H19.9998C20.5521 2 20.9998 2.44772 20.9998 3V17C20.9998 17.5523 20.5521 18 19.9998 18H16.9998V20.9991C16.9998 21.5519 16.5499 22 15.993 22H4.00666C3.45059 22 3 21.5554 3 20.9991L3.0026 7.00087C3.0027 6.44811 3.45264 6 4.00942 6H6.9998ZM5.00242 8L5.00019 20H14.9998V8H5.00242ZM8.9998 6H16.9998V16H18.9998V4H8.9998V6Z&quot; fill=&quot;currentColor&quot;&gt;&lt;&#x2F;path&gt;&lt;&#x2F;svg&gt;
+" data-check-icon="&lt;svg xmlns=&quot;http:&#x2F;&#x2F;www.w3.org&#x2F;2000&#x2F;svg&quot; viewBox=&quot;0 0 24 24&quot; width=&quot;18&quot; height=&quot;18&quot;&gt;&lt;path d=&quot;M10.0007 15.1709L19.1931 5.97852L20.6073 7.39273L10.0007 17.9993L3.63672 11.6354L5.05093 10.2212L10.0007 15.1709Z&quot; fill=&quot;currentColor&quot;&gt;&lt;&#x2F;path&gt;&lt;&#x2F;svg&gt;
+" >
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18"><path d="M6.9998 6V3C6.9998 2.44772 7.44752 2 7.9998 2H19.9998C20.5521 2 20.9998 2.44772 20.9998 3V17C20.9998 17.5523 20.5521 18 19.9998 18H16.9998V20.9991C16.9998 21.5519 16.5499 22 15.993 22H4.00666C3.45059 22 3 21.5554 3 20.9991L3.0026 7.00087C3.0027 6.44811 3.45264 6 4.00942 6H6.9998ZM5.00242 8L5.00019 20H14.9998V8H5.00242ZM8.9998 6H16.9998V16H18.9998V4H8.9998V6Z" fill="currentColor"></path></svg>
+
+    </button>
+  </div>
+</dialog>
+
+
+
+  </main>
+</div>
+
+  
+<script src="/js/lightense.min.js"></script>
+
+
+  <script src="https://jms55.github.io/js/main.js"></script>
+</body>
+
+</html>
