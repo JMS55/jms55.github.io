@@ -1,6 +1,6 @@
 +++
 title = "Bevy's Sixth Birthday - Lighting and Libraries"
-date = "2026-08-28"
+date = "2026-08-29"
 
 [taxonomies]
 tags = ["bevy", "bevy birthday"]
@@ -16,7 +16,7 @@ It's been a pretty packed year, so unlike past years, for this blog post I'm onl
 
 ### A Year in Review
 
-#### Solari
+#### Solari - Success!
 
 4 years into Bevy, and I'm still heavily focused on 3D rendering.
 
@@ -26,21 +26,33 @@ For those of you who haven't been following, Bevy Solari is a realtime pathtrace
 
 I've written [plenty of articles on Solari](/tags/raytracing) before, but the TLDR is that I want to make lighting more accessible to beginners, and push the boundaries of what Bevy is capable of. Rather than having to learn a mix of shadow maps, lightmap baking, light probe baking, environment maps, screen space methods, what their pitfalls and limitations are, and spending hours tweaking things, pathtracing replaces all that complexity with a single, much easier to reason about lighting algorithm.
 
+{{ figure(src="zorah1_albedo.png", caption=" ") }}
+{{ figure(src="zorah2_albedo.png", caption="NVIDIA Zorah Scene, albedo rendering (no lighting)") }}
+
 Solari has been a years long project, but it's finally becoming production ready, and I'm really happy with what I've ended up with!
+
+{{ figure(src="zorah1_lit.png", caption=" ") }}
+{{ figure(src="zorah2_lit.png", caption="NVIDIA Zorah Scene, Solari rendering") }}
 
 It's been a long, _long_ journey through several different rewrites:
 * Lumen/AMD GI like screen-space probes (diffuse GI only), a spatial hashing based world irradiance cache, and a spherical-harmonic based spatial denoiser
 * The above, but now with radiance cascades added
-* Added a somewhat bad ReSTIR DI added for direct lighting
+* Added a somewhat bad ReSTIR DI for direct lighting
 * <2 year long gap>
 * Complete rewrite, now ReSTIR DI + GI (still diffuse only) + the same world cache + DLSS-RR
 * Added a separate pathtracing pass dedicated just to indirect specular (ReSTIR DI now shades direct specular, but still resamples based on diffuse)
 * Another complete rewrite, now with a single unified pathtracer tracing direct and indirect diffuse and specular lighting, and a single ReSTIR pass resampling everything using the reconnection shift
 * DLSS-RR 4.5 has gotten so good, ReSTIR is now optional!
 
+{{ figure(src="cascades.png", caption="Cornell Box, old version of Solari GI from 2023, screen-space probes with world-space radiance cascade intervals") }}
+{{ figure(src="cascades_merged.png", caption="The cascades merged together") }}
+
 There's still a decent amount to do, notably supporting transparent materials and more types of light sources, but the core lighting algorithm is pretty solid!
 
 I'm really proud of how everything's turned out. Expect another blog post on Solari soon for Bevy 0.20, where I'll cover things in more detail, and stay tuned for a formal publication coming at the end of the year that I can't talk about too much yet :)
+
+{{ figure(src="zero_day_albedo.png", caption=" ") }}
+{{ figure(src="zero_day.png", caption="NVIDIA Zero Day Scene, Solari rendering") }}
 
 #### dlss_wgpu
 
@@ -82,11 +94,11 @@ However, in the spirit of this being a yearly reflection, I'm going to talk abou
 
 This was the first year I've started using AI, after not really liking or using it in 2025. Sometime in early 2026, LLMs and associated tooling like Claude Code reached an inflection point. They became much more capable, and something I actually find useful. I also got access to AI subscriptions at work, so there was no cost to me if I wanted to use it.
 
-To frame the rest of this section, I mainly use the Claude Code VSCode plugin, usually in auto mode on high effort.
+> To frame the rest of this section, I mainly use the Claude Code VSCode plugin, usually in auto mode on Opus high.
 
-So AI has definitely saved me a lot of time. Bevy is something I contribute to in my spare time, of which I have a very limited amount. If I can get a few agents to investigate and reproduce bug reports while I'm eating lunch, that saves me a ton of time and energy that I can devote to real, impactful improvements in Bevy.
+So starting off, AI has definitely saved me a lot of time. Bevy is something I contribute to in my spare time, of which I have a very limited amount. If I can get a few agents to investigate and reproduce bug reports while I'm eating lunch, that saves me a ton of time and energy that I can devote to real, impactful improvements in Bevy.
 
-I've also found it super useful for "tooling" related tasks that are tedious, and get in the way of actual work. E.g. adapting scenes from online and getting all the meshes, materials, cameras, lights, etc set up in Bevy. The Zero Day and Zorah screenshots above were set up by AI (thanks to @stuartparmenter).
+I've also found it super useful for "tooling" related tasks that are tedious, and get in the way of actual work. E.g. adapting scenes from online and getting all the meshes, materials, cameras, lights, etc set up in Bevy. The Zorah and Zero Day scenes in the screenshots above were set up by AI (thanks to @stuartparmenter).
 
 Similarly, I've used AI a lot for generating throwaway debug overlays when working on Solari. E.g. visualizing post-denoiser variance when I was testing some DLSS-RR-related changes. Before AI, I would not have spent the effort making such a specific tool for just a single task.
 
@@ -94,7 +106,7 @@ I've talked before about how often I need new GPU features that wgpu doesn't exp
 
 I've contributed several PRs to wgpu this year thanks to AI (and not only me; wgpu's open PR count has doubled in the last few months, not due to review times getting longer, but due to the sheer velocity of new PRs).
 
-On the other hand, I've found AI pretty worthless for actually complex tasks. E.g. when asking it about complex MIS weights in ReSTIR, if I asked 6 different times, it would give me 6 different conflicting answers about whether the math is right or not, even when prompted to verify everything that it can through code. Maybe if I used Fable max and let it run for 16 hours I would have had a different experience, but I'm not going to do that.
+On the other hand, I've found AI pretty worthless for actually complex tasks. E.g. when asking it about complex MIS weights in ReSTIR, if I asked 6 different times, it would give me 6 different conflicting answers about whether the math was right or not, even when prompted to verify everything that it can through code. Maybe if I used Fable max and let it run for 16 hours I would have had a different experience, but I'm not going to do that.
 
 Furthermore, even if AI could give me the right answer, _I wouldn't understand it_. I've found that it's very easy to produce something working without putting effort into the design, but if you keep doing that, you very quickly start having zero understanding of what you've built, and can no longer reason about it. It becomes impossible to further work on the project, and generally just feels awful. Maybe eventually AI will become so good that this won't be an issue, but currently it's very easy to move fast while having no idea where you've gone and how to go forward. To me, this is a bigger problem than any individual slop PR.
 
@@ -106,7 +118,7 @@ We recently changed our contributing policy from what I'll summarize as "no AI, 
 
 Long time contributors I've been friends with have become extremely burnt out and disengaged from Bevy, OSS, and even programming in general, in large part due to AI (and in part due to e.g. lack of an editor for years).
 
-I have no magic solution to this, but I ask everyone: be kind to each other. Many of us want Bevy to be great, and have more in common than we do differences that divide us.
+I have no magic solution to this, but I ask everyone: be kind to each other. We all want to see Bevy succeed, and we have more in common than we do differences that divide us.
 
 ### Questions & Answers
 
