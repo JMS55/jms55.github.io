@@ -3,7 +3,7 @@ title = "Bevy's Third Birthday - Reflections on Rendering"
 date = "2023-09-12"
 
 [taxonomies]
-tags = ["bevy"]
+tags = ["bevy", "bevy birthday"]
 +++
 
 > Written in response to [Bevy's Third Birthday](https://bevyengine.org/news/bevys-third-birthday).
