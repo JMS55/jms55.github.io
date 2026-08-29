@@ -14,8 +14,6 @@ It's the sixth year of Bevy, and now 4 years in total that I've been contributin
 
 It's been a pretty packed year, so unlike past years, I'm only going to cover what I've personally been working on this year.
 
-So, what have I done?
-
 ### A Year in Review
 
 #### Solari
@@ -74,12 +72,63 @@ I took ctt, and used it as the new backend for CompressedImageSaver in Bevy. Loo
 
 Huge thanks to @cwfitzgerald for helping me integrate ctt, fixing bugs I reported, and for creating ctt in the first place.
 
-### Next Year Goals
+### AI
 
-> I'd like to hear more about future rendering plans that might be more unknown to the broader community, if there is any? (not sure if you're a part of that but it seems like you've worked on every part of the renderer 😄 )
+TODO
 
-> I think thoughts on stability and reliability and well tested well used parts of bevy rendering could be good. Lots of software out there today, and I think people are starting to look for quality
+### Questions & Answers
+
+For this blog post, I solicited some questions from the Bevy community to answer (questions have been lightly edited for the purposes of a smoother reading experience).
+
+> I'd like to hear more about future rendering plans that might be more unknown to the broader community, if there is any?
+
+My personal rendering plans for next year are to continue wrapping up Solari, and potentially go back to virtual geometry. I have been thinking about building a material layering system, although there are some technical blockers holding that up at the moment.
+
+In terms of broader plans, here's what I've been seeing discussed (keep in mind that none of these are commitments!):
+* HDR display support (currently being worked on by @stuartparmenter!)
+* Bevy's material API is too low level, and tied to the technical details around how the renderer works (e.g. APIs for supplying a fragment shader for deferred/forward/virtual geometry/etc). We need some higher level APIs that under the hood, we can then adapt to different rendering and data storage methods. GpuComponentArrayBuffer is a recent step in the right direction.
+* Unifying the 2D and 3D renderers, and e.g. replacing Sprite with SpriteMesh
+* Adding some sort of built-in API for texture/mesh streaming (mesh streaming could potentially be delegated to virtual geometry)
+* More work on volumetric rendering
+* As always, hoping that WebGPU finally ships everywhere, so we can deprecate WebGL2 and assume storage buffers and compute shaders everywhere (fingers crossed that this is the year!)
+
+> I think thoughts on stability and reliability and well tested well used parts of Bevy rendering could be good. Lots of software out there today, and I think people are starting to look for quality
+
+Yeah, this is a hard one. It's been discussed a _lot_ in the Bevy community. We're very aware of the issues users are facing.
+
+Starting with reliability:
+
+On one hand, shipping bugs, especially regressions, sucks and contributes towards a sense of unreliability that makes it hard for people to trust that Bevy is "production ready".
+
+On the other hand, squashing every or even most bugs is not realistically something we can, or should really try to do.
+
+Shipping with ~zero bugs on the level of e.g. SQLite would mean _drastically_ slowing down on developing new features. This would be a net negative overall, as an engine with no features is way less useful than a much more featureful engine that's a bit buggy.
+
+Every new feature, especially in rendering, tends to involve a large rewrite of and intersection with existing systems, with more and more potential for breakage. We could introduce some new feature X, but actually under TAA there's an issue, or when using multiple cameras, or it used to work with shadow maps and then we change the shadow pass internals which breaks that interaction or regressed performance on certain GPU, etc.
+
+So you could say, add more tests! And [we do](https://pixel-eagle.com/project/b04f67c0-c054-4a6f-92ec-f599fec2fd1d). It's helped a lot compared to when we had nothing, but there's only so much we can cover. We will never be able to cover every interaction between techniques, regressions on specific mobile devices with poor GPU drivers, etc.
+
+The release candidate process we adopted last year _does_ help a lot with both reliability, and giving library authors time to update their plugins before the official release. But it's also brought it's own share of issues, e.g. Bevy 0.19 being very delayed from our typical 3 month schedule, in part due to a large amount of bugs we spent time fixing rather than sticking to the release schedule.
+
+In terms of stability, I'd much rather make breaking changes then try for backwards compability. Game engines are huge, have a lot of surface area to cover (rendering, physics, ui, assets, artist tooling, etc), and are constantly evolving. I'd much rather improve things but cause some breakage, rather than try to introduce more mess trying to make things backwards compatible.
+
+My advice for game developers: stick to a single version of Bevy, and backport individual parts if needed. The same advice applies to pretty much every game engine on the market, but one of Bevy's major benefits is modularity. Don't be afraid to pull in a new feature from a newer version via copy and pasting the plugin into your project, rather than trying to upgrade your whole game to a newer version of Bevy all at once.
 
 > Testing and quality refinement strategies for rendering in general would be super interesting to read about
 
-### AI (maybe)
+I talked about this a bit in the AI section above, but to me this comes down to good tooling and test scenes. Automatic screenshot and video comparisons, profiling runs, hot reloading, etc are essential to improving rendering. I need to be able to make a change, see what changed (both visually, and numerically compared to path-traced ground truth), how that affected perf, etc. And then do the same in 10 other scenes with varying levels of geometric complexity, size, material types, animations, lighting conditions, etc to ensure it's an improvement across the board.
+
+For Solari, I've slowly been building up a set of test scenes and one-off AI generated tools for helping me with this. E.g. a debug overlay to run through a specific part of a scene while visualizing correlations on both smooth and rough dielectrics and metals, for tweaking ReSTIR heuristics.
+
+> For me and I think a lot of other gamedevs, rendering is one of those things that is a voodoo sorcery black box where materials and meshes go in and pretty pictures come out.
+> So, this may be a big ask, but my question is "as an engine dev do you have any resources to link or recommend that help crack open that black box and make it easier to understand?"
+
+Honestly, not really! I did try and write some higher-level docs for the Bevy book this year, but never finished or merged them. For specific rendering topics, there's lots of individual papers and articles I could point at for, but I don't have anything for people just starting out.
+
+Rendering is a really broad area! There's a lot of things that boil down to "it's done in this extremely complex, specialized way, because performance".
+
+I would say, unless you're really interested in being a rendering developer, you probably don't need to learn the details! The goal of engines like Bevy is to do all that for you, so that you don't need to learn and implement it all from scratch yourself. Learning how to use the tools, as an artist, should suffice for most users.
+
+If you _are_ interested in rendering development, my typical recommendation is:
+* Read through a couple of recent [frame breakdowns](https://www.gamedevpensieve.com/graphics/3d/3d_frame-breakdown) to get a broad sense of how real games are rendered. If you see something you don't recognize, do a quick google to get an idea of what it is, and why the game does it that way.
+* For Bevy specifically, come ask questions in #rendering or #rendering-dev in the Bevy discord! We're always happy to talk and help people understand things!
