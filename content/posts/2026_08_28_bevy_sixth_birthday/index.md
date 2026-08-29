@@ -1,5 +1,5 @@
 +++
-title = "Bevy's Sixth Birthday - Lighting for All"
+title = "Bevy's Sixth Birthday - Lighting and Libraries"
 date = "2026-08-28"
 
 [taxonomies]
@@ -12,7 +12,7 @@ tags = ["bevy", "bevy birthday"]
 
 It's the sixth year of Bevy, and now 4 years in total that I've been contributing to it!
 
-It's been a pretty packed year, so unlike past years, I'm only going to cover what I've personally been doing this year.
+It's been a pretty packed year, so unlike past years, I'm only going to cover what I've personally been working on this year.
 
 So, what have I done?
 
@@ -26,7 +26,7 @@ If you've been following my work, it shouldn't come as a surprise that 90% of wh
 
 For those of you who haven't been following, Bevy Solari is a realtime pathtracer aiming to be a high-end, forward-looking alternative to Bevy's main renderer.
 
-I've written plenty of articles on Solari before (TODO: link to blog tag), but the TLDR is that I want to make lighting more accessible to beginners, and push the boundries of what Bevy's capable of. Rather than having to learn a mix of shadow maps, baking lightmaps, baking light probes, environment maps, screen space methods, what their pitfalls and limitations are, and spending hours tweaking things, pathtracing replaces all that complexity with a single, much easier to reason about lighting algorithm.
+I've written [plenty of articles on Solari](/tags/raytracing) before, but the TLDR is that I want to make lighting more accessible to beginners, and push the boundries of what Bevy's capable of. Rather than having to learn a mix of shadow maps, baking lightmaps, baking light probes, environment maps, screen space methods, what their pitfalls and limitations are, and spending hours tweaking things, pathtracing replaces all that complexity with a single, much easier to reason about lighting algorithm.
 
 Solari has been a years long project, but it's finally becoming production ready, and I'm really happy with what we've ended up with!
 
@@ -44,33 +44,35 @@ I'm really proud of how everything's turned out. Expect another blog post on Sol
 
 #### dlss_wgpu
 
-Of course, a key part of my pivot to per-pixel pathtracing in Solari was predicated on having a good denoiser (ideally one I didn't have to write myself). For that, NVIDIA's DLSS-RR and NRD were the best options available.
+Of course, a key part of my pivot to per-pixel pathtracing in Solari was predicated on having a good denoiser (ideally one that I didn't have to write myself). For that, NVIDIA's DLSS-RR and NRD were the best options available.
 
 One of my first contributions to Bevy was a TAA implementation I wrote, so adding DLSS support was a nice blast from the past :)
 
 Getting DLSS/FSR integration in Bevy is been something I have been eyeing for a long while, but getting them working with wgpu's resource tracking and automatic barrier system took some effort!
 
-I ended up submitting a PR to wgpu to add a new transition_resources() function https://github.com/gfx-rs/wgpu/pull/6678 (which should probably have been named something like record_resource_usage). This lets you insert new [usage scopes](https://gpuweb.github.io/gpuweb/#usage-scope) into wgpu's resource tracker, enabling users to integrate vulkan/directx/metal libraries directly with wgpu.
+I ended up submitting a PR to wgpu to add a new [`transition_resources()`](https://github.com/gfx-rs/wgpu/pull/6678) function (which in hindsight should probably have been named something like `record_resource_usage`). This lets you insert new [usage scopes](https://gpuweb.github.io/gpuweb/#usage-scope) into wgpu's resource tracker, enabling users to integrate vulkan/directx/metal libraries directly with wgpu.
 
-Otherwise, there would be no (simple) way for users to e.g. insert a barrier and transition a texture from color attachment to shader read layout. This, along with some new as_hal() APIs, allows Bevy to now record depth/normal/color/etc data, pass it to DLSS, and then read DLSS's result back in wgpu-land.
+Otherwise, there would be no (simple) way for users to e.g. insert a barrier and transition a texture from color attachment to shader read layout. This, along with some new as_hal() APIs, allows Bevy to now record depth/normal/color/etc data, pass it to DLSS, and then read DLSS's result back into wgpu-land.
 
 I've packaged up the barrier code, C FFI, wgpu<->Vulkan interopt, and DLL-linking build scripts into an open source, Bevy-independent crated called [dlss_wgpu](https://github.com/bevyengine/dlss_wgpu). If you're looking to add DLSS-SR or DLSS-RR to your wgpu project, give it a try!
 
-Back in Bevy land, DLSS-RR works as a great denoiser + upscaler for Solari, and DLSS-SR works as a better, mostly drop-in replacement for Bevy's TAA.
+In Bevy, DLSS-RR works as a great denoiser + upscaler for Solari, and DLSS-SR works as a better, mostly drop-in replacement for Bevy's TAA.
 
 I'd love to add FSR4 and FSR4-RR support to Bevy as well, but unfortunately AMD has not released any Vulkan bindings for them.
 
-#### CompressedImageSaver revamp
+#### CompressedImageSaver Revamp
 
-TODO
+The other major project I worked on this year was revamping Bevy's texture compression pipeline.
 
-### Last year goal review
-* Solari - yes obv
-* Virtual geo - no
-* More docs - no
-* UI - somewhat
-* Editor - no
-* Material - no
+Until recently, Bevy's only option for texture compression and mipmap generation was an old version of [Basis Universal](https://github.com/BinomialLLC/basis_universal). Basis Universal is sort of an intermediate format, that gets transcoded to BCn/ASTC at runtime. It's useful for web, as it lets you avoid shipping two sets of textures, but it's not so great for desktop and mobile. It's much better to just encode directly as BCn/ASTC for these platforms.
+
+The problem is that until recently, there's been no good tool or library for compressing textures for different platforms. There are several disparate tools, each with their own weird input formats, quirks, and supported or unsupported target formats. Trying to wrap different tools in a unified interface was... not very easy, and I gave up trying.
+
+However, @cwfitzgerald (a maintainer of wgpu) released [ctt](https://github.com/cwfitzgerald/ctt) this year - a Rust texture compression library that can take texture data of various layouts, generate mipmaps, encode into the various BCn/ASTC/etc formats (via FFI to all the different encoder libraries), super-compress with ZSTD for smaller disk sizes, and finally spit out a ktx2 file - all through one unified interface. It's a huge achievement, and I highly reccomend using it if you need texture compression. There are even C bindings available!
+
+I took ctt, and used it as the new backend for CompressedImageSaver in Bevy. Look forward to much improved texture compression in Bevy 0.20!
+
+Huge thanks to @cwfitzgerald for helping me integrate ctt, fixing bugs I reported, and for creating ctt in the first place.
 
 ### Next Year Goals
 
