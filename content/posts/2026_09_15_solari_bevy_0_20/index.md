@@ -250,9 +250,11 @@ Overall, we get some very nice quality wins, simplify the code, and reduce our m
 
 Note that there _are_ some downsides I've found from the unified ReSTIR algorithm.
 
-One simple downside is that a big unified pathtracing kernel uses more registers than separate kernels, which reduces occupancy and can hurt performance. It's not typically a huge loss, but it's something to be aware of.
+Shadow boundaries where some pixels prefer GI, and some prefer DI, get a bit worse to the single set of reservoirs.
 
-The bigger issue is that we're no longer tracing paths for both the primary vertex's diffuse _and_ specular lobes every frame. Before, we had dedicated passes for diffuse and specular GI paths (really just a single-bounce for diffuse GI, we weren't doing a full path), but now we're only tracing a single path, with stochastic lobe selection for dielectric materials that have two lobes. Tracing two separate paths would be too expensive.
+Another downside is that a big unified pathtracing kernel uses more registers than separate kernels, which reduces occupancy and can hurt performance. It's not typically a huge loss, but it's something to be aware of.
+
+The real issue is that we're no longer tracing paths for both the primary vertex's diffuse _and_ specular lobes every frame. Before, we had dedicated passes for diffuse and specular GI paths (really just a single-bounce for diffuse GI, we weren't doing a full path), but now we're only tracing a single path, with stochastic lobe selection for dielectric materials that have two lobes. Tracing two separate paths would be too expensive.
 
 Remember from the last post that dielectric materials are implemented as a thin specular lobe layered _over_ a diffuse lobe. Depending on what angle you view it at, the top specular layer gets a certain percentage of the energy, with the rest being transmitted to the diffuse layer beneath it. When picking a BRDF lobe to follow to keeping tracing the path, we can importance sample the two layers according to these percentages, biasing towards picking the lobe that will recieve a higher amount of energy.
 
@@ -282,20 +284,88 @@ The logic is pretty simple: for smooth dielectric surfaces, ReSTIR will _already
 
 ## Saying Goodbye to ReSTIR
 
-TODO
+So, we just spent all that time, and really the last 2 years talking about ReSTIR. That's a lot of time invested into it.
+
+The thing is... Do we really need ReSTIR?
+
+As great as ReSTIR is, it's actually quite expensive, costing 4 rays for resampling in current versions of Solari.
+
+And then we run into the issues with correlations. As I talked about above, ReSTIR just... doesn't play well with current denoisers.
+
+When you think about it, what actually _is_ a denoiser doing anyways?
+
+Denoising is essentially signal smoothing. The radiance of a pixel come be thought of as a function, except in pathtracing it would be prohibitively expensive to calculate the full function. Instead, we sample the function, calculating it's value at discrete points. This is what produces the noisy input we feed a denoiser.
+
+The denoiser can then look at those points, and try to "guess", and fill in the rest of the function, usually by interpolating (averaging) neighboring points together.
+
+If the input samples are a good representation of the overall function, then the denoiser can do a pretty good job at getting close to what the function should be.
+
+If the input samples _aren't_ a good representation, well, then the denoiser is going to do a poor job of guessing. This is where denoiser artifacts and blurriness comes from.
+
+Now, denoisers have an advantage - they can look at multiple pixels at once. The good thing is, lighting tends to be a pretty "smooth" signal. It fades out smoothly over a distance, and dosen't tend to change that drastically between pixels. So long as _some_ of the nearby pixels have a good estimate of the incoming radiance, modern denoisers can do a pretty solid job at reconstructing a smooth lighting signal.
+
+Now, after reading that, does my description of denoisers sound... familiar?
+
+It's very similar to what ReSTIR is doing. In ReSTIR, we're taking discrete paths, and shifting them to terminate at a different pixel, re-evaluating how much radiance the path should give under the new conditions. We do this spatially and temporally. We're reusing paths between pixels.
+
+Denoisers do the same, just with pixel radiance, instead of samples.
+
+The advantage of denoisers is that interpolating pixels is pretty cheap, relative to shifting a whole path.
+
+In ReSTIR, more than a single temporal and spatial sample is too expensive for realtime (that's 4 rays/pixel, which even then is a decent chunk of performance). Denoisers, on the other hand, through the use of CNN's and transformers, can afford to look at tons of other pixels.
+
+Moreover, while denoisers can more easily cause bias, they don't cause any issues with correlations. And even with ReSTIR, we need a denoiser anyways.
+
+Testing I've done shows that current (v4.5) versions of DLSS-RR just... don't really need ReSTIR a lot of the time. Our GI signal is already sufficiently dense enough for DLSS-RR to do a perfectly good job. Our DI signal is pretty undersampled if you have more than a few lights, as RIS is not sufficent, but even then it tends to manifest as shadows that fade out at a distance, which - ever used a shadow map?
+
+If this still sounds like a crazy idea to you, consider - lots of games are doing quarter-res GI as-is. Denoisers can already deal with a fairly noisy signal - we don't need it to be _that_ dense. ReSTIR is often overkill.
+
+With this in mind, I've made the decision to disable ReSTIR by default in Solari 0.20. There's no point in deleting it outright as it can help in tricky scenes, and it's still useful for DI for now, but users should consider whether they actually need it or not.
+
+In the future, I'll be considering ways to more cheaply guide the initial sampling process, rather than making ReSTIR smarter at reusing existing samples.
+
+For instance, we can reallocate paths from pixels in neighborhoods with simple lighting, and spend them on pixels with more complicated lighting conditions.
+
+And I'm going to look into cheaper methods like MegaLights or light clustering to guide DI sampling, in addition to RIS.
 
 ## Reflection Denoising
 
-TODO
+In Solari 0.20, I spent a good few weeks working on improving the guide buffers we provide to DLSS-RR so that reflections are more temporally stable. A lot of this was motivated by testing in the newly-setup Zero Day scene.
+
+A lot of this was trial and error via AI to make test scenes and generate comparison videos. I had a "feeling" that reflections were a bit blurry and shimmery, but it was hard to really tell for sure. I did a _lot_ of pixel peeping during this time.
+
+The changes are pretty complicated, and not very scientific, but it boiled down to doing primary surface replacement (PSR) on more types of materials and with more guide buffers (depth, regular non-specular motion vectors, etc). Review [the code](https://github.com/bevyengine/bevy/pull/25423) if you're interested in exactly what changed.
+
+In previous versions of Solari, PSR was done only for perfectly smooth metals. Now we've expanded it to dielectrics and slightly less smooth metals, with pretty good results!
+
+I would love if NVIDIA could publish some official docs on what the right way to do PSR is with DLSS-RR.
 
 ## CPU Performance Improvements
 
-TODO
+Another big goal for me this development cycle was to improve Solari's CPU performance.
+
+Bevy is very modular, and Solari is no exception. The entire raytracing scene code is one plugin, with the realtime lighting plugin being another, and the reference pathtracer a third plugin.
+
+Previously the raytracing scene code was functional, but very naive. It rebuilt the scene from scratch every frame, iterating over every mesh, light source, and material in the scene.
+
+Now, with a _lot_ of ugly and careful code, and after a long time instrumenting things and comparing Tracy traces, Solari has much better CPU performance!
+
+Similar to past efforts for the standard renderer over the last several Bevy releases, Solari now caches the entire scene, and does incremental updates to both the render world ECS and GPU buffers using tools like Bevy's change detection and [AtomicSparseBufferVec](https://docs.rs/bevy/latest/bevy/render/render_resource/struct.AtomicSparseBufferVec.html).
+
+Additionally, TLAS builds are now much more GPU driven. Partially to avoid wgpu overhead, and mainly to avoid uploading a large amount of data to the GPU every frame, TLAS instances are now written to a buffer to on the GPU via a compute shader.
+
+Every frame, the compute shader iterates over the existing list of entity transform/meshes on the GPU, and simply copies the transform and BLAS address of each entity into a new buffer. GPU -> GPU copies are much faster than doing a second set of CPU->GPU copies for transforms :)
 
 ## Atmosphere and Skybox Lighting
 
-TODO
+For the final major change in Solari 0.20, I added support for lighting from Atmosphere (Bevy's procedural skybox plugin), and EnvironmentMapLight (Bevy's traditional split-sum cubemaps, where mip 0 of the specular cubemap is basically the skybox).
 
-## Future
+It's pretty simple for now - just sample the cubemap when on ray miss, and fold that into the typical path contribution and resampling routines.
 
-TODO
+In the future, we'll want to do NEE against the cubemap and build a hierarchical CDF to accelerate sampling for NEE, but for now the simple method works pretty well.
+
+This feature is part of a shift in my focus towards getting Solari to support more features to bring it up to parity with Bevy's standard renderer. In particular, in the future, I'd like to support the remaining rect/point/spotlight types, animated meshes, and alpha masked and transparent/transmissive/refractive materials.
+
+Light transport is good an all, and of course I will continue to experiment in that department and always work to improve performance, but I'd like Solari to reach a more usable state in the near future.
+
+With that, I'll leave you some pretty pictures of Bevy's Atmosphere + Solari. Thanks for reading, and look forward to the release of Bevy 0.20 soon!
