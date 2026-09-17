@@ -56,7 +56,7 @@ If raytracing gets upstreamed into wgpu, I would happily pick this project back 
 ### Writing
 Last year I finally started a blog... but didn't end up writing much. Or I did, but 80% of it was concentrated into one really long, really time-consuming post. It took something like a month to write.
 
-I also wrote a rather long post on reddit's /r/rust about things I disliked in Rust (after using it for so long, and recently using a lot of Java developing an enterprise application) (I do still love Rust, that hasn't changed). Surprisingly to me, a lot of people liked it and it sparked some interesting discussions. Seperate from the post's contents, people also asked me if I had a blog where they could read more of my writing. I of course, had to tell them that yes I do, but it only has two posts, one of which is extremely niche and technical, so there's not much all that much to read.
+I also wrote a rather long post on reddit's /r/rust about things I disliked in Rust (after using it for so long, and recently using a lot of Java developing an enterprise application) (I do still love Rust, that hasn't changed). Surprisingly to me, a lot of people liked it and it sparked some interesting discussions. separate from the post's contents, people also asked me if I had a blog where they could read more of my writing. I of course, had to tell them that yes I do, but it only has two posts, one of which is extremely niche and technical, so there's not much all that much to read.
 
 Needless to say, this year, I'd like to try to blog more. I'm going to try to get more writing out, and focus less on quality and spending so much time editing. Starting of course, with this post.
 

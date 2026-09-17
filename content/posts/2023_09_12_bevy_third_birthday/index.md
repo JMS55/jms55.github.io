@@ -158,7 +158,7 @@ I'm also really looking forward to _developing_ Bevy's editor. I originally join
 
 The key missing parts are twofold:
 * An ergonomic, reactive, pretty, capable, and scalable UI system
-* Concrete direction on how the editor will actually operate (as a seperate process with message passing, as a bevy_app plugin to the game process, etc)
+* Concrete direction on how the editor will actually operate (as a separate process with message passing, as a bevy_app plugin to the game process, etc)
 
 I'm interested in doing the work of designing the UI for the editor and writing all the UI code and features, but not so much figuring out the basic foundations. Hopefully others will take on this task :)
 

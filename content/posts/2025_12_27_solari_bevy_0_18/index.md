@@ -288,7 +288,7 @@ Indirect lighting is where specular gets much more interesting.
 
 First off, as far as the world cache is concerned, all surfaces are diffuse only, with no specular lobe. This means that when you query the cache, you treat the query point as a diffuse surface. When updating cache entries, you also treat the cache point as a diffuse surface.
 
-For per-pixel GI, Solari splits the lighting calculations into two seperate passes - one for the diffuse lobe, and one for the specular lobe.
+For per-pixel GI, Solari splits the lighting calculations into two separate passes - one for the diffuse lobe, and one for the specular lobe.
 
 The diffuse lobe is handled by the existing ReSTIR GI pass. ReSTIR GI resampling is exactly the same as in Bevy 0.17 - like DI, only the final shading changes.
 
