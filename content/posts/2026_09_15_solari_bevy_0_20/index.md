@@ -150,9 +150,9 @@ What the ReSTIR PT Enhanced paper did, and now Solari in Bevy 0.20 does, is comb
 
 The new lighting algorithm for Solari 0.20 has been simplified down to just two dispatches:
 1. Initial pathtracing, up to 3 bounces, plus temporal resampling
-2. Spatial resampling, and shading
+2. Spatial resampling and shading
 
-These two passes handle DI, GI, diffuse, and specular lighting effects, all with a single set of reservoirs and initial sampling routine.
+These two passes handle DI, GI, diffuse, and specular lighting effects, all with a single set of reservoirs and a single initial sampling routine that does pathtracing.
 
 The basic idea is that you start with your bog standard pathtracer:
 1. Perform NEE at the current path vertex (use RIS to choose a good sample for this)
@@ -210,15 +210,33 @@ struct UnifiedReservoir {
 }
 ```
 
+### Implementation Choices
+
+Unlike the paper, I chose not to implement the hybrid shift, and stick purely to the reconnection shift. Basically, when tracing paths, if it's from too sharp of a specular lobe, instead of putting it in the reservoir to use for resampling, we simply write the path's radiance directly to the screen.
+
+Unlike a wide lobe, it's not possible to use a sharply directional lobe with the reconnection shift. The hybrid shift, which conditionally switches to "random replay", can handle these types of lobes, but it involves re-tracing the path, which in my opinion is too expensive for a realtime renderer.
+
+Additionally, I have a fairly high roughness gate on the primary vertex to guard resampling. I realized that just because you _can_ resample specular paths, doesn't mean you _should_.
+
+As denoisers have improved recently, correlations from temporal and spatial reuse have become a big problem. Because we're reusing discrete samples, the denoiser sees the same samples more often than it otherwise would with regular importance sampling. The denoiser then thinks that this is detail worth preserving (it's a repeating pattern in an otherwise noisy signal), which leads to ugly denoising artifacts.
+
+See [Compatibility-Guided Neighbor Selection for ReSTIR](https://www.youtube.com/watch?v=MCqnETw3l8A) for a good explanation of correlations in ReSTIR.
+
+Smooth specular surfaces, unlike rough diffuse surfaces, have a low amount of possible paths with strong contributions. So as soon as ReSTIR finds one good sample, it tends to propogate to all neighboring pixels, and stay there for a while without being overwritten by new samples. This over-reuse and correlated neighbor pixels confuse the denoiser.
+
+> As a side note, in the previous post in this series, I recommended halving the spatial sampling radius after failing to find a valid sample. It turns out, this is a bad idea, and I have reverted it. Doing this _also_ introduces problematic correlations, as many pixels end up reusing the same few samples within a small radius.
+
+I tried a few different ways of mitigating correlations, e.g. by copying ReSTIR PT Enhanced's duplication maps, or scaling temporal confidence weight by surface roughness, but in the end the only foolproof method I came up with was a hard cutoff based on roughness.
+
 One final note on the algorithm - if you've been paying attention, you may be wondering: "what kind of MIS weights do you use during resampling?"
 
 After all, BRDF-sampled emissive hits at the primary vertex, NEE hits at the primary vertex, BRDF-sampled emissive hits at further vertices, NEE hits at further vertices, and the world cache termination are all _very_ different types of sampling stategies.
 
 The answer is kind of complicated, and you can [take a look at the code](https://github.com/bevyengine/bevy/blob/37256568acc84fd2c8e3c801b906b7dd253f84f5/crates/bevy_solari/src/realtime/initial_path.wesl) for exact details, but it's actually very similar to the way you would typically do MIS in pathtracing.
 
-### Tradeoffs
+### Benefits
 
-As you can see, by octahedral packing the sample point normal in the reservoir struct, and removing the weight_sum field (we never actually need to store it), we can fit in a LightSample, which is all we need to represent both DI and GI. We're saving 16 bytes/pixel compared to non-unified ReSTIR's two separate sets of reservoirs.
+By merging the two sets of reservoirs into one structure, we're saving 16 bytes/pixel compared to non-unified ReSTIR's two separate sets of reservoirs.
 
 More importantly than memory savings, that are a bunch of other improvements we either get for free, or can now afford to make due to combining the ReSTIR passes:
 * In Solari 0.19's ReSTIR DI, we never traced BRDF rays to sample emissive lighting, instead relying only on NEE. Now that everything is unified into one pathtracer, we can trace and resample BRDF-based emissive lighting for free, as if we don't hit an emissive mesh, the ray is not wasted - it just becomes a GI path. This greatly improves direct lighting from nearby emissives.
@@ -228,9 +246,39 @@ More importantly than memory savings, that are a bunch of other improvements we 
 
 Overall, we get some very nice quality wins, simplify the code, and reduce our memory usage. Performance tends be either about the same, slightly slower, or slightly faster depending on the scene and GPU in question.
 
-* Specular BRDF boost / stochastic lobes
-* Talk about bias and correlations
-  * Revert from last time - spatial sampling is fixed radius
+### Downsides
+
+Note that there _are_ some downsides I've found from the unified ReSTIR algorithm.
+
+One simple downside is that a big unified pathtracing kernel uses more registers than separate kernels, which reduces occupancy and can hurt performance. It's not typically a huge loss, but it's something to be aware of.
+
+The bigger issue is that we're no longer tracing paths for both the primary vertex's diffuse _and_ specular lobes every frame. Before, we had dedicated passes for diffuse and specular GI paths (really just a single-bounce for diffuse GI, we weren't doing a full path), but now we're only tracing a single path, with stochastic lobe selection for dielectric materials that have two lobes. Tracing two separate paths would be too expensive.
+
+Remember from the last post that dielectric materials are implemented as a thin specular lobe layered _over_ a diffuse lobe. Depending on what angle you view it at, the top specular layer gets a certain percentage of the energy, with the rest being transmitted to the diffuse layer beneath it. When picking a BRDF lobe to follow to keeping tracing the path, we can importance sample the two layers according to these percentages, biasing towards picking the lobe that will recieve a higher amount of energy.
+
+However, that only accounts for one part of the rendering equation. Incident radiance is _also_ an important quantity to account for. Let's say that for a given pixel we estimate that the specular layer will recieve 70% of the incoming energy, while the diffuse layer only gets 30%. We should choose to sample the specular layer, right?
+
+But what if the specular lobe is pointing in a direction where no light is coming from? 70% of 0 energy is still 0 - it would've been better to sample the diffuse lobe after all...
+
+Really, we'd like to sample according to some estimate (obviously if we had a perfect, cheap predictor of the full rendering equation, there would be no need to trace paths at all) of the combined `BRDF * incident_radiance` product. This is called "path guiding", and Bevy dosen't currently have a way of doing that. We have to stick to the inferior BRDF-only sampling.
+
+In practical terms, I noticed that after switching to unified ReSTIR, that specular reflections in dielectric materials got much noisier, leading to the denoiser reconstructing a much more blurry reflection.
+
+To mitigate this issue, I simply boosted the chance of sampling the specular lobe for smooth surfaces.
+
+```rust
+fn specular_lobe_sampling_probability(rho: LobeReflectances, perceptual_roughness: f32) -> f32 {
+    let specular_luminance = luminance(rho.specular);
+    let total_luminance = specular_luminance + luminance(rho.diffuse);
+    let energy_probability = specular_luminance / max(total_luminance, 0.0001);
+
+    // Give smooth dielectric reflections more specular samples to prevent undersampling
+    let roughness_biased_probability = mix(0.5, energy_probability, perceptual_roughness);
+    return max(energy_probability, roughness_biased_probability);
+}
+```
+
+The logic is pretty simple: for smooth dielectric surfaces, ReSTIR will _already_ reduce noise from diffuse paths through reservoir reuse. Since we're not resampling specular paths, it makes more sense to allocate a higher percentage of our initial samples towards specular paths, since they don't have any form of ReSTIR to help them out unlike diffuse path. Additionally, sharp specular reflections are simply more detailed than blurry diffuse reflections, and therefore the denoiser needs more samples in order to properly reconstruct them.
 
 ## Saying Goodbye to ReSTIR
 
