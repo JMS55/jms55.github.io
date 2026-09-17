@@ -29,7 +29,7 @@ I've written [plenty of articles on Solari](/tags/raytracing) before, but the TL
 {{ figure(src="zorah1_albedo.png", caption=" ") }}
 {{ figure(src="zorah2_albedo.png", caption="NVIDIA Zorah Scene, albedo rendering (no lighting)") }}
 
-Solari has been a years long project, but it's finally becoming production ready, and I'm really happy with what I've ended up with!
+Solari has been a years-long project, but it's finally becoming production ready, and I'm really happy with what I've ended up with!
 
 {{ figure(src="zorah1_lit.png", caption=" ") }}
 {{ figure(src="zorah2_lit.png", caption="NVIDIA Zorah Scene, Solari rendering") }}
@@ -116,7 +116,7 @@ When it comes to the human aspects of AI, things are much worse. Bevy, thankfull
 
 We recently changed our contributing policy from what I'll summarize as "no AI, at all" to "some AI for code, so long as you act in good faith and show understanding and build trust in your code". Even that was extremely contentious, with the change coming mainly because the "no AI, at all" rule was impossible to enforce, and led to a lot of witch hunting.
 
-Long time contributors I've been friends with have become extremely burnt out and disengaged from Bevy, OSS, and even programming in general, in large part due to AI (and in part due to e.g. lack of an editor for years).
+Long-time contributors I've been friends with have become extremely burnt out and disengaged from Bevy, OSS, and even programming in general, in large part due to AI (and in part due to e.g. lack of an editor for years).
 
 I have no magic solution to this, but I ask everyone: be kind to each other. We all want to see Bevy succeed, and we have more in common than we do differences that divide us.
 
@@ -175,7 +175,7 @@ For Solari, I've slowly been building up a set of test scenes and one-off AI gen
 > For me and I think a lot of other gamedevs, rendering is one of those things that is a voodoo sorcery black box where materials and meshes go in and pretty pictures come out.
 > So, this may be a big ask, but my question is "as an engine dev do you have any resources to link or recommend that help crack open that black box and make it easier to understand?"
 
-Honestly, not really! I did try and write some higher-level docs for the Bevy book this year, but never finished or merged them. For specific rendering topics, there's lots of individual papers and articles I could point at, but I don't have anything for people just starting out.
+Honestly, not really! I did try and write some higher-level docs for the Bevy book this year, but never finished or merged them. For specific rendering topics, there are lots of individual papers and articles I could point at, but I don't have anything for people just starting out.
 
 Rendering is a really broad area! There's a lot of things that boil down to "it's done in this extremely complex, specialized way, because performance".
 

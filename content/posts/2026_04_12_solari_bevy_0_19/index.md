@@ -120,7 +120,7 @@ The fix was to switch to a path termination heuristic inspired by [RTXGI](https:
 
 {{ figure(src="path_spread.svg", caption="Cumulative path spread grows with each bounce until it exceeds the world cache cell size, triggering termination") }}
 
-This improves performance by terminating paths sooner when appropriate. However, there are still visible artifacts when transitioning between LOD levels of the world cache — the lighting can pop or shift as the path termination crosses a LOD boundry. Unlike ReSTIR GI for diffuse, there's no temporal reservioirs to hide the transition. Smoothing out these transitions is still an open problem.
+This improves performance by terminating paths sooner when appropriate. However, there are still visible artifacts when transitioning between LOD levels of the world cache — the lighting can pop or shift as the path termination crosses a LOD boundary. Unlike ReSTIR GI for diffuse, there are no temporal reservoirs to hide the transition. Smoothing out these transitions is still an open problem.
 
 ## BRDF Correctness
 
@@ -244,7 +244,7 @@ if rand_f(&rng) >= f32(WORLD_CACHE_CELL_UPDATES_SOFT_CAP) / f32(world_cache_acti
 }
 ```
 
-Stochastic world cache updates keeps the performance hit down in larger scenes, at the cost of less reactive lighting.
+Stochastic world cache updates keep the performance hit down in larger scenes, at the cost of less reactive lighting.
 
 {{ figure(src="bistro_stochastic_cells_update.png", caption="0.47ms to update a random 40,000 world cache cells in Bistro") }}
 
@@ -280,7 +280,7 @@ The obvious question is: can we do better by precomputing which lights matter _w
 
 A bit ago, @SparkyPotato experimented with [light trees](https://gpuopen.com/download/Hierarchical_Light_Sampling_with_Accurate_Spherical_Gaussian_Lighting.pdf) — hierarchical acceleration structures that let you importance sample lights based on their estimated contribution. While theoretically sound (light trees are used a lot in the film industry), the overhead of constructing and traversing the tree ended up being too high for our use case.
 
-I explored building alias tables over light CDFs, built on top of Solari's existing world cache, which would give O(1) sampling from an theoretically high quality distribution. But building the alias table for every cell each frame turned out to be expensive, and the quality gains didn't justify the cost.
+I explored building alias tables over light CDFs, built on top of Solari's existing world cache, which would give O(1) sampling from a theoretically high quality distribution. But building the alias table for every cell each frame turned out to be expensive, and the quality gains didn't justify the cost.
 
 I also wanted to avoid methods like [ReGIR](https://research.nvidia.com/labs/rtr/publication/boksansky2021rendering), which requires a lot of storage and computation to get good results, and relies heavily on temporal reuse.
 
