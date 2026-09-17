@@ -79,28 +79,28 @@ It's important to note that each of these reservoirs comes from a different doma
 
 Since multiple domains are involved, we can't use constant MIS weights, and will have to use the balance heuristic again.
 
-To use the balance heuristic, we need PDFs. But with reservoirs, while the regular PDFs can be replaced by unbiased contribution weights (UCWs), we have no method of generating cross-domain PDFs!
+To use the balance heuristic, we need PDFs. But with reservoirs, although the regular PDFs can be replaced by unbiased contribution weights (UCWs), we have no method of generating cross-domain PDFs!
 
 Instead of the balance heuristic, we'll have to instead use the _generalized balance heuristic_, which uses a combination of the UCWs and target functions of each reservoir to compute MIS weights.
 
-Unfortunately, whereas the regular balance heuristic involves cross-domain PDFs that are pretty cheap to compute, the generalized balance heuristic involves computing cross-domain _target functions_, which are _much_ more expensive to compute since you need to trace new visibility rays and even full paths.
+Unfortunately, whereas the regular balance heuristic involves cross-domain PDFs that are pretty cheap to compute, the generalized balance heuristic involves computing cross-domain _target functions_, which are _much_ more expensive to compute since you need to trace new visibility rays, and even full paths.
 
 ### MIS in Solari
 
 In realtime rendering, we often use hacks and approximations in the name of performance, and ReSTIR is no exception.
 
-See, you don't strictly _need_ to use proper MIS weights. You can tradeoff various levels of performance/correctness (bias)/variance reduction by using purposefully incorrect MIS weights, depending on what you want your renderer to achieve.
+See, you don't strictly _need_ to use proper MIS weights. You can tradeoff various levels of performance/correctness (bias)/variance reduction by using purposefully incorrect MIS weights, depending on what you want to prioritize.
 
-For instance, when computing MIS weights for a reusing a temporal reservoir, you could do any of the following, in order of increasing performance cost:
+For instance, when computing MIS weights for reusing a temporal reservoir, you could do any of the following, in order of increasing performance cost:
 1. Use constant MIS weights
 2. Use the generalized balance heuristic, but with various assumptions in the cross-domain target functions:
-  * The material properties and world position of the current and previous frame pixels are the same
-  * The intensity and color of the light the sample is from is the same in the current and previous frame (but watch out for lights that were despawned between frames)
-  * When computing the target function of the canonical sample in the temporal reservoir's domain, if the light was visible to the pixel last frame, it's probably visible to the pixel again this frame (e.g. there's no occluders that got in the way since last frame) (note that you'll still want to trace a visibility ray when computing the target function of the temporal sample in the canonical domain)
+    * The material properties and world position of the current and previous frame pixels are the same
+    * The intensity and color of the light the sample is from is the same in the current and previous frame (but watch out for lights that were despawned between frames)
+    * When computing the target function of the canonical sample in the temporal reservoir's domain, if the light was visible to the pixel last frame, it's probably visible to the pixel again this frame (e.g. there's no occluders that got in the way since last frame) (note that you'll still want to trace a visibility ray when computing the target function of the temporal sample in the canonical domain)
 3. Same as #2, but:
-  * Store and lookup the gbuffer and depth data from the previous frame
-  * Keep a mapping of lights between frames, and lookup the new light proprties for the temporal sample
-  * When computing the target function of the canonical sample in the temporal reservoir's domain, instead of skipping the visibility ray, trace a visibility ray using the current frame's TLAS as an approximation of the true visibility
+    * Store and lookup the gbuffer and depth data from the previous frame
+    * Keep a mapping of lights between frames, and lookup the new light proprties for the temporal sample
+    * When computing the target function of the canonical sample in the temporal reservoir's domain, instead of skipping the visibility ray, trace a visibility ray using the current frame's TLAS as an approximation of the true visibility
 4. Use the full, properly computed generalized balance heuristic / target functions, with no simplifications, by e.g. storing the previous frame's TLAS and BLAS data, and tracing the extra rays
 
 In Bevy 0.19, Solari was (more or less) following #3. This led to bias, increased variance, and importantly, temporal lag. Shadows of moving objects often appeared to lag behind the object.
@@ -115,7 +115,7 @@ For any readers who felt that the previous section was a lot of math, and not mu
 
 A few months ago, NVIDIA researchers released a really interesting paper called [ReSTIR PT Enhanced: Algorithmic Advances for Faster and More Robust ReSTIR Path Tracing](https://research.nvidia.com/labs/rtr/publication/lin2026restirptenhanced).
 
-The new paper is a followup to their 2022 paper on ReSTIR PT, this time detailing a lot of algorithmic improvements to improve the performance of (the quite expensive) ReSTIR PT (among some other changes to e.g. reduce correlations).
+The paper is a followup to their 2022 paper on ReSTIR PT, this time detailing a lot of algorithmic improvements to improve the performance of (the quite expensive) ReSTIR PT (among some other changes to e.g. reduce correlations).
 
 The main optimization from the paper that I want to talk about is the concept of a single, "unified" ReSTIR pass.
 
@@ -240,9 +240,9 @@ By merging the two sets of reservoirs into one structure, we're saving 16 bytes/
 
 More importantly than memory savings, that are a bunch of other improvements we either get for free, or can now afford to make due to combining the ReSTIR passes:
 * In Solari 0.19's ReSTIR DI, we never traced BRDF rays to sample emissive lighting, instead relying only on NEE. Now that everything is unified into one pathtracer, we can trace and resample BRDF-based emissive lighting for free, as if we don't hit an emissive mesh, the ray is not wasted - it just becomes a GI path. This greatly improves direct lighting from nearby emissives.
-* As discussed in the previous section, in Solari 0.19, we skipped tracing some visibility rays during MIS to increase performance, at the cost of some bias (shadow growing slightly larger and darker). Now, because we only have a single set of ReSTIR passes, we can afford to trace these rays, giving us fully unbiased (and lower variance) rendering. Overall we went from about 6-12 rays per pixel (3 DI, 3 GI, 0-6 specular BRDF + NEE), to 6-10 rays per pixel (2-6 pathtracing BRDF + NEE, 4 ReSTIR).
+* As discussed in the previous section, in Solari 0.19, we skipped tracing some visibility rays during MIS to increase performance, at the cost of some bias (shadow growing slightly larger and darker). Now, because we only have a single set of ReSTIR passes, we can reallocate the rays we saved from no longer having two ReSTIR passes to be used in MIS for the single pass, giving us fully unbiased (and lower variance) rendering. Overall we went from about 6-12 rays per pixel (3 DI, 3 GI, 0-6 specular BRDF + NEE), to 6-10 rays per pixel (2-6 pathtracing BRDF + NEE, 4 ReSTIR).
 * Whereas before we never resampled specular GI, we can now resample sufficently rough/glossy specular reflections. More on the caveats here in a bit.
-* Much better light leak prevention, as instead of always terminating into the world cache after the first bounce like we used to for ReSTIR GI, it's now easy to simply continue tracing the path.
+* Much better light leak prevention, as instead of always terminating into the world cache after the first bounce like we used to for ReSTIR GI, it's now easy to simply continue tracing the path if terminating would risk leaking light.
 
 Overall, we get some very nice quality wins, simplify the code, and reduce our memory usage. Performance tends be either about the same, slightly slower, or slightly faster depending on the scene and GPU in question.
 
