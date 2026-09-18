@@ -1,0 +1,871 @@
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light dark">
+  
+  
+    
+  
+  <meta name="description" content="Bevy, Rust, Graphics, etc">
+
+  <title>Realtime Raytracing in Bevy 0.20 (Solari)</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="https://jms55.github.io/img/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="https://jms55.github.io/img/favicon-16x16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="https://jms55.github.io/img/apple-touch-icon.png">
+  
+  <style>
+
+  /* light mode colors */
+  body {
+    --primary-color: #5871a2;
+    --primary-pale-color: #5871a233;
+    --primary-decoration-color: #5871a210;
+    --bg-color: #ffffff;
+    --text-color: #2f3030;
+    --text-pale-color: #767676;
+    --text-decoration-color: #a9a9a9;
+    --highlight-mark-color: #5f75b020;
+
+    --callout-note-color: #5871a2;
+    --callout-tip-color: #268556;
+    --callout-important-color: #885fc9;
+    --callout-warning-color: #ab6632;
+    --callout-caution-color: #c64e4e;
+  }
+
+  /* dark mode colors */
+  body.dark {
+    --primary-color: #6f8fd1;
+    --primary-pale-color: #6f8fd166;
+    --primary-decoration-color: #6f8fd112;
+    --bg-color: #1c1c1c;
+    --text-color: #c1c1c1;
+    --text-pale-color: #848484;
+    --text-decoration-color: #5f5f5f;
+    --highlight-mark-color: #8296cb3b;
+
+    --callout-note-color: #6f8fd1;
+    --callout-tip-color: #47976f;
+    --callout-important-color: #9776cd;
+    --callout-warning-color: #ad7a52;
+    --callout-caution-color: #d06161;
+  }
+
+  /* typography */
+  body {
+    --main-font: ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+    --code-font: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+    --homepage-max-width: 768px;
+    --main-max-width: 768px;
+    --avatar-size: 60px;
+    --font-size: 16px;
+    --line-height: 1.75;
+    --img-border-radius: 0px;
+    --detail-border-radius: 0px;
+    --dark-mode-img-brightness: 0.75;
+    --dark-mode-chart-brightness: 0.75;
+    --inline-code-border-radius: 2px;
+    --inline-code-bg-color: var(--primary-decoration-color);
+    --block-code-border-radius: 0px;
+    --block-code-border-color: var(--primary-color);
+    --detail-border-color: var(--primary-color);
+  }
+
+</style>
+
+  <link rel="stylesheet" href="https://jms55.github.io/main.css">
+  
+
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" integrity="sha384-nB0miv6/jRmo5UMMR1wu3Gz6NLsoTkbqJghGIsx//Rlm+ZU03BU6SQNC66uf4l5+" crossorigin="anonymous">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" integrity="sha384-7zkQWkzuo3B5mTepMUcHkMB5jZaolc2xDwL6VFqjFALcbeS9Ggm/Yr2r3Dy4lfFg" crossorigin="anonymous"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js" integrity="sha384-43gviWU0YVjaDtb/GhzOouOXtZMP/7XUzwPTstBeZFe/+rCMvRwr4yROQP43s0Xk" crossorigin="anonymous"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/copy-tex.min.js" integrity="sha384-HORx6nWi8j5/mYA+y57/9/CZc5z8HnEw4WUZWy5yOn9ToKBv1l58vJaufFAn9Zzi" crossorigin="anonymous"></script>
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        renderMathInElement(document.body, {
+            delimiters: [
+                { left: '$$', right: '$$', display: true },
+                { left: '$', right: '$', display: false },
+                { left: '\\(', right: '\\)', display: false },
+                { left: '\\[', right: '\\]', display: true }
+            ],
+            throwOnError: false
+        });
+    });
+</script>
+
+
+  
+</head>
+
+<body class="post">
+  
+  
+<div id="wrapper">
+  <div id="blank"></div>
+  <aside>
+    
+    
+    <nav>
+      <ul>
+        
+        <li>
+          <a class="h2" href="#introduction">Introduction</a>
+          
+        </li>
+        
+        <li>
+          <a class="h2" href="#reducing-shadow-lag">Reducing Shadow Lag</a>
+          
+          <ul>
+            
+            <li>
+              <a class="h3" href="#mis-for-the-combined-estimator">MIS for the Combined Estimator</a>
+            </li>
+            
+            <li>
+              <a class="h3" href="#mis-in-ris">MIS in RIS</a>
+            </li>
+            
+            <li>
+              <a class="h3" href="#mis-in-restir">MIS in ReSTIR</a>
+            </li>
+            
+            <li>
+              <a class="h3" href="#mis-in-solari">MIS in Solari</a>
+            </li>
+            
+          </ul>
+          
+        </li>
+        
+        <li>
+          <a class="h2" href="#unified-restir">Unified ReSTIR</a>
+          
+          <ul>
+            
+            <li>
+              <a class="h3" href="#historical-background">Historical Background</a>
+            </li>
+            
+            <li>
+              <a class="h3" href="#a-unified-pathtracer">A Unified Pathtracer</a>
+            </li>
+            
+            <li>
+              <a class="h3" href="#implementation-choices">Implementation Choices</a>
+            </li>
+            
+            <li>
+              <a class="h3" href="#benefits">Benefits</a>
+            </li>
+            
+            <li>
+              <a class="h3" href="#downsides">Downsides</a>
+            </li>
+            
+          </ul>
+          
+        </li>
+        
+        <li>
+          <a class="h2" href="#saying-goodbye-to-restir">Saying Goodbye to ReSTIR</a>
+          
+          <ul>
+            
+            <li>
+              <a class="h3" href="#what-in-the-denoiser">What in the Denoiser?</a>
+            </li>
+            
+          </ul>
+          
+        </li>
+        
+        <li>
+          <a class="h2" href="#reflection-denoising">Reflection Denoising</a>
+          
+        </li>
+        
+        <li>
+          <a class="h2" href="#cpu-performance-improvements">CPU Performance Improvements</a>
+          
+        </li>
+        
+        <li>
+          <a class="h2" href="#atmosphere-and-skybox-lighting">Atmosphere and Skybox Lighting</a>
+          
+        </li>
+        
+      </ul>
+    </nav>
+    
+    
+    <button id="back-to-top" aria-label="back to top">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-up"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>
+
+    </button>
+    
+  </aside>
+  <main>
+    
+<header>
+  <nav>
+    <a id="back-link" href="https:&#x2F;&#x2F;jms55.github.io&#x2F;posts">← Back</a>
+  </nav>
+</header>
+
+
+    <div>
+      
+      
+      
+      
+      <div id="copy-cfg" style="display: none;" data-copy-icon="&lt;svg xmlns=&quot;http:&#x2F;&#x2F;www.w3.org&#x2F;2000&#x2F;svg&quot; viewBox=&quot;0 0 24 24&quot; width=&quot;18&quot; height=&quot;18&quot;&gt;&lt;path d=&quot;M6.9998 6V3C6.9998 2.44772 7.44752 2 7.9998 2H19.9998C20.5521 2 20.9998 2.44772 20.9998 3V17C20.9998 17.5523 20.5521 18 19.9998 18H16.9998V20.9991C16.9998 21.5519 16.5499 22 15.993 22H4.00666C3.45059 22 3 21.5554 3 20.9991L3.0026 7.00087C3.0027 6.44811 3.45264 6 4.00942 6H6.9998ZM5.00242 8L5.00019 20H14.9998V8H5.00242ZM8.9998 6H16.9998V16H18.9998V4H8.9998V6Z&quot; fill=&quot;currentColor&quot;&gt;&lt;&#x2F;path&gt;&lt;&#x2F;svg&gt;
+" data-check-icon="&lt;svg xmlns=&quot;http:&#x2F;&#x2F;www.w3.org&#x2F;2000&#x2F;svg&quot; viewBox=&quot;0 0 24 24&quot; width=&quot;18&quot; height=&quot;18&quot;&gt;&lt;path d=&quot;M10.0007 15.1709L19.1931 5.97852L20.6073 7.39273L10.0007 17.9993L3.63672 11.6354L5.05093 10.2212L10.0007 15.1709Z&quot; fill=&quot;currentColor&quot;&gt;&lt;&#x2F;path&gt;&lt;&#x2F;svg&gt;
+"></div>
+      
+      <article class="prose">
+        <h1>Realtime Raytracing in Bevy 0.20 (Solari)</h1>
+        <div id="post-info">
+          <div id="date">
+            <span id="publish">Sep 18, 2026</span>
+            </div>
+
+          
+          <div id="tags">
+            <a class="instant" href="https://jms55.github.io/tags/bevy"><span>#</span>bevy</a><a class="instant" href="https://jms55.github.io/tags/raytracing"><span>#</span>raytracing</a>
+          </div>
+          
+        </div>
+
+        
+        
+
+        
+
+        <h2 id="introduction">Introduction<a class="zola-anchor" href="#introduction" aria-label="Anchor link for: introduction" style="visibility: hidden;"></a>
+</h2>
+<p>Bevy 0.20 is going to release soon, so it's time to talk about all the improvements I've been working on for Solari, Bevy's realtime pathtracer.</p>
+<p>Whereas last cycle was mostly incremental improvements, this cycle was the complete opposite. Solari 0.20 features nothing less than a complete rewrite of the renderer!</p>
+<p>Lots to cover, so let's get started!</p>
+<figure>
+    <img
+        src="headline.png"
+        
+        
+        
+    >
+    
+    <figcaption><p>Zero Day rendered in realtime via Bevy Solari 0.20</p>
+</figcaption>
+    
+</figure>
+<h2 id="reducing-shadow-lag">Reducing Shadow Lag<a class="zola-anchor" href="#reducing-shadow-lag" aria-label="Anchor link for: reducing-shadow-lag" style="visibility: hidden;"></a>
+</h2>
+<p>This section is going to start off with a good bit of math, but we'll get to the practical applications towards the end. Bear with me for a bit.</p>
+<h3 id="mis-for-the-combined-estimator">MIS for the Combined Estimator<a class="zola-anchor" href="#mis-for-the-combined-estimator" aria-label="Anchor link for: mis-for-the-combined-estimator" style="visibility: hidden;"></a>
+</h3>
+<p>In pathtracing, when combining multiple sampling strategies (ways of generating samples, also called <em>domains</em>), you need to apply proper MIS weights to obtain both unbiased rendering, and optimal variance reduction.</p>
+<p>Typically, you would use something like the balance heuristic to compute MIS weights.</p>
+<p>Given a sample $a$ from strategy A, and sample $b$ from strategy B, in order to combine them you would start by computing the following 4 values:</p>
+<ol>
+<li>$p_A(a)$ - The PDF of sample $a$ as if it were sampled from strategy A</li>
+<li>$p_B(b)$ - The PDF of sample $b$ as if it were sampled from strategy B</li>
+<li>$p_A(b)$ - The PDF of sample $b$ as if it were sampled from strategy A (a different domain!)</li>
+<li>$p_B(a)$ - The PDF of sample $a$ as if it were sampled from strategy B (a different domain!)</li>
+</ol>
+<p>The first two values you already have - they're how you obtained $a$ and $b$ in the first place.</p>
+<p>If you were simply computing the (non-combined) estimator of e.g. just $a$, you would compute $f(a) / p_A(a)$, and that would be it.</p>
+<p>But if you want to compute the <em>combined</em> estimator of these two samples (which come from two different domains) using the balance heuristic, it gets more complicated. You need the last two values, which are new and need to be computed from scratch. These are <em>cross domain</em> PDFs.</p>
+<p>With the regular and cross domain PDFs in hand, we can now compute the MIS weights using the balance heuristic:</p>
+<p>$$m(a) = \frac{p_A(a)}{p_A(a) + p_B(a)}$$</p>
+<p>$$m(b) = \frac{p_B(b)}{p_A(b) + p_B(b)}$$</p>
+<p>And then the final combined estimator:</p>
+<p>$$f_1 = \frac{f(a)}{p_A(a)} m(a)$$</p>
+<p>$$f_2 = \frac{f(b)}{p_B(b)} m(b)$$</p>
+<p>$$f_{a,b} = f_1 + f_2$$</p>
+<h3 id="mis-in-ris">MIS in RIS<a class="zola-anchor" href="#mis-in-ris" aria-label="Anchor link for: mis-in-ris" style="visibility: hidden;"></a>
+</h3>
+<p>In RIS, instead of <em>combining</em> samples, you aim to <em>select</em> a single "best" sample by randomly choosing from the samples with weights proportional to each sample's contribution.</p>
+<p>As part of RIS, you always need to compute MIS weights for each sample. You can use a constant $1/N$ MIS weight for every sample if all samples are from the same domain, but with multiple domains you need e.g. the balance heuristic. See <a rel="nofollow noreferrer" href="https://intro-to-restir.cwyman.org/presentations/2023ReSTIR_Course_Notes.pdf">A Gentle Introduction to ReSTIR</a> for details if the process of RIS with MIS is unfamiliar to you.</p>
+<p>To give a concrete multi-domain example, let's say you're generating the "initial" reservoir for ReSTIR, and are doing RIS over the unshadowed light contributions of two different light samples.</p>
+<p>The first sample is drawn by randomly selecting an emissive mesh, then randomly selecting a triangle in that mesh, and then randomly selecting a front-facing point on that triangle (this is NEE).</p>
+<p>The second sample is drawn by shooting a ray according to the current pixel's BRDF, and hitting a point on an emissive mesh (this is BRDF sampling).</p>
+<p>We have two different strategies: NEE and BRDF sampling. In order to do RIS over the two samples, we need to calculate MIS weights for each sample.</p>
+<p>We already saw how to do this in the previous section: you calculate both $p_\text{NEE}$ and $p_\text{BRDF}$ for each sample, and simply apply the balance heuristic to get the two MIS weights $m(\text{sample}_1)$ and $m(\text{sample}_2)$. Then we can apply RIS to choose one of the two samples.</p>
+<h3 id="mis-in-restir">MIS in ReSTIR<a class="zola-anchor" href="#mis-in-restir" aria-label="Anchor link for: mis-in-restir" style="visibility: hidden;"></a>
+</h3>
+<p>Now that we've covered how MIS works in RIS, it should be straightforward to apply the same concepts to ReSTIR, right? ReSTIR is just RIS, after all.</p>
+<p>In ReSTIR, we aim to resample reservoirs (samples) from different pixels. E.g. you could have an "initial" reservoir, a "temporal" reservoir, and a "spatial" reservoir, and aim to select the best reservoir to keep and use for shading from the three via RIS.</p>
+<p>It's important to note that each of these reservoirs comes from a different domain: the initial reservoir comes from the frame+pixel, the temporal reservoir comes from the previous frame+pixel, and the spatial reservoir comes from the current frame but from a neighboring pixel.</p>
+<p>Since multiple domains are involved, we can't use constant MIS weights, and will have to use the balance heuristic again.</p>
+<p>To use the balance heuristic, we need PDFs. But with reservoirs, although the regular PDFs can be replaced by unbiased contribution weights (UCWs), we have no method of generating cross-domain PDFs!</p>
+<p>Instead of the balance heuristic, we'll have to instead use the <em>generalized balance heuristic</em>, which uses a combination of the UCWs and target functions of each reservoir to compute MIS weights.</p>
+<p>Unfortunately, whereas the regular balance heuristic involves cross-domain PDFs that are pretty cheap to compute, the generalized balance heuristic involves computing cross-domain <em>target functions</em>, which are <em>much</em> more expensive to compute since you need to trace new visibility rays, and even full paths.</p>
+<h3 id="mis-in-solari">MIS in Solari<a class="zola-anchor" href="#mis-in-solari" aria-label="Anchor link for: mis-in-solari" style="visibility: hidden;"></a>
+</h3>
+<p>In realtime rendering, we often use hacks and approximations in the name of performance, and ReSTIR is no exception.</p>
+<p>See, you don't strictly <em>need</em> to use proper MIS weights. You can trade off various levels of performance/correctness (bias)/variance reduction by using purposefully incorrect MIS weights, depending on what you want to prioritize.</p>
+<p>For instance, when computing MIS weights for reusing a temporal reservoir, you could do any of the following, in order of decreasing bias but increasing performance cost:</p>
+<ol>
+<li>Use constant MIS weights</li>
+<li>Use the generalized balance heuristic, but with various assumptions in the cross-domain target functions:
+<ul>
+<li>The material properties and world position of the current and previous frame pixels are the same</li>
+<li>The intensity and color of the light the sample is from is the same in the current and previous frame (but watch out for lights that were despawned between frames)</li>
+<li>When computing the target function of the canonical sample in the temporal reservoir's domain, if the light was visible to the pixel last frame, it's probably visible to the pixel again this frame (e.g. there are no occluders that got in the way since last frame) (note that you'll still want to trace a visibility ray when computing the target function of the temporal sample in the canonical domain)</li>
+</ul>
+</li>
+<li>Same as #2, but:
+<ul>
+<li>Store and look up the gbuffer and depth data from the previous frame</li>
+<li>Keep a mapping of lights between frames, and look up the new light properties for the temporal sample</li>
+<li>When computing the target function of the canonical sample in the temporal reservoir's domain, instead of skipping the visibility ray, trace a visibility ray using the current frame's TLAS as an approximation of the true visibility</li>
+</ul>
+</li>
+<li>Use the full, properly computed generalized balance heuristic / target functions, with no simplifications, by e.g. storing the previous frame's TLAS and BLAS data, and tracing the extra rays</li>
+</ol>
+<p>In Bevy 0.19, Solari was (more or less) following #3. This led to bias, increased variance, and importantly, temporal lag. Shadows of moving objects often appeared to lag behind the object.</p>
+<video style="max-width: 100%; margin: var(--gap) var(--gap) 0 var(--gap); border-radius: 6px;" controls>
+  <source src="shadow_lag.mp4" type="video/mp4">
+</video>
+<center>
+<p><em>Lagging shadows behind the robot in Bevy 0.19</em></p>
+</center>
+<p>In Bevy 0.20, we switched to using the previous frame's TLAS when testing visibility in the domain of the previous frame. This costs a decent amount of extra VRAM and complexity due to having to keep a second TLAS around, but in return it greatly reduces temporal shadow lag.</p>
+<video style="max-width: 100%; margin: var(--gap) var(--gap) 0 var(--gap); border-radius: 6px;" controls>
+  <source src="fixed_shadow_lag.mp4" type="video/mp4">
+</video>
+<center>
+<p><em>Much less shadow lag in Bevy 0.20, by using the previous frame's TLAS in the temporal reservoir MIS weights</em></p>
+</center>
+<h2 id="unified-restir">Unified ReSTIR<a class="zola-anchor" href="#unified-restir" aria-label="Anchor link for: unified-restir" style="visibility: hidden;"></a>
+</h2>
+<p>For any readers who felt that the previous section was a lot of math, and not much engineering, rejoice! This section is going to be the complete opposite :)</p>
+<h3 id="historical-background">Historical Background<a class="zola-anchor" href="#historical-background" aria-label="Anchor link for: historical-background" style="visibility: hidden;"></a>
+</h3>
+<p>A few months ago, NVIDIA researchers released a really interesting paper called <a rel="nofollow noreferrer" href="https://research.nvidia.com/labs/rtr/publication/lin2026restirptenhanced">ReSTIR PT Enhanced: Algorithmic Advances for Faster and More Robust ReSTIR Path Tracing</a>.</p>
+<p>The paper is a followup to their 2022 paper on ReSTIR PT, this time detailing a lot of algorithmic changes to improve the performance of (the quite expensive) ReSTIR PT (among some other changes to e.g. reduce correlations).</p>
+<p>The main optimization from the paper that I want to talk about is the concept of a single, "unified" ReSTIR pass.</p>
+<p>To give a quick recap of algorithms:</p>
+<ul>
+<li>2020: ReSTIR DI resamples direct illumination</li>
+<li>2021: ReSTIR GI resamples indirect, diffuse illumination</li>
+<li>2022: ReSTIR PT resamples indirect, diffuse and specular illumination</li>
+<li>2026: ReSTIR PT Enhanced resamples both direct and indirect illumination, and both diffuse and specular paths</li>
+</ul>
+<p>Historically, ReSTIR DI would handle direct lighting, and ReSTIR GI or PT would handle indirect lighting.</p>
+<p>For instance, in Bevy 0.19, the main lighting algorithm consisted of the following 5 compute dispatches:</p>
+<ol>
+<li>Initial sampling of DI via NEE, and temporal resampling for DI</li>
+<li>Spatial resampling and shading for DI</li>
+<li>Initial sampling of diffuse GI via uniform hemisphere tracing, and temporal resampling for diffuse GI</li>
+<li>Spatial resampling and shading for diffuse GI</li>
+<li>Up to 3 bounce pathtracing of specular reflections (single-sample NEE at every vertex except the primary)</li>
+</ol>
+<p>As another example, in <a rel="nofollow noreferrer" href="https://www.youtube.com/watch?v=8AnVpcIczyk">NVIDIA's NvRTX fork of Unreal Engine</a>, ReSTIR DI handled direct lighting, and ReSTIR PT would handle diffuse and specular indirect lighting, computed at quarter-resolution because it's so expensive.</p>
+<p>These are still pathtracing, just with different kernels to handle different parts of the overall path space.</p>
+<blockquote>
+<p>As an aside, up until recently, games would render each of these effects (DI, diffuse GI, specular GI) to different textures, and denoise them separately using specialized denoisers for each type.</p>
+<p>Oftentimes, games would only use raytracing for one or two of these effects, and e.g. handle DI via traditional shadow maps and screen-space light clustering, or use reflection probes and screen space reflections to handle specular GI.</p>
+<p>With the advent of really good denoisers like DLSS-RR, and with faster hardware, it's much more practical to fully raytrace all lighting effects (e.g. pathtracing), and combine all effects into a single texture and denoise them together.</p>
+</blockquote>
+<h3 id="a-unified-pathtracer">A Unified Pathtracer<a class="zola-anchor" href="#a-unified-pathtracer" aria-label="Anchor link for: a-unified-pathtracer" style="visibility: hidden;"></a>
+</h3>
+<p>What the ReSTIR PT Enhanced paper did, and now Solari in Bevy 0.20 does, is combine the two (DI and GI) into one.</p>
+<p>The new lighting algorithm for Solari 0.20 has been simplified down to just two dispatches:</p>
+<ol>
+<li>Initial pathtracing, up to 3 bounces, plus temporal resampling</li>
+<li>Spatial resampling and shading</li>
+</ol>
+<p>These two passes handle DI, GI, diffuse, and specular lighting effects, all with a single set of reservoirs and a single initial sampling routine that does pathtracing.</p>
+<p>The basic idea is that you start with your bog-standard pathtracer:</p>
+<ol>
+<li>Perform NEE at the current path vertex (use RIS to choose a good sample for this)</li>
+<li>Sample the BRDF, trace your next ray, continue if hit</li>
+<li>Add emissive contribution, if any</li>
+<li>Terminate in the world cache (if the path has been wide enough)</li>
+<li>Perform Russian roulette to terminate long paths early</li>
+<li>Loop</li>
+</ol>
+<p>And then add ReSTIR, transforming the algorithm to look like this:</p>
+<ol>
+<li>Initialize an empty reservoir</li>
+<li>Perform NEE at the current path vertex
+<ul>
+<li>Resample new path contribution into the reservoir</li>
+</ul>
+</li>
+<li>Sample the BRDF, trace your next ray, continue if hit</li>
+<li>Add emissive contribution, if any
+<ul>
+<li>Resample new path contribution into the reservoir</li>
+</ul>
+</li>
+<li>Terminate in the world cache (if the path has been wide enough)
+<ul>
+<li>Resample new path contribution into the reservoir</li>
+</ul>
+</li>
+<li>Perform Russian roulette to terminate long paths early</li>
+<li>Loop</li>
+</ol>
+<p>At the end, you're left with a single "initial" reservoir that you can then perform temporal and spatial resampling on, before finally using it to shade the pixel.</p>
+<p>You are essentially resampling between different paths, regardless of whether those paths are primarily made of DI or GI contributions. It's all just one set of reservoirs.</p>
+<p>To give you an idea of what the reservoir structure looks like, here's what Solari's reservoir structs looked like in Bevy 0.19:</p>
+<pre data-lang="rust" style="background-color:#002b36;color:#839496;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#586e75;">// 16 bytes
+</span><span style="color:#268bd2;">struct </span><span style="color:#b58900;">DIReservoir </span><span style="color:#657b83;">{
+</span><span>    </span><span style="color:#268bd2;">sample</span><span>: LightSample,
+</span><span>    </span><span style="color:#268bd2;">confidence_weight</span><span>: </span><span style="color:#268bd2;">f32</span><span>,
+</span><span>    </span><span style="color:#268bd2;">unbiased_contribution_weight</span><span>: </span><span style="color:#268bd2;">f32</span><span>,
+</span><span style="color:#657b83;">}
+</span><span>
+</span><span style="color:#586e75;">// 48 bytes
+</span><span style="color:#268bd2;">struct </span><span style="color:#b58900;">GIReservoir </span><span style="color:#657b83;">{
+</span><span>    </span><span style="color:#268bd2;">sample_point_world_position</span><span>: vec3&lt;</span><span style="color:#268bd2;">f32</span><span>&gt;,
+</span><span>    </span><span style="color:#268bd2;">weight_sum</span><span>: </span><span style="color:#268bd2;">f32</span><span>, </span><span style="color:#586e75;">// could be deleted, don&#39;t actually need to store
+</span><span>    </span><span style="color:#268bd2;">radiance</span><span>: vec3&lt;</span><span style="color:#268bd2;">f32</span><span>&gt;,
+</span><span>    </span><span style="color:#268bd2;">confidence_weight</span><span>: </span><span style="color:#268bd2;">f32</span><span>,
+</span><span>    </span><span style="color:#268bd2;">sample_point_world_normal</span><span>: vec3&lt;</span><span style="color:#268bd2;">f32</span><span>&gt;,
+</span><span>    </span><span style="color:#268bd2;">unbiased_contribution_weight</span><span>: </span><span style="color:#268bd2;">f32</span><span>,
+</span><span style="color:#657b83;">}
+</span></code></pre>
+<p>And here's what Solari's new unified reservoir structure looks like in Bevy 0.20:</p>
+<pre data-lang="rust" style="background-color:#002b36;color:#839496;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#586e75;">// 48 bytes
+</span><span style="color:#268bd2;">struct </span><span style="color:#b58900;">UnifiedReservoir </span><span style="color:#657b83;">{
+</span><span>    </span><span style="color:#268bd2;">sample_point_world_position</span><span>: vec3&lt;</span><span style="color:#268bd2;">f32</span><span>&gt;,
+</span><span>    </span><span style="color:#268bd2;">unbiased_contribution_weight</span><span>: </span><span style="color:#268bd2;">f32</span><span>,
+</span><span>    </span><span style="color:#268bd2;">radiance</span><span>: vec3&lt;</span><span style="color:#268bd2;">f32</span><span>&gt;,
+</span><span>    </span><span style="color:#268bd2;">confidence_weight</span><span>: </span><span style="color:#268bd2;">f32</span><span>,
+</span><span>    </span><span style="color:#268bd2;">sample_point_world_normal</span><span>: vec2&lt;</span><span style="color:#268bd2;">f32</span><span>&gt;, </span><span style="color:#586e75;">// octahedral packed
+</span><span>    </span><span style="color:#268bd2;">light_sample</span><span>: LightSample,
+</span><span style="color:#657b83;">}
+</span></code></pre>
+<h3 id="implementation-choices">Implementation Choices<a class="zola-anchor" href="#implementation-choices" aria-label="Anchor link for: implementation-choices" style="visibility: hidden;"></a>
+</h3>
+<p>Unlike the paper, I chose not to implement the hybrid shift, and stuck purely to the reconnection shift. Basically, when tracing paths, if it's from too sharp of a specular lobe, instead of putting the path into the reservoir to use for resampling, we simply write the path's radiance directly to the screen.</p>
+<p>Unlike a wide lobe, it's not possible to use a sharply directional lobe with the reconnection shift. The hybrid shift, which conditionally switches to "random replay", can handle these types of lobes, but it involves re-tracing the path, which in my opinion is too expensive for a realtime renderer.</p>
+<p>Additionally, I have a fairly high roughness gate on the primary vertex to guard resampling. I realized that just because you <em>can</em> resample specular paths, doesn't mean you <em>should</em>.</p>
+<p>As denoisers have improved recently, correlations from temporal and spatial reuse have become a big problem. Because we're reusing discrete samples, the denoiser sees the same samples more often than it otherwise would with plain importance sampling. The denoiser then thinks that this is detail worth preserving (it's a repeating pattern in an otherwise noisy signal), which leads to ugly denoising artifacts.</p>
+<p>Smooth specular surfaces, unlike rough diffuse surfaces, have a small number of possible paths with strong contributions. So as soon as ReSTIR finds one good sample, it tends to propagate to all neighboring pixels, and stay there for a while without being overwritten by new samples. This over-reuse and correlated neighbor pixels confuses the denoiser.</p>
+<blockquote>
+<p>See <a rel="nofollow noreferrer" href="https://www.youtube.com/watch?v=MCqnETw3l8A">Compatibility-Guided Neighbor Selection for ReSTIR</a> for a good explanation of correlations in ReSTIR.</p>
+</blockquote>
+<blockquote>
+<p>As a side note, in the previous post in this series, I recommended halving the spatial sampling radius after failing to find a valid sample. It turns out, this is a bad idea, and I have reverted it. Doing this <em>also</em> introduces problematic correlations, as many pixels end up reusing the same few samples within a small radius.</p>
+</blockquote>
+<p>I tried a few different ways of mitigating correlations, e.g. by copying ReSTIR PT Enhanced's duplication maps, or scaling temporal confidence weight by surface roughness, but in the end the only foolproof method I came up with was a hard cutoff based on roughness.</p>
+<p>One final note on the algorithm - if you've been paying attention, you may be wondering: "what kind of MIS weights do you use during resampling?"</p>
+<p>After all, BRDF-sampled emissive hits at the primary vertex, NEE hits at the primary vertex, BRDF-sampled emissive hits at further vertices, NEE hits at further vertices, and the world cache termination are all <em>very</em> different types of sampling strategies.</p>
+<p>The answer is kind of complicated, and you can <a rel="nofollow noreferrer" href="https://github.com/bevyengine/bevy/blob/37256568acc84fd2c8e3c801b906b7dd253f84f5/crates/bevy_solari/src/realtime/initial_path.wesl">take a look at the code</a> for exact details, but it's actually very similar to the way you would typically do MIS in pathtracing.</p>
+<h3 id="benefits">Benefits<a class="zola-anchor" href="#benefits" aria-label="Anchor link for: benefits" style="visibility: hidden;"></a>
+</h3>
+<p>By merging the two sets of reservoirs into one structure, we're saving 16 bytes/pixel compared to non-unified ReSTIR's two separate sets of reservoirs.</p>
+<p>More important than the memory savings, there are a bunch of other improvements we either get for free, or can now afford to make due to combining the ReSTIR passes:</p>
+<ul>
+<li>In Solari 0.19's ReSTIR DI, we never traced BRDF rays to sample emissive lighting, instead relying only on NEE. Now that everything is unified into one pathtracer, we can trace and resample BRDF-based emissive lighting for free, since if we don't hit an emissive mesh, the ray is not wasted - it just becomes a GI path. This greatly improves direct lighting from nearby emissives.</li>
+<li>As discussed in the previous section, in Solari 0.19, we skipped tracing some visibility rays during MIS to increase performance, at the cost of some bias (shadows growing slightly larger and darker). Now, because we only have a single set of ReSTIR passes, we can reallocate the rays we saved from no longer having two ReSTIR passes to be used in MIS for the single pass, giving us fully unbiased (and lower variance) rendering. Overall we went from about 6-12 rays per pixel (3 DI, 3 GI, 0-6 specular BRDF + NEE), to 6-10 rays per pixel (2-6 pathtracing BRDF + NEE, 4 ReSTIR).</li>
+<li>Whereas before we never resampled specular GI, we can now resample sufficiently rough/glossy specular reflections. More on the caveats here in a bit.</li>
+<li>Much better light leak prevention, as instead of always terminating into the world cache after the first bounce like we used to for ReSTIR GI, it's now easy to simply continue tracing the path if terminating would risk leaking light.</li>
+</ul>
+<p>Overall, we get some very nice quality wins, simplify the code, and reduce our memory usage. Performance tends to be either about the same, slightly slower, or slightly faster depending on the GPU and scene you're benchmarking.</p>
+<p><figure>
+    <img
+        src="pica_pica_reference.png"
+        
+        
+        
+    >
+    
+    <figcaption><p>Pathtraced PICA PICA scene</p>
+</figcaption>
+    
+</figure>
+
+<figure>
+    <img
+        src="before_unifed_pica_pica.png"
+        
+        
+        
+    >
+    
+    <figcaption><p>Separate ReSTIR DI and GI passes, no denoising</p>
+</figcaption>
+    
+</figure>
+
+<figure>
+    <img
+        src="unified_pica_pica.png"
+        
+        
+        
+    >
+    
+    <figcaption><p>Unified ReSTIR, no denoising - less biased and less visibility noise</p>
+</figcaption>
+    
+</figure>
+</p>
+<h3 id="downsides">Downsides<a class="zola-anchor" href="#downsides" aria-label="Anchor link for: downsides" style="visibility: hidden;"></a>
+</h3>
+<p>Note that there <em>are</em> some downsides I've found from the unified ReSTIR algorithm.</p>
+<p>Shadow boundaries where some pixels prefer GI, and some prefer DI, get a bit worse due to the single set of reservoirs.</p>
+<p>Another downside is that a big unified pathtracing kernel uses more registers than separate kernels, which reduces occupancy and can hurt performance. It's not typically a huge loss, but it's something to be aware of.</p>
+<p>The real issue is that we're no longer tracing paths for both the primary vertex's diffuse <em>and</em> specular lobes every frame. Before, we had dedicated passes for diffuse and specular GI paths (really just a single-bounce for diffuse GI, we weren't doing a full path), but now we're only tracing a single path, with stochastic lobe selection for dielectric materials that have two lobes. Tracing two separate paths would be too expensive.</p>
+<figure>
+    <img
+        src="no_specular_boost.png"
+        
+        
+        
+    >
+    
+    <figcaption><p>Standard BRDF sampling - specular reflections are badly undersampled</p>
+</figcaption>
+    
+</figure>
+<p>Remember from the last post that dielectric materials are implemented as a thin specular lobe layered <em>over</em> a diffuse lobe. Depending on what angle you view it at, the top specular layer gets a certain percentage of the energy, with the rest being transmitted to the diffuse layer beneath it. When picking a BRDF lobe to follow to keep tracing the path, we can importance sample the two layers according to these percentages, biasing towards picking the lobe that will receive a higher amount of energy.</p>
+<p>However, that only accounts for one part of the rendering equation. Incident radiance is <em>also</em> an important quantity to account for. Let's say that for a given pixel we estimate that the specular layer will receive 70% of the incoming energy, while the diffuse layer only gets 30%. We should choose to sample the specular layer, right?</p>
+<p>But what if the specular lobe is pointing in a direction where no light is coming from? 70% of 0 energy is still 0 - it would've been better to sample the diffuse lobe after all...</p>
+<p>Really, we'd like to sample according to some estimate (obviously if we had a perfect, cheap predictor of the full rendering equation, there would be no need to trace paths at all) of the combined <code>BRDF * incident_radiance</code> product. This is called "path guiding", and Bevy doesn't currently have a way of doing that. We have to stick to the inferior BRDF-only sampling.</p>
+<p>In practical terms, I noticed that after switching to unified ReSTIR, that specular reflections in dielectric materials got much noisier, leading to the denoiser reconstructing a much more blurry reflection.</p>
+<p>To mitigate this issue, I simply boosted the chance of sampling the specular lobe for smooth surfaces.</p>
+<pre data-lang="rust" style="background-color:#002b36;color:#839496;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#268bd2;">fn </span><span style="color:#b58900;">specular_lobe_sampling_probability</span><span style="color:#657b83;">(</span><span style="color:#268bd2;">rho</span><span>: LobeReflectances, </span><span style="color:#268bd2;">perceptual_roughness</span><span>: </span><span style="color:#268bd2;">f32</span><span style="color:#657b83;">) </span><span>-&gt; </span><span style="color:#268bd2;">f32 </span><span style="color:#657b83;">{
+</span><span>    </span><span style="color:#268bd2;">let</span><span> specular_luminance </span><span style="color:#657b83;">= </span><span style="color:#859900;">luminance</span><span style="color:#657b83;">(</span><span>rho.specular</span><span style="color:#657b83;">)</span><span>;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> total_luminance </span><span style="color:#657b83;">=</span><span> specular_luminance </span><span style="color:#657b83;">+ </span><span style="color:#859900;">luminance</span><span style="color:#657b83;">(</span><span>rho.diffuse</span><span style="color:#657b83;">)</span><span>;
+</span><span>    </span><span style="color:#268bd2;">let</span><span> energy_probability </span><span style="color:#657b83;">=</span><span> specular_luminance </span><span style="color:#657b83;">/ </span><span style="color:#859900;">max</span><span style="color:#657b83;">(</span><span>total_luminance, </span><span style="color:#6c71c4;">0.0001</span><span style="color:#657b83;">)</span><span>;
+</span><span>
+</span><span>    </span><span style="color:#586e75;">// Give smooth dielectric reflections more specular samples to prevent undersampling
+</span><span>    </span><span style="color:#268bd2;">let</span><span> roughness_biased_probability </span><span style="color:#657b83;">= </span><span style="color:#859900;">mix</span><span style="color:#657b83;">(</span><span style="color:#6c71c4;">0.5</span><span>, energy_probability, perceptual_roughness</span><span style="color:#657b83;">)</span><span>;
+</span><span>    </span><span style="color:#859900;">return max</span><span style="color:#657b83;">(</span><span>energy_probability, roughness_biased_probability</span><span style="color:#657b83;">)</span><span>;
+</span><span style="color:#657b83;">}
+</span></code></pre>
+<p>The logic is pretty simple: for smooth dielectric surfaces, ReSTIR will <em>already</em> reduce noise from diffuse paths through reservoir reuse. Since we're not resampling specular paths, it makes more sense to allocate a higher percentage of our initial samples towards specular paths, since they don't have any form of ReSTIR to help them out unlike diffuse paths. Additionally, sharp specular reflections are simply more detailed than blurry diffuse reflections, and therefore the denoiser needs more samples in order to properly reconstruct them.</p>
+<figure>
+    <img
+        src="specular_boost.png"
+        
+        
+        
+    >
+    
+    <figcaption><p>With specular boost - noticeably cleaner reflections</p>
+</figcaption>
+    
+</figure>
+<h2 id="saying-goodbye-to-restir">Saying Goodbye to ReSTIR<a class="zola-anchor" href="#saying-goodbye-to-restir" aria-label="Anchor link for: saying-goodbye-to-restir" style="visibility: hidden;"></a>
+</h2>
+<p>So, we just spent all that time, and really I've spent the last year or two talking about and working to improve ReSTIR. That's a lot of time invested.</p>
+<p>The thing is, a few weeks after landing the unified ReSTIR rewrite, I started to think... Do we even really need ReSTIR?</p>
+<p>As great as ReSTIR is, it's actually quite expensive, costing 4 rays for resampling just two extra reservoirs (1 temporal, 1 spatial) in the current version of Solari.</p>
+<p>And then you run into issues with correlations. As I talked about above, ReSTIR just... doesn't play well with current denoiser designs.</p>
+<h3 id="what-in-the-denoiser">What in the Denoiser?<a class="zola-anchor" href="#what-in-the-denoiser" aria-label="Anchor link for: what-in-the-denoiser" style="visibility: hidden;"></a>
+</h3>
+<p>I'm going to go on a bit of a tangent here, but bear with me.</p>
+<p>When you think about it, what actually <em>is</em> a denoiser doing anyways?</p>
+<p>Denoising is essentially signal smoothing. The radiance of a pixel can be thought of as a function, which I'll simplify down to a 2d function for the purposes of this metaphor.</p>
+<figure>
+    <img
+        src="denoiser_function.svg"
+        
+        
+        
+    >
+    
+    <figcaption><p>Ground truth pathtracing - perfectly noise free, but impossible to construct</p>
+</figcaption>
+    
+</figure>
+<p>However in pathtracing, it would be prohibitively expensive to calculate the full function. Instead, we sample the function, calculating its value at discrete points. This is what produces the noisy input we feed a denoiser.</p>
+<figure>
+    <img
+        src="denoiser_samples.svg"
+        
+        
+        
+    >
+    
+    <figcaption><p>What the pathtracer hands the denoiser: the function evaluated at a handful of discrete points</p>
+</figcaption>
+    
+</figure>
+<p>The denoiser can then look at those points, and try to "guess", and fill in the rest of the function, usually by interpolating (averaging) neighboring points together.</p>
+<figure>
+    <img
+        src="denoiser_good.svg"
+        
+        
+        
+    >
+    
+    <figcaption><p>With enough samples, interpolating neighbors together lands close to the real function</p>
+</figcaption>
+    
+</figure>
+<p>If the input samples are a good representation of the overall function, then the denoiser can do a pretty good job at getting close to what the function should be.</p>
+<p>If the input samples <em>aren't</em> a good representation, well, then the denoiser is going to do a poor job of guessing. This is where denoiser artifacts and blurriness come from.</p>
+<figure>
+    <img
+        src="denoiser_poor.svg"
+        
+        
+        
+    >
+    
+    <figcaption><p>With poorly selected samples, the denoiser guesses the function wrong</p>
+</figcaption>
+    
+</figure>
+<p>Now, denoisers have an advantage - they can look at multiple pixels at once. The good thing is, lighting tends to be a pretty "smooth" signal. It fades out smoothly over a distance, and doesn't tend to change that drastically between pixels. So long as <em>some</em> of the nearby pixels have a good estimate of the incoming radiance, modern denoisers can do a pretty solid job at reconstructing a smooth lighting signal.</p>
+<p>Now, after reading that, does my description of denoisers sound... familiar?</p>
+<p>It's very similar to what ReSTIR is doing. In ReSTIR, we're taking discrete paths, and shifting them to terminate at different pixels, re-evaluating how much radiance the path should give under the new conditions. We do this spatially and temporally, reusing paths between pixels.</p>
+<p><figure>
+    <img
+        src="bistro_noisy.png"
+        
+        
+        
+    >
+    
+    <figcaption><p>Bistro without ReSTIR, before denoising</p>
+</figcaption>
+    
+</figure>
+
+<figure>
+    <img
+        src="bistro_noisy_restir.png"
+        
+        
+        
+    >
+    
+    <figcaption><p>Bistro with ReSTIR, before denoising</p>
+</figcaption>
+    
+</figure>
+</p>
+<p>Denoisers do the same, just with path <em>radiance</em>, instead of the paths themselves.</p>
+<p>The advantage of denoisers is that interpolating color data is pretty cheap, relative to shifting a whole path and having to trace new rays.</p>
+<p>In ReSTIR, more than a single temporal and spatial sample is too expensive for realtime (that's 4 rays/pixel, which even then is a decent chunk of performance). Denoisers, on the other hand, through the use of CNNs and transformers, can afford to look at tons of other pixels.</p>
+<p>Moreover, while denoisers can more easily cause bias, they don't cause any issues with correlations. And even with ReSTIR, we need a denoiser anyways, so - why not rely more heavily on the denoiser?</p>
+<p>Testing I've done shows that current (v4.5) versions of DLSS-RR just... don't really need ReSTIR a lot of the time. Our GI signal is already dense enough for DLSS-RR to do a perfectly good job. Our DI signal is pretty undersampled if you have more than a few lights, as RIS is not sufficient, but even then it tends to manifest as shadows that fade out at a distance, which - ever used a shadow map?</p>
+<p><figure>
+    <img
+        src="bistro_denoised.png"
+        
+        
+        
+    >
+    
+    <figcaption><p>Bistro without ReSTIR, after DLSS-RR - missing some shadows</p>
+</figcaption>
+    
+</figure>
+
+<figure>
+    <img
+        src="bistro_restir_denoised.png"
+        
+        
+        
+    >
+    
+    <figcaption><p>Bistro with ReSTIR, after DLSS-RR</p>
+</figcaption>
+    
+</figure>
+</p>
+<p>If this still sounds like a crazy idea to you, consider - lots of games are currently doing quarter resolution and even variable resolution GI. Denoisers are already designed to deal with a fairly noisy signal - we don't need it to be <em>that</em> dense. ReSTIR is often overkill.</p>
+<p>With this in mind, I've made the decision to disable ReSTIR by default in Solari 0.20. There's no point in deleting it outright as it can help in tricky scenes, and it's still useful for DI for now, but users should consider whether they actually need it or not.</p>
+<p>In the future, I'll be focusing more on ways to cheaply guide the initial sampling process, rather than focusing on making ReSTIR smarter at reusing those samples.</p>
+<p>For instance, we can reallocate paths from pixels in neighborhoods with simple, easy to sample lighting conditions, and spend them on pixels with more complicated lighting conditions (variable rate pathtracing).</p>
+<p>And I'm going to look into cheaper methods like MegaLights or light clustering to guide DI sampling, in addition to RIS.</p>
+<h2 id="reflection-denoising">Reflection Denoising<a class="zola-anchor" href="#reflection-denoising" aria-label="Anchor link for: reflection-denoising" style="visibility: hidden;"></a>
+</h2>
+<p>In Solari 0.20, I spent a good few weeks working on improving the guide buffers we provide to DLSS-RR so that reflections are more temporally stable. A lot of this was motivated by testing in the newly-setup Zero Day scene.</p>
+<p>A lot of this was trial and error via AI to make test scenes and generate comparison videos. I had a "feeling" that reflections were a bit blurry and shimmery, but it was hard to really tell for sure. I did a <em>lot</em> of pixel peeping during this time.</p>
+<p>The changes are pretty complicated, and not very scientific, but it boiled down to doing primary surface replacement (PSR) on more types of materials and with more guide buffers (depth, regular non-specular motion vectors, etc).</p>
+<p>In previous versions of Solari, PSR was done only for perfectly smooth metals. Now we've expanded it to dielectrics and slightly less smooth metals, with pretty good results!</p>
+<video style="max-width: 100%; margin: var(--gap) var(--gap) 0 var(--gap); border-radius: 6px;" controls>
+  <source src="reflection_denoising.mp4" type="video/mp4">
+</video>
+<center>
+<p><em>More temporally stable reflections in Zero Day after improved PSR (left before, right after)</em></p>
+<p><em>(recommended to view in fullscreen)</em></p>
+</center>
+<p>Review <a rel="nofollow noreferrer" href="https://github.com/bevyengine/bevy/pull/25423">the code</a> if you're interested in exactly what changed.</p>
+<p>I would love if NVIDIA could publish some official docs on what the right way to do PSR is with DLSS-RR.</p>
+<h2 id="cpu-performance-improvements">CPU Performance Improvements<a class="zola-anchor" href="#cpu-performance-improvements" aria-label="Anchor link for: cpu-performance-improvements" style="visibility: hidden;"></a>
+</h2>
+<p>Another big goal for me this development cycle was to improve Solari's CPU performance.</p>
+<p>Bevy is very modular, and Solari is no exception. The entire raytracing scene code is one plugin, with the realtime lighting plugin being another, and the reference pathtracer a third plugin.</p>
+<p>Previously, the raytracing scene code was functional, but very naive. It rebuilt the scene from scratch every frame, iterating over every mesh, light source, and material in the scene.</p>
+<figure>
+    <img
+        src="before_tracy.png"
+        
+        
+        
+    >
+    
+    <figcaption><p>Tracy CPU trace, before optimization</p>
+</figcaption>
+    
+</figure>
+<p>Now, with a <em>lot</em> of ugly and careful code, and after a long time instrumenting things and comparing Tracy traces, Solari has much better CPU performance!</p>
+<figure>
+    <img
+        src="after_tracy.png"
+        
+        
+        
+    >
+    
+    <figcaption><p>Tracy CPU trace, after optimization - now GPU bound (prepare_windows)</p>
+</figcaption>
+    
+</figure>
+<p>Similar to past efforts for the standard renderer over the last several Bevy releases, Solari now caches the entire scene, and does incremental updates to both the render world ECS and GPU buffers using tools like Bevy's change detection and <a rel="nofollow noreferrer" href="https://docs.rs/bevy/latest/bevy/render/render_resource/struct.AtomicSparseBufferVec.html">AtomicSparseBufferVec</a>.</p>
+<p>Additionally, TLAS builds are now much more GPU driven. Partially to avoid wgpu overhead, and mainly to avoid uploading a large amount of data to the GPU every frame, TLAS instances are now written to a buffer on the GPU via a compute shader.</p>
+<p>Every frame, the compute shader iterates over the existing list of entity transforms on the GPU, and simply copies the transform and BLAS address of each entity into a new buffer. GPU -&gt; GPU copies are much faster than doing a second set of CPU-&gt;GPU copies for the whole list of transforms!</p>
+<pre data-lang="rust" style="background-color:#002b36;color:#839496;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#859900;">@group</span><span style="color:#657b83;">(</span><span style="color:#6c71c4;">0</span><span style="color:#657b83;">) </span><span style="color:#859900;">@binding</span><span style="color:#657b83;">(</span><span style="color:#6c71c4;">0</span><span style="color:#657b83;">) </span><span>var&lt;storage, read&gt; transforms: array&lt;array&lt;vec4&lt;</span><span style="color:#268bd2;">f32</span><span>&gt;, 3&gt;&gt;;
+</span><span style="color:#859900;">@group</span><span style="color:#657b83;">(</span><span style="color:#6c71c4;">0</span><span style="color:#657b83;">) </span><span style="color:#859900;">@binding</span><span style="color:#657b83;">(</span><span style="color:#6c71c4;">1</span><span style="color:#657b83;">) </span><span>var&lt;storage, read&gt; blas_refs: array&lt;vec2&lt;</span><span style="color:#268bd2;">u32</span><span>&gt;&gt;;
+</span><span style="color:#859900;">@group</span><span style="color:#657b83;">(</span><span style="color:#6c71c4;">0</span><span style="color:#657b83;">) </span><span style="color:#859900;">@binding</span><span style="color:#657b83;">(</span><span style="color:#6c71c4;">2</span><span style="color:#657b83;">) </span><span>var&lt;storage, read_write&gt; instances: array&lt;TlasInstance&gt;;
+</span><span>
+</span><span style="color:#268bd2;">struct </span><span style="color:#b58900;">TlasInstance </span><span style="color:#657b83;">{
+</span><span>    </span><span style="color:#268bd2;">transform</span><span>: array&lt;vec4&lt;</span><span style="color:#268bd2;">f32</span><span>&gt;, 3&gt;,
+</span><span>    </span><span style="color:#268bd2;">custom_data_and_mask</span><span>: </span><span style="color:#268bd2;">u32</span><span>,
+</span><span>    </span><span style="color:#268bd2;">sbt_offset_and_flags</span><span>: </span><span style="color:#268bd2;">u32</span><span>,
+</span><span>    </span><span style="color:#268bd2;">blas_ref</span><span>: vec2&lt;</span><span style="color:#268bd2;">u32</span><span>&gt;,
+</span><span style="color:#657b83;">}
+</span><span>
+</span><span style="color:#859900;">@</span><span>compute </span><span style="color:#859900;">@workgroup_size</span><span style="color:#657b83;">(</span><span style="color:#6c71c4;">64</span><span>, </span><span style="color:#6c71c4;">1</span><span>, </span><span style="color:#6c71c4;">1</span><span style="color:#657b83;">)
+</span><span style="color:#268bd2;">fn </span><span style="color:#b58900;">setup_tlas_instances</span><span style="color:#657b83;">(</span><span>@builtin</span><span style="color:#657b83;">(</span><span style="color:#268bd2;">global_invocation_id</span><span style="color:#657b83;">) </span><span style="color:#268bd2;">global_id</span><span>: vec3&lt;</span><span style="color:#268bd2;">u32</span><span>&gt;</span><span style="color:#657b83;">) {
+</span><span>    </span><span style="color:#268bd2;">let</span><span> slot </span><span style="color:#657b83;">=</span><span> global_id.x;
+</span><span>    </span><span style="color:#859900;">if</span><span> slot </span><span style="color:#657b83;">&gt;=</span><span> arrayLength</span><span style="color:#657b83;">(</span><span style="color:#859900;">&amp;</span><span>instances</span><span style="color:#657b83;">) </span><span style="color:#859900;">||</span><span> slot </span><span style="color:#657b83;">&gt;=</span><span> arrayLength</span><span style="color:#657b83;">(</span><span style="color:#859900;">&amp;</span><span>blas_refs</span><span style="color:#657b83;">) </span><span style="color:#859900;">||</span><span> slot </span><span style="color:#657b83;">&gt;=</span><span> arrayLength</span><span style="color:#657b83;">(</span><span style="color:#859900;">&amp;</span><span>transforms</span><span style="color:#657b83;">) {
+</span><span>        </span><span style="color:#859900;">return</span><span>;
+</span><span>    </span><span style="color:#657b83;">}
+</span><span>
+</span><span>    instances</span><span style="color:#657b83;">[</span><span>slot</span><span style="color:#657b83;">] =</span><span> TlasInstance</span><span style="color:#657b83;">(
+</span><span>        transforms</span><span style="color:#657b83;">[</span><span>slot</span><span style="color:#657b83;">]</span><span>,
+</span><span>        </span><span style="color:#657b83;">(</span><span>slot </span><span style="color:#859900;">&amp;</span><span> 0xFFFFFFu</span><span style="color:#657b83;">) </span><span style="color:#859900;">|</span><span> 0xFF000000u,
+</span><span>        0u,
+</span><span>        blas_refs</span><span style="color:#657b83;">[</span><span>slot</span><span style="color:#657b83;">]</span><span>,
+</span><span>    </span><span style="color:#657b83;">)</span><span>;
+</span><span style="color:#657b83;">}
+</span></code></pre>
+<h2 id="atmosphere-and-skybox-lighting">Atmosphere and Skybox Lighting<a class="zola-anchor" href="#atmosphere-and-skybox-lighting" aria-label="Anchor link for: atmosphere-and-skybox-lighting" style="visibility: hidden;"></a>
+</h2>
+<p>For the final major change in Solari 0.20, I added support for lighting from Atmosphere (Bevy's procedural skybox plugin), and EnvironmentMapLight (Bevy's traditional split-sum cubemaps, where mip 0 of the specular cubemap is basically the skybox).</p>
+<p>It's pretty simple for now - just sample the cubemap when on ray miss, and fold that into the typical path contribution and resampling routines.</p>
+<p>In the future, we'll want to do NEE against the cubemap and build a hierarchical CDF to accelerate sampling for NEE, but for now the simple method works pretty well.</p>
+<figure>
+    <img
+        src="atmosphere.png"
+        
+        
+        
+    >
+    
+    <figcaption><p>Procedural atmosphere rendering used for lighting via Solari</p>
+</figcaption>
+    
+</figure>
+<p>This feature is part of a shift in my focus towards getting Solari to support more rendering features to bring it up to parity with Bevy's standard renderer. In particular, I'd like to add support to Solari for the remaining rect/point/spotlight types, animated meshes, and alpha masked and transparent/transmissive/refractive materials.</p>
+<p>Light transport is good and all, and of course I will continue to experiment in that department and always work to improve performance, but I'd like Solari to reach a more usable state in the near future.</p>
+<p>And with that, we're at the end of the blog post. Thanks for reading, and look forward to the release of Bevy 0.20 soon!</p>
+
+      </article>
+
+      
+      
+
+      
+      
+      <div class="giscus"></div>
+      <script src="https://giscus.app/client.js"
+        data-repo="JMS55/jms55.github.io"
+        data-repo-id="R_kgDOKFxX0Q"
+        data-category="Announcements"
+        data-category-id="DIC_kwDOKFxX0c4Cvqkk"
+        data-mapping="url"
+        data-strict="0"
+        data-reactions-enabled="0"
+        data-emit-metadata="0"
+        data-input-position="top"
+        data-theme="https://jms55.github.io/giscus_light.css"
+        data-lang="en"
+        crossorigin="anonymous"
+        async>
+</script>
+
+      
+    </div>
+
+    
+
+
+<footer>
+  <div class="left">
+    <div class="copyright">
+      © 2025 JMS55
+      
+      <span>|</span>
+      Built with <a href="https://www.getzola.org" rel="noreferrer" target="_blank">zola</a> and <a href="https://github.com/isunjn/serene" rel="noreferrer" target="_blank">serene</a>
+      
+    </div>
+  </div>
+
+  <div class="right">
+    
+    
+      
+    
+    
+    <a id="rss-btn" href="https://jms55.github.io/atom.xml">RSS</a>
+    
+    
+
+    
+  </div>
+</footer>
+
+
+
+
+<dialog id="rss-mask">
+  <div>
+    <a href="https:&#x2F;&#x2F;jms55.github.io&#x2F;atom.xml">https:&#x2F;&#x2F;jms55.github.io&#x2F;atom.xml</a>
+    
+    
+    <button autofocus aria-label="copy" data-link="https:&#x2F;&#x2F;jms55.github.io&#x2F;atom.xml" data-copy-icon="&lt;svg xmlns=&quot;http:&#x2F;&#x2F;www.w3.org&#x2F;2000&#x2F;svg&quot; viewBox=&quot;0 0 24 24&quot; width=&quot;18&quot; height=&quot;18&quot;&gt;&lt;path d=&quot;M6.9998 6V3C6.9998 2.44772 7.44752 2 7.9998 2H19.9998C20.5521 2 20.9998 2.44772 20.9998 3V17C20.9998 17.5523 20.5521 18 19.9998 18H16.9998V20.9991C16.9998 21.5519 16.5499 22 15.993 22H4.00666C3.45059 22 3 21.5554 3 20.9991L3.0026 7.00087C3.0027 6.44811 3.45264 6 4.00942 6H6.9998ZM5.00242 8L5.00019 20H14.9998V8H5.00242ZM8.9998 6H16.9998V16H18.9998V4H8.9998V6Z&quot; fill=&quot;currentColor&quot;&gt;&lt;&#x2F;path&gt;&lt;&#x2F;svg&gt;
+" data-check-icon="&lt;svg xmlns=&quot;http:&#x2F;&#x2F;www.w3.org&#x2F;2000&#x2F;svg&quot; viewBox=&quot;0 0 24 24&quot; width=&quot;18&quot; height=&quot;18&quot;&gt;&lt;path d=&quot;M10.0007 15.1709L19.1931 5.97852L20.6073 7.39273L10.0007 17.9993L3.63672 11.6354L5.05093 10.2212L10.0007 15.1709Z&quot; fill=&quot;currentColor&quot;&gt;&lt;&#x2F;path&gt;&lt;&#x2F;svg&gt;
+" >
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18"><path d="M6.9998 6V3C6.9998 2.44772 7.44752 2 7.9998 2H19.9998C20.5521 2 20.9998 2.44772 20.9998 3V17C20.9998 17.5523 20.5521 18 19.9998 18H16.9998V20.9991C16.9998 21.5519 16.5499 22 15.993 22H4.00666C3.45059 22 3 21.5554 3 20.9991L3.0026 7.00087C3.0027 6.44811 3.45264 6 4.00942 6H6.9998ZM5.00242 8L5.00019 20H14.9998V8H5.00242ZM8.9998 6H16.9998V16H18.9998V4H8.9998V6Z" fill="currentColor"></path></svg>
+
+    </button>
+  </div>
+</dialog>
+
+
+
+  </main>
+</div>
+
+  
+<script src="/js/lightense.min.js"></script>
+
+
+  <script src="https://jms55.github.io/js/main.js"></script>
+</body>
+
+</html>
