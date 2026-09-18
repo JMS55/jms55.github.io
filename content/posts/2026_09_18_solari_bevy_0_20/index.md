@@ -411,9 +411,11 @@ Bevy is very modular, and Solari is no exception. The entire raytracing scene co
 
 Previously, the raytracing scene code was functional, but very naive. It rebuilt the scene from scratch every frame, iterating over every mesh, light source, and material in the scene.
 
+{{ figure(src="before_tracy.png", caption="Tracy CPU trace, before optimization") }}
+
 Now, with a _lot_ of ugly and careful code, and after a long time instrumenting things and comparing Tracy traces, Solari has much better CPU performance!
 
-TODO: Before/after tracy screenshots
+{{ figure(src="after_tracy.png", caption="Tracy CPU trace, after optimization - now GPU bound (prepare_windows)") }}
 
 Similar to past efforts for the standard renderer over the last several Bevy releases, Solari now caches the entire scene, and does incremental updates to both the render world ECS and GPU buffers using tools like Bevy's change detection and [AtomicSparseBufferVec](https://docs.rs/bevy/latest/bevy/render/render_resource/struct.AtomicSparseBufferVec.html).
 
