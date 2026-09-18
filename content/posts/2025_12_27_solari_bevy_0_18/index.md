@@ -27,11 +27,11 @@ Bevy 0.17 saw the initial release of Solari, with the following components:
 
 ReSTIR DI handles the first bounce of lighting, ReSTIR GI handles the second bounce of lighting, and the world cache handles all subsequent bounces.
 
-Summed together and denoised we get full, pathtraced lighting, close to the quality of a offline movie-quality pathtracer - but running much, much faster due to heavy temporal and spatial amortization.
+Summed together and denoised we get full, pathtraced lighting, close to the quality of an offline movie-quality pathtracer - but running much, much faster due to heavy temporal and spatial amortization.
 
 Or at least, that's the theory.
 
-In practice, all the amortization and shortcuts gives up some accuracy (making the result biased) in order to improve performance.
+In practice, all the amortization and shortcuts give up some accuracy (making the result biased) in order to improve performance.
 
 My goal with Solari is to get _as close as possible_ to the offline reference (zero bias), while getting "good enough" performance for realtime. Going into the 0.18 dev cycle, improving quality was my main priority.
 
@@ -288,7 +288,7 @@ Indirect lighting is where specular gets much more interesting.
 
 First off, as far as the world cache is concerned, all surfaces are diffuse only, with no specular lobe. This means that when you query the cache, you treat the query point as a diffuse surface. When updating cache entries, you also treat the cache point as a diffuse surface.
 
-For per-pixel GI, Solari splits the lighting calculations into two seperate passes - one for the diffuse lobe, and one for the specular lobe.
+For per-pixel GI, Solari splits the lighting calculations into two separate passes - one for the diffuse lobe, and one for the specular lobe.
 
 The diffuse lobe is handled by the existing ReSTIR GI pass. ReSTIR GI resampling is exactly the same as in Bevy 0.17 - like DI, only the final shading changes.
 
@@ -342,7 +342,7 @@ The basic outline is:
 * Lighting comes from any of: hitting an emissive surface, NEE, or terminating in the world cache
 * Each bounce samples the GGX distribution to find the next bounce direction (if the surface was rough enough, we would have terminated in the world cache - more on this in a second)
 
-It's essentially just a standard pathtracer, except with theortically higher coherence from always following the specular lobe.
+It's essentially just a standard pathtracer, except with theoretically higher coherence from always following the specular lobe.
 
 However, there are many subtle details that took me some time to figure out:
 * Emissive contributions are skipped on the first bounce, as ReSTIR DI handles those paths
@@ -370,7 +370,7 @@ At the time, I chalked it up to an inherent limitation of the world cache and mo
 
 However, while experimenting with various things this cycle, I realized that not only was it not due to the world cache, but DI also was losing energy, and not just GI!
 
-After many painful days of narrowing down the issue, I tracked it down to the [light tile code](@posts/2025-09-20-solari-bevy-0-17/#light-tile-presampling), which was shared between DI and the world cache.
+After many painful days of narrowing down the issue, I tracked it down to the [light tile code](@/posts/2025_09_20_solari_bevy_0_17/index.md#light-tile-presampling), which was shared between DI and the world cache.
 
 The rgb9e5 packing of the light radiance I was doing did not have enough bits to encode the light, and so energy was being lost.
 
@@ -405,7 +405,7 @@ One of the problems I wasn't able to solve in Bevy 0.17 was ReSTIR DI correlatio
 
 {{ figure(src="di_correlations.png", caption="Correlations from ReSTIR DI confusing the denoiser") }}
 
-For ReSTIR GI, I was able to solve this with permutation sampling during temporal reuse. But for ReSTIR DI, trying to use permutation sampling lead to artifacts on shadow penumbras due to the way I was doing visibility reuse.
+For ReSTIR GI, I was able to solve this with permutation sampling during temporal reuse. But for ReSTIR DI, trying to use permutation sampling led to artifacts on shadow penumbras due to the way I was doing visibility reuse.
 
 {{ figure(src="di_permutation_artifacts.png", caption="Visibility reuse messing up shadows when using permutation sampling") }}
 
@@ -439,11 +439,11 @@ The two big differences are:
 
 Moving the second visibility test from the spatial sample only to after all resampling was the key change.
 
-Before permutation sampling, it was ok to not re-test visibility for the temporal sample. The light was visible to the pixel last frame, it's probably still visible this frame. Same for if the light was not visible last frame. When this assumption is wrong, e.g. for moving objects, it just led to a 1-frame lag in shadows that's almost unnoticable - an acceptable tradeoff.
+Before permutation sampling, it was ok to not re-test visibility for the temporal sample. The light was visible to the pixel last frame, it's probably still visible this frame. Same for if the light was not visible last frame. When this assumption is wrong, e.g. for moving objects, it just led to a 1-frame lag in shadows that's almost unnoticeable - an acceptable tradeoff.
 
-With permutation sampling, we can no longer trust that the visibility of the temporal sample is correct to reuse. The temporal sample now may come from a neighboring pixel, and at shadow pneumbras, the visibility is changing very frequently. It's no longer safe to reuse visibility, even on static scenes - we must retest visibility.
+With permutation sampling, we can no longer trust that the visibility of the temporal sample is correct to reuse. The temporal sample now may come from a neighboring pixel, and at shadow penumbras, the visibility is changing very frequently. It's no longer safe to reuse visibility, even on static scenes - we must retest visibility.
 
-The best way to test visibility without using extra ray traces is to move it right before shading of the final sample, where incorrect visibility would show up on screen
+The best way to test visibility without using extra ray traces is to move it right before shading of the final sample, where incorrect visibility would show up on screen.
 
 The second change (not feeding forward the second visibility test to the next frame) is not strictly necessary, but keeps direct lighting unbiased.
 
@@ -472,7 +472,7 @@ The world cache is the oldest part of Solari - it was copied nearly wholesale fr
 Because of this, it was also the jankiest part of Solari.
 
 As I started testing on more complex scenes, it became clear that there were significant problems:
-* On the cornell box scene, it worked fine.
+* On the Cornell Box scene, it worked fine.
 * On the PICA PICA scene, it worked ok when conditions were static, but under dynamic conditions the GI was fairly laggy.
 * On Bistro, performance wasn't good, especially as you started moving around the scene.
 
@@ -597,7 +597,7 @@ Finally, I tweaked a bunch of other things based on my testing in Bistro:
 
 * Limited indirect rays sent from cache entries during the world cache update step to a max of 50 meters - This prevents long raytraces from holding up the whole threadgroup, improving performance, and prevents far-away samples from influencing the cache, reducing variance.
 * Switched the world cache update workgroup size from 1024 to 64 threads - Much more appropriate for raytracing workloads. This fixed some really weird GPU usage traces I was seeing in NSight.
-* Make the world cache transition LODs faster - In a large scene like Bistro, we had way too many cache entries for far-away areas.
+* Made the world cache transition LODs faster - In a large scene like Bistro, we had way too many cache entries for far-away areas.
 
 Combined, these changes brought the world cache update step from 1.42ms to a much more reasonable 0.09ms in Bistro.
 
@@ -652,7 +652,7 @@ The same questions also apply to the world irradiance cache itself. Currently th
 
 Lots of room for experimentation.
 
-Additionally as a final note on GI quality, currently one of Solari's worst form of artifacts is GI light leaks on the edges of objects. While hashing the surface normal helps, on curved surfaces and corners, it's not a perfect solution.
+Additionally as a final note on GI quality, currently one of Solari's worst forms of artifacts is GI light leaks on the edges of objects. While hashing the surface normal helps, on curved surfaces and corners, it's not a perfect solution.
 
 And it's actually very easy to identify the cases where this happens. Light leaks tend to occur when the length of the ray querying the cache is less than the size of the cache cell.
 
@@ -676,22 +676,22 @@ All results were captured on an RTX 3080 locked to base clocks in NSight, at 160
 ### PICA PICA
 
 {{ figure(src="pica_pica_realtime.png", caption="PICA PICA - Solari realtime") }}
-{{ figure(src="pica_pica_reference.png", caption="PICA PICA - Pathraced reference (ignore the black noise - it's a bug)") }}
+{{ figure(src="pica_pica_reference.png", caption="PICA PICA - Pathtraced reference (ignore the black noise - it's a bug)") }}
 
 ### Bistro
 
-{{ figure(src="bistro_realtime.png", caption="Bistro - Solari realtime (ignore the foilage - Solari doesn't support alpha masks yet)") }}
-{{ figure(src="bistro_reference.png", caption="Bistro - Pathraced reference") }}
+{{ figure(src="bistro_realtime.png", caption="Bistro - Solari realtime (ignore the foliage - Solari doesn't support alpha masks yet)") }}
+{{ figure(src="bistro_reference.png", caption="Bistro - Pathtraced reference") }}
 
 ### Dragons
 
 {{ figure(src="dragons_realtime.png", caption="Dragons - Solari realtime") }}
-{{ figure(src="dragons_reference.png", caption="Dragons - Pathraced reference") }}
+{{ figure(src="dragons_reference.png", caption="Dragons - Pathtraced reference") }}
 
 ### Cornell Box
 
 {{ figure(src="cornell_box_realtime.png", caption="Cornell Box - Solari realtime") }}
-{{ figure(src="cornell_box_reference.png", caption="Cornell Box - Pathraced reference") }}
+{{ figure(src="cornell_box_reference.png", caption="Cornell Box - Pathtraced reference") }}
 
 ### Performance
 

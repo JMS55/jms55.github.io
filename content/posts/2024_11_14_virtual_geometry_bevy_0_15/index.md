@@ -128,7 +128,7 @@ render_device.create_buffer(&BufferDescriptor {
 
 Next, we'll setup two indirect commands in some buffers. One for hardware raster, one for software raster. For hardware raster, we're going to hardcode the vertex count to 64 (the maximum number of triangles per meshlet) times 3 (vertices per triangle) total vertices. We'll also initialize the instance count to zero.
 
-This was a sceme I described in my last post, but purposefully avoided due to the lackluster performance. However, now that we're adding a software rasterizer, I expect that almost all clusters will be software rasterized. Therefore some performance loss for the hardware raster is acceptable, as it should be rarely used. In return, we'll get to use a nice trick in the next step.
+This was a scheme I described in my last post, but purposefully avoided due to the lackluster performance. However, now that we're adding a software rasterizer, I expect that almost all clusters will be software rasterized. Therefore some performance loss for the hardware raster is acceptable, as it should be rarely used. In return, we'll get to use a nice trick in the next step.
 
 ```rust
 render_device.create_buffer_with_data(&BufferInitDescriptor {
@@ -324,7 +324,7 @@ PR [#15023](https://github.com/bevyengine/bevy/pull/15023) has a bunch of small 
 
 The main change is switching from a maximum 64 vertices and 64 triangles (`64v:64t`) to 255 vertices and 128 triangles per meshlet (`255v:128t`). I found that having a less than or equal `v:t` ratio leads to most meshlets having less than `t` triangles, which we don't want. Having a `2v:t` ratio leads to more fully-filled meshlets, and I went with `255v:128t` (which is nearly the same as Nanite, minus the fact that meshoptimizer only supports meshlets with up to 255 vertices) over `128v:64t` after some performance testing.
 
-Note that this change involved some other work, such as adjusting software and hardware raster to work with more triangles, software rasterization looping if needed to load 2 vertices per thread instead of 1, using another bit per triangle ID when packing cluster + triangle IDs to accomodate triangles up to 127, etc.
+Note that this change involved some other work, such as adjusting software and hardware raster to work with more triangles, software rasterization looping if needed to load 2 vertices per thread instead of 1, using another bit per triangle ID when packing cluster + triangle IDs to accommodate triangles up to 127, etc.
 
 The other changes I made were:
 * Setting the target error when simplifying triangles to `f32::MAX` (no point in capping it for continuous LOD, gives better simplification results)
@@ -402,13 +402,13 @@ PR [#15643](https://github.com/bevyengine/bevy/pull/15643) stores copies of the 
 
 ### Motivation
 
-The whole idea behind virtual geometry is that you only pay (as much as possible, it's of course not perfect) for the geometry currently needed on screen. Zoomed out? You pay the rasterization cost for only a few triangles at a higher LOD, and not for the entire mesh. Part of the mesh occluded? It gets culled. But continuing on with the theme from the last PR, memory usage is also a big cost. We might be able to render a large scene of high poly meshes with clever usage of LODs and culling, but can we afford to _store_ all that mesh data to begin with in our GPU's measily 8-12gb of VRAM? (not even accounting for space taken up by material textures which will reduce our budget even further).
+The whole idea behind virtual geometry is that you only pay (as much as possible, it's of course not perfect) for the geometry currently needed on screen. Zoomed out? You pay the rasterization cost for only a few triangles at a higher LOD, and not for the entire mesh. Part of the mesh occluded? It gets culled. But continuing on with the theme from the last PR, memory usage is also a big cost. We might be able to render a large scene of high poly meshes with clever usage of LODs and culling, but can we afford to _store_ all that mesh data to begin with in our GPU's measly 8-12gb of VRAM? (not even accounting for space taken up by material textures which will reduce our budget even further).
 
 The way we fix this is with streaming. Rather than keep everything in memory all the time, you have the GPU write requests of what data it needs to a buffer, read that back onto the CPU, and then load the requested data from disk into a fixed-size GPU buffer. If the GPU no longer needs a piece of data, you mark that section of the buffer as free space, and can write new data to it as new requests come in.
 
 Typical implementations of mesh streaming stream discrete LOD levels, but our goal is to be much more fine-grained. Keeping with the theme of only paying for the cluster data you need actually need to render the current frame, we want to stream individual meshlets, not whole LOD levels (in practice, Nanite streams fixed-size pages of meshlet data, and not individual meshlets). This presents a problem with our current implementation: since all meshlets reference the same set of vertex data, we have no simple way of unloading or loading vertex data for a single meshlet. While I'm not going to tackle streaming in Bevy 0.15, in this PR I'll be changing the way we store vertex data to solve this problem and unblock streaming in the future.
 
-Up until now, each MeshletMesh has had one set of vertex data shared between all meshlets within the mesh. Each meshlet has a local index buffer, mapping triangles to meshlet-local vertex IDs, and then a global index buffer mapping meshlet-local vetex IDs to actual vertex data from the mesh. E.g. triangle corner X within a meshlet points to vertex ID Y within a meshlet which points to vertex Z within the mesh.
+Up until now, each MeshletMesh has had one set of vertex data shared between all meshlets within the mesh. Each meshlet has a local index buffer, mapping triangles to meshlet-local vertex IDs, and then a global index buffer mapping meshlet-local vertex IDs to actual vertex data from the mesh. E.g. triangle corner X within a meshlet points to vertex ID Y within a meshlet which points to vertex Z within the mesh.
 
 In order to support streaming, we're going to move to a new scheme. We will store a copy of vertex data for each meshlet, concatenated together into one slice. All the vertex data for meshlet 0 will be stored as one contiguous slice, with all the vertex data for meshlet 1 stored contiguously after it, and all the vertex data for meshlet 2 after _that_, etc.
 
@@ -428,11 +428,11 @@ For each meshlet, we'll iterate over all of its vertex positions, and calculate 
 
 Our first (albeit small) saving become apparent: at the cost of 12 extra bytes in the meshlet metadata, we save 3 bits per vertex position due to no longer needing a bit for the sign for each of the X/Y/Z values, as `[0, max - min]` is never going to contain any negative numbers. We technically now only need a hypothetical `f31` per axis.
 
-However, there's a another trick we can perform. If we take the ceiling of the log2 of a range of floating point values `ceil(log2(max - min + 1))`, we get the minimum number of bits we need to store any value in that range. Rather than storing meshlet vertex positions as a list of `vec3<f32>`s, we could instead store them as a packed list of bits (a bitstream).
+However, there's another trick we can perform. If we take the ceiling of the log2 of a range of floating point values `ceil(log2(max - min + 1))`, we get the minimum number of bits we need to store any value in that range. Rather than storing meshlet vertex positions as a list of `vec3<f32>`s, we could instead store them as a packed list of bits (a bitstream).
 
 E.g. if we determine that we need 4/7/3 bits for the X/Y/Z ranges of the meshlet, we could store a list of bits where bits 0..4 are for vertex 0 axis X, bits 4..11 are for vertex 0 axis Y, bits 11..14 are for vertex 0 axis Z, bits 14..18 are for vertex 1 axis X, bits 18..25 are for vertex 1 axis Y, etc.
 
-Again we can store the bit size (as a `u8`) for each of the X/Y/Z axis within the meshlet's metadata, at a cost of 3 extra bytes. We'll use this later in our shaders to figure out how many bits to read from the bistream for each of the meshlet's vertices.
+Again we can store the bit size (as a `u8`) for each of the X/Y/Z axis within the meshlet's metadata, at a cost of 3 extra bytes. We'll use this later in our shaders to figure out how many bits to read from the bitstream for each of the meshlet's vertices.
 
 In practice, if you try this out as-is, you're probably going to end up with fairly large bit sizes per axis, and not actually save any space vs using `vec3<f32>`. This is due to the large amount of precision we have in our vertex positions (a full `f32`), which leads to a lot of precision needed in the range, and therefore a large bit size.
 
@@ -547,7 +547,7 @@ pub struct Meshlet {
 }
 ```
 
-To fetch a single vertex from the bitstream (we we bind as an array of `u32`s), we can use this function:
+To fetch a single vertex from the bitstream (which we bind as an array of `u32`s), we can use this function:
 
 ```rust
 fn get_meshlet_vertex_position(meshlet: ptr<function, Meshlet>, vertex_id: u32) -> vec3<f32> {
@@ -595,9 +595,9 @@ Tangents we already removed in the last PR.
 
 For UVs, I currently store them uncompressed. I could have maybe used half-precision floating point values, but I am wary of artifacts resulting from the reduced precision, so for right now it's a full `vec2<f32>`. This is a big opportunity for future improvement.
 
-Normals are a bit more interesting. They start as `vec3<f32>`. I first perform an octahedral encoding on them, bringing them down to a `vec2<f32>` near-losessly. I then give up some precision to reduce the size even further by using `pack2x16snorm()`, bringing it down to a `vec2<f16>`, or a packed `u32`. These operations are easily reversed in the shader using the built-in `unpack2x16snorm()` function, and then the simple octahedral decode step.
+Normals are a bit more interesting. They start as `vec3<f32>`. I first perform an octahedral encoding on them, bringing them down to a `vec2<f32>` near-losslessly. I then give up some precision to reduce the size even further by using `pack2x16snorm()`, bringing it down to a `vec2<f16>`, or a packed `u32`. These operations are easily reversed in the shader using the built-in `unpack2x16snorm()` function, and then the simple octahedral decode step.
 
-I _did_ try a bitstream encoding similiar to what I did for positions, but couldn't get any smaller sizes than a simple `pack2x16snorm()`. I think with more time and motivation (I was getting burnt out by the end of this), I could have probably figured out a good variable-size octahedral encoding for normals as well. Something else to investigate in the future.
+I _did_ try a bitstream encoding similar to what I did for positions, but couldn't get any smaller sizes than a simple `pack2x16snorm()`. I think with more time and motivation (I was getting burnt out by the end of this), I could have probably figured out a good variable-size octahedral encoding for normals as well. Something else to investigate in the future.
 
 ### Results
 
@@ -620,7 +620,7 @@ That method worked, but isn't entirely watertight. Where you place the bounding 
 
 Arseny Kapoulkine once again helped me out here. As part of meshoptimizer, they started experimenting with their [nanite.cpp](https://github.com/zeux/meshoptimizer/blob/d93419ced5956307f41333c500c8037c8b861d59/demo/nanite.cpp) demo. In this PR, I copied his code for LOD cut selection.
 
-To determine the group bounding sphere, you simply build a new bounding sphere enclosing all of the group's childrens' bounding spheres. The first group you build out of LOD 0 uses the LOD 0 culling bounding spheres around each meshlet. This way, you ensure that both the error (using the existing method of taking the max error among the group and group children), _and_ the bounding sphere are monotonic. Error is no longer stored in the radius of the bounding sphere, and is instead stored as a seperate f16 (lets us pack both group and parent group error into a single u32, and the lost precision is irrelevant). This also gave me the opportunity to clean up the code now that I understand the theory better, and clarify the difference between meshlets and meshlet groups better.
+To determine the group bounding sphere, you simply build a new bounding sphere enclosing all of the group's childrens' bounding spheres. The first group you build out of LOD 0 uses the LOD 0 culling bounding spheres around each meshlet. This way, you ensure that both the error (using the existing method of taking the max error among the group and group children), _and_ the bounding sphere are monotonic. Error is no longer stored in the radius of the bounding sphere, and is instead stored as a separate f16 (lets us pack both group and parent group error into a single u32, and the lost precision is irrelevant). This also gave me the opportunity to clean up the code now that I understand the theory better, and clarify the difference between meshlets and meshlet groups better.
 
 For projecting the error at runtime, we now use the below function. I can't claim to understand how it works that well (and it's been a few weeks since I last looked at it), but it does work. The end result is that we get more seamless LOD changes, and our mesh to meshlet mesh converter is more robust (it used to crash on larger meshes, due to a limitation in the code for how I calculated group bounding spheres).
 
@@ -653,10 +653,10 @@ PR [#15886](https://github.com/bevyengine/bevy/pull/15886) brings more improveme
 Following on from the last PR, I again took a bunch of improvements from the meshoptimizer nanite.cpp demo:
 
 * Consider only the vertex position (and ignore things like UV seams) when determining meshlet groups
-* Add back stuck meshlets that either failed to simplify, or failed to group, to the processing queue to try again at a later LOD. Dosen't seem to be much of an improvement though.
+* Add back stuck meshlets that either failed to simplify, or failed to group, to the processing queue to try again at a later LOD. Doesn't seem to be much of an improvement though.
 * Provide a seed to METIS to make the meshlet mesh conversion fully deterministic. I didn't realize METIS even had options before now.
 * Target groups of 8 meshlets instead of 4. This improved simplification quality a lot! Nanite does groups of size 8-32, probably based on some kind of heuristic, which is probably worth experimenting with in the future.
-* Manually lock only vertices belonging to meshlet group borders, instead of the full toplogical group border that meshoptimizer's `LOCK_BORDER` flag does.
+* Manually lock only vertices belonging to meshlet group borders, instead of the full topological group border that meshoptimizer's `LOCK_BORDER` flag does.
 
 With all of these changes combined, we can finally reliably get down to a single meshlet (or at least 1-3 meshlets for larger meshes) at the highest LOD!
 
@@ -962,7 +962,7 @@ Memory and disk size are also much lower in Bevy 0.15 than Bevy 0.14, although a
 
 ### Discussion - Performance
 
-Of course, asset size dosen't matter if performance is worse. After all, we could skip the additional LOD levels entirely to save on the cost of storing them, but we would get much worse runtime performance.
+Of course, asset size doesn't matter if performance is worse. After all, we could skip the additional LOD levels entirely to save on the cost of storing them, but we would get much worse runtime performance.
 
 The good news is that comparing the bunny scene in Bevy 0.14 to Bevy 0.15, rendering got almost 5x faster!
 
@@ -972,7 +972,7 @@ Culling (which is also LOD selection) got a little bit faster as well, going fro
 
 The other big win for culling is that with ~half as many meshlets to process, we only have to do half the work, as evidenced by the second pass performing a little over twice as well (the second pass here is basically just measuring overhead from spawning threads per cluster, since it's doing a single read + early-out for every single cluster as occlusion culling is near-perfect in  static scene like this).
 
-Looking at the cliff scene with a much larger amount of meshlets and triangles, concentrated into much fewer instances, we can see some interesting results. Rasterization is actually _faster_ in this scene than the bunny scene by 0.08 ms, but the first culling pass takes a whopping 1.27 ms, up from only 0.19 ms. Ouch. We ideally want similiar timings no matter the type of scene, so that artists don't have to care about things like number of triangles per mesh, but we're not quite there yet. Culling is the clear bottleneck.
+Looking at the cliff scene with a much larger amount of meshlets and triangles, concentrated into much fewer instances, we can see some interesting results. Rasterization is actually _faster_ in this scene than the bunny scene by 0.08 ms, but the first culling pass takes a whopping 1.27 ms, up from only 0.19 ms. Ouch. We ideally want similar timings no matter the type of scene, so that artists don't have to care about things like number of triangles per mesh, but we're not quite there yet. Culling is the clear bottleneck.
 
 Finally, fill cluster buffers got a little bit faster as well, going down from 0.30 ms to 0.12 ms, with a good chunk of the performance again coming from having half as many total clusters in the scene.
 

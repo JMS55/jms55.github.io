@@ -17,7 +17,7 @@ Hi, I'm JMS55, and I've been working on Bevy's 3D renderer for the past ~10 mont
 
 I've also been involved in the Rust gamedev community for a long time:
 * I have been using Rust since pre-1.0 (around ~7 years ago).
-* Tried out Piston when it first came out; same with Amythest.
+* Tried out Piston when it first came out; same with Amethyst.
 * Contributed a (very tiny) bit to [Veloren](https://veloren.net).
 * [Wrote a demo](https://github.com/JMS55/botnet#botnet) for a cool RTS simulation kind of game where you program your units via Rust-compiled-to-WASM (and would love to get back to it at some point), using Wasmtime and Macroquad.
 * [Wrote a falling sand game](https://github.com/JMS55/sandbox#sandbox) using pixels, wgpu, and imgui-rs (I also tried egui and yakui). I wrote the shaders for it in GLSL - this was before wgpu started using WGSL!
@@ -85,7 +85,7 @@ Bevy has gone from "we have some basic PBR shaders with analytic direct lighting
 indie game-usable renderer with much fewer caveats, and much fancier lighting and post processing!
 
 Take Slime Rancher, a hit indie game from 2017. [This post](https://pixelalchemy.dev/posts/a-frame-of-slime-rancher) goes into
-detail on the tricks and rendering techniques the game used to achieve its graphics. Bevy 0.11 has support for almost all of the listed techniques! The only thing we're missing are decals, and refraction (although there's a PR open that implements screen-space refaction!).
+detail on the tricks and rendering techniques the game used to achieve its graphics. Bevy 0.11 has support for almost all of the listed techniques! The only thing we're missing are decals, and refraction (although there's a PR open that implements screen-space refraction!).
 
 I would specifically like to note the _amount_ of people working on rendering features, and how it's increased over time. It's a great sign to see that rendering isn't the domain of only 1 or 2 dedicated developers. Rather, we have a fairly large amount of people contributing major rendering features and improvements.
 
@@ -103,7 +103,7 @@ In no specific order, here are some things I feel we need to prioritize.
 ### More dynamic, comprehensive, and accessible test scenes
 
 Most rendering development is currently done with either dedicated Bevy example scenes, or Lumberyard's Bistro or Intel's Sponza scenes.
-The former tend to be too simple for more intensive rendering tests, and the latter are difficult to setup, and don't have the dynamism a real game would have. Furthermore, we don't have any scenes that excercise _all_ of Bevy's rendering features at once, and how they might interact.
+The former tend to be too simple for more intensive rendering tests, and the latter are difficult to setup, and don't have the dynamism a real game would have. Furthermore, we don't have any scenes that exercise _all_ of Bevy's rendering features at once, and how they might interact.
 
 It would be great to get more test scenes that are easy to setup and tweak, demonstrate many of Bevy's rendering features working in tandem, and overall provide real-world uses cases that we can test against, rather than toy scenes. Currently, thoroughly exercising a new rendering feature or performance change requires almost as much work as writing the feature itself. To some extent, I'm asking us to develop a small game, focused on polished rendering and animation.
 
@@ -111,12 +111,12 @@ It would be great to get more test scenes that are easy to setup and tweak, demo
 
 A fact that is probably surprising to developers without much experience in rendering is that Bevy's renderer performance is currently heavily CPU-limited - not GPU-limited, as you might expect. There's two factor to this:
 
-1. Bevy is inefficent with how it stores and uses rendering data
+1. Bevy is inefficient with how it stores and uses rendering data
 2. Bevy makes too many draw calls, and does too much state binding changes between draws
 
 In order to become a serious renderer, we'll need to dramatically improve our CPU performance. Thankfully, we have a _lot_ of changes in progress towards this goal. Many core parts of the renderer that have been neglected in favor of working on new features are being revamped and improved. Expect large performance gains in Bevy 0.12, and probably 0.13.
 
-Long-term, we'll want to support GPU-driven rendering, where the GPU handles almost all of the rendering work. An extreme example of this kind of architecture is Unreal Engine's Nanite, which is capable of rendering micro-poly meshes. We (almost certainly) won't go _that_ far, but implementing 60% of the techniques (bindless, draw indirect, compute-based rasterizer, compute-based fustrum culling, two pass occlusion culling, and also asset streaming) should give us 90% of the benefit, and allow complex scenes with many orders of magnitude greater amounts of meshes. This is an exciting area to work on, and there's a lot to do!
+Long-term, we'll want to support GPU-driven rendering, where the GPU handles almost all of the rendering work. An extreme example of this kind of architecture is Unreal Engine's Nanite, which is capable of rendering micro-poly meshes. We (almost certainly) won't go _that_ far, but implementing 60% of the techniques (bindless, draw indirect, compute-based rasterizer, compute-based frustum culling, two pass occlusion culling, and also asset streaming) should give us 90% of the benefit, and allow complex scenes with many orders of magnitude greater amounts of meshes. This is an exciting area to work on, and there's a lot to do!
 
 ### Documentation
 
@@ -158,7 +158,7 @@ I'm also really looking forward to _developing_ Bevy's editor. I originally join
 
 The key missing parts are twofold:
 * An ergonomic, reactive, pretty, capable, and scalable UI system
-* Concrete direction on how the editor will actually operate (as a seperate process with message passing, as a bevy_app plugin to the game process, etc)
+* Concrete direction on how the editor will actually operate (as a separate process with message passing, as a bevy_app plugin to the game process, etc)
 
 I'm interested in doing the work of designing the UI for the editor and writing all the UI code and features, but not so much figuring out the basic foundations. Hopefully others will take on this task :)
 
@@ -180,7 +180,7 @@ Finally, I'd like to mention some things I'm excited to work on! Some of these I
 
 It's not something I've mentioned at all yet, but one of the things I've been spending a _lot_ of time on the past several months is a project I'm calling bevy_solari.
 
-Bevy currently has support for direct lighting - i.e., simulating the light coming from a light source, and hitting a surface. In real life however, light dosen't just stop at the first surface it hits. Light bounces around a scene, leading to mirror or blurry reflections, color bleeding, micro-shadows, and more. Simulating these many bounces of light is called global illumination (GI), and tends to be very expensive and slow to do in real time. Without GI, however, lighting tends to look kinda off, and a lot less prettier.
+Bevy currently has support for direct lighting - i.e., simulating the light coming from a light source, and hitting a surface. In real life however, light doesn't just stop at the first surface it hits. Light bounces around a scene, leading to mirror or blurry reflections, color bleeding, micro-shadows, and more. Simulating these many bounces of light is called global illumination (GI), and tends to be very expensive and slow to do in real time. Without GI, however, lighting tends to look kinda off, and a lot less prettier.
 
 Most games tend to approximate global illumination via baked static lighting methods such as lightmaps, irradiance volumes, and environment maps, as well as very limited dynamic methods such as planar reflections, light/reflection probes, and screen-space raytracing. Of these, Bevy currently only supports environment maps and SSAO, although I know that some people are working on implementing the other methods.
 

@@ -56,7 +56,7 @@ The real win however, was actually an entirely unrelated change I made in the sa
 
 After rasterizing to the visbuffer texture (packed depth + cluster ID + triangle ID), there are two fullscreen triangle render passes to read from the visbuffer and write depth to both an actual depth texture, and the "material depth" texture discussed in previous posts.
 
-Lets look at the material depth resolve shader:
+Let's look at the material depth resolve shader:
 ```rust
 @fragment
 fn resolve_material_depth(in: FullscreenVertexOutput) -> @builtin(frag_depth) f32 {
@@ -78,7 +78,7 @@ Adding this single line to discard the background fragments doubled the performa
 
 ### Issues With Clearing
 
-In Bevy we cache resource between frames, and so at the start of the frame, we need to clear the visbuffer texture back to zero to prepare it for use during the frame.
+In Bevy we cache resources between frames, and so at the start of the frame, we need to clear the visbuffer texture back to zero to prepare it for use during the frame.
 
 Wgpu has some simple `CommandEncoder::clear_buffer()` and `CommandEncoder::clear_texture()` commands. But their behavior under the hood might be a little unintuitive if you've never used Vulkan before.
 
@@ -142,14 +142,14 @@ Overall perf improvement is about 0.42ms faster in a very simple demo scene.
 
 And that's it for virtual geometry stuff I worked on during Bevy 0.16.
 
-In related but non-Bevy news, Nvidia revealed their blackwell RTX 50 series GPUs, with some exciting [new meshlet/virtual geometry stuff](https://github.com/nvpro-samples/build_all?tab=readme-ov-file#mega-geometry)!
+In related but non-Bevy news, Nvidia revealed their Blackwell RTX 50 series GPUs, with some exciting [new meshlet/virtual geometry stuff](https://github.com/nvpro-samples/build_all?tab=readme-ov-file#mega-geometry)!
 
 * New raytracing APIs (not rasterization!) for meshlet-based acceleration structures (CLAS) that are cheaper to build
-  * And on blackwell, CLAS's use a compressed (but sadly opaque) memory format
-* New demos using CLAS's for animated geometry, dynamic tesselation, and even full Nanite-style virtual geometry!
+  * And on Blackwell, CLAS's use a compressed (but sadly opaque) memory format
+* New demos using CLAS's for animated geometry, dynamic tessellation, and even full Nanite-style virtual geometry!
 * New libraries for generating raytracing-friendly meshlets (i.e. optimized for bounding-box size), and virtual geometry oriented DAGs of meshlets
 
-One of the biggest issues with Nanite (besides aggregate geometry like foilage) is that it came about right when realtime raytracing was starting to pick up. Until now, it hasn't been clear how to integrate virtual geometry with raytracing (beyond rasterizing the geometry to a gbuffer, so at least you get more primary visibility detail). These new APIs resolve that issue.
+One of the biggest issues with Nanite (besides aggregate geometry like foliage) is that it came about right when realtime raytracing was starting to pick up. Until now, it hasn't been clear how to integrate virtual geometry with raytracing (beyond rasterizing the geometry to a gbuffer, so at least you get more primary visibility detail). These new APIs resolve that issue.
 
 Meshoptimizer v0.23 also released recently, with some new APIs (`meshopt_buildMeshletsFlex`, `meshopt_partitionClusters`, `meshopt_computeSphereBounds`) that I need to try out for DAG building at some point.
 
