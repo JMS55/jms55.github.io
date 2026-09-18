@@ -17,6 +17,8 @@ Whereas last cycle was mostly incremental improvements, this cycle was the compl
 
 Lots to cover, so let's get started!
 
+TODO: Headline screenshot
+
 ## Reducing Shadow Lag
 
 This section is going to start off with a good bit of math, but we'll get to the practical applications towards the end. Bear with me for a bit.
@@ -73,7 +75,7 @@ We already saw how to do this in the previous section: you calculate both $p_\te
 
 Now that we've covered how MIS works in RIS, it should be straightforward to apply the same concepts to ReSTIR, right? ReSTIR is just RIS, after all.
 
-In ReSTIR, we aim to resample reservoirs (samples) from different pixels. E.g. you could have an "initial" reservoir, a "temporal" reservoir, and a "spatial" reservoir, and you aim to select the best reservoir to keep and use for shading from the three via RIS.
+In ReSTIR, we aim to resample reservoirs (samples) from different pixels. E.g. you could have an "initial" reservoir, a "temporal" reservoir, and a "spatial" reservoir, and aim to select the best reservoir to keep and use for shading from the three via RIS.
 
 It's important to note that each of these reservoirs comes from a different domain: the initial reservoir comes from the frame+pixel, the temporal reservoir comes from the previous frame+pixel, and the spatial reservoir comes from the current frame but from a neighboring pixel.
 
@@ -91,7 +93,7 @@ In realtime rendering, we often use hacks and approximations in the name of perf
 
 See, you don't strictly _need_ to use proper MIS weights. You can trade off various levels of performance/correctness (bias)/variance reduction by using purposefully incorrect MIS weights, depending on what you want to prioritize.
 
-For instance, when computing MIS weights for reusing a temporal reservoir, you could do any of the following, in order of increasing performance cost:
+For instance, when computing MIS weights for reusing a temporal reservoir, you could do any of the following, in order of decreasing bias but increasing performance cost:
 1. Use constant MIS weights
 2. Use the generalized balance heuristic, but with various assumptions in the cross-domain target functions:
     * The material properties and world position of the current and previous frame pixels are the same
@@ -105,7 +107,11 @@ For instance, when computing MIS weights for reusing a temporal reservoir, you c
 
 In Bevy 0.19, Solari was (more or less) following #3. This led to bias, increased variance, and importantly, temporal lag. Shadows of moving objects often appeared to lag behind the object.
 
+TODO: Temporal lag before
+
 In Bevy 0.20, we switched to using the previous frame's TLAS when testing visibility in the domain of the previous frame. This costs a decent amount of extra VRAM and complexity due to having to keep a second TLAS around, but in return it greatly reduces temporal shadow lag.
+
+TODO: Temporal lag after
 
 ## Unified ReSTIR
 
@@ -115,7 +121,7 @@ For any readers who felt that the previous section was a lot of math, and not mu
 
 A few months ago, NVIDIA researchers released a really interesting paper called [ReSTIR PT Enhanced: Algorithmic Advances for Faster and More Robust ReSTIR Path Tracing](https://research.nvidia.com/labs/rtr/publication/lin2026restirptenhanced).
 
-The paper is a followup to their 2022 paper on ReSTIR PT, this time detailing a lot of algorithmic improvements to improve the performance of (the quite expensive) ReSTIR PT (among some other changes to e.g. reduce correlations).
+The paper is a followup to their 2022 paper on ReSTIR PT, this time detailing a lot of algorithmic changes to improve the performance of (the quite expensive) ReSTIR PT (among some other changes to e.g. reduce correlations).
 
 The main optimization from the paper that I want to talk about is the concept of a single, "unified" ReSTIR pass.
 
@@ -162,7 +168,7 @@ The basic idea is that you start with your bog-standard pathtracer:
 5. Perform Russian roulette to terminate long paths early
 6. Loop
 
-Adding ReSTIR then transforms the algorithm to look like this:
+And then add ReSTIR, transforming the algorithm to look like this:
 1. Initialize an empty reservoir
 2. Perform NEE at the current path vertex
     * Resample new path contribution into the reservoir
@@ -174,7 +180,9 @@ Adding ReSTIR then transforms the algorithm to look like this:
 6. Perform Russian roulette to terminate long paths early
 7. Loop
 
-At the end, you're left with a single "initial" reservoir that we can then perform temporal and spatial resampling on, before finally using it to shade the pixel.
+At the end, you're left with a single "initial" reservoir that you can then perform temporal and spatial resampling on, before finally using it to shade the pixel.
+
+You are essentially resampling between different paths, regardless of whether those paths are primarily made of DI or GI contributions. It's all just one set of reservoirs.
 
 To give you an idea of what the reservoir structure looks like, here's what Solari's reservoir structs looked like in Bevy 0.19:
 ```rust
@@ -212,17 +220,17 @@ struct UnifiedReservoir {
 
 ### Implementation Choices
 
-Unlike the paper, I chose not to implement the hybrid shift, and stick purely to the reconnection shift. Basically, when tracing paths, if it's from too sharp of a specular lobe, instead of putting it in the reservoir to use for resampling, we simply write the path's radiance directly to the screen.
+Unlike the paper, I chose not to implement the hybrid shift, and stuck purely to the reconnection shift. Basically, when tracing paths, if it's from too sharp of a specular lobe, instead of putting the path into the reservoir to use for resampling, we simply write the path's radiance directly to the screen.
 
 Unlike a wide lobe, it's not possible to use a sharply directional lobe with the reconnection shift. The hybrid shift, which conditionally switches to "random replay", can handle these types of lobes, but it involves re-tracing the path, which in my opinion is too expensive for a realtime renderer.
 
 Additionally, I have a fairly high roughness gate on the primary vertex to guard resampling. I realized that just because you _can_ resample specular paths, doesn't mean you _should_.
 
-As denoisers have improved recently, correlations from temporal and spatial reuse have become a big problem. Because we're reusing discrete samples, the denoiser sees the same samples more often than it otherwise would with regular importance sampling. The denoiser then thinks that this is detail worth preserving (it's a repeating pattern in an otherwise noisy signal), which leads to ugly denoising artifacts.
+As denoisers have improved recently, correlations from temporal and spatial reuse have become a big problem. Because we're reusing discrete samples, the denoiser sees the same samples more often than it otherwise would with plain importance sampling. The denoiser then thinks that this is detail worth preserving (it's a repeating pattern in an otherwise noisy signal), which leads to ugly denoising artifacts.
 
-See [Compatibility-Guided Neighbor Selection for ReSTIR](https://www.youtube.com/watch?v=MCqnETw3l8A) for a good explanation of correlations in ReSTIR.
+Smooth specular surfaces, unlike rough diffuse surfaces, have a small number of possible paths with strong contributions. So as soon as ReSTIR finds one good sample, it tends to propagate to all neighboring pixels, and stay there for a while without being overwritten by new samples. This over-reuse and correlated neighbor pixels confuses the denoiser.
 
-Smooth specular surfaces, unlike rough diffuse surfaces, have a small number of possible paths with strong contributions. So as soon as ReSTIR finds one good sample, it tends to propagate to all neighboring pixels, and stay there for a while without being overwritten by new samples. This over-reuse and correlated neighbor pixels confuse the denoiser.
+> See [Compatibility-Guided Neighbor Selection for ReSTIR](https://www.youtube.com/watch?v=MCqnETw3l8A) for a good explanation of correlations in ReSTIR.
 
 > As a side note, in the previous post in this series, I recommended halving the spatial sampling radius after failing to find a valid sample. It turns out, this is a bad idea, and I have reverted it. Doing this _also_ introduces problematic correlations, as many pixels end up reusing the same few samples within a small radius.
 
@@ -244,7 +252,9 @@ More important than the memory savings, there are a bunch of other improvements 
 * Whereas before we never resampled specular GI, we can now resample sufficiently rough/glossy specular reflections. More on the caveats here in a bit.
 * Much better light leak prevention, as instead of always terminating into the world cache after the first bounce like we used to for ReSTIR GI, it's now easy to simply continue tracing the path if terminating would risk leaking light.
 
-Overall, we get some very nice quality wins, simplify the code, and reduce our memory usage. Performance tends to be either about the same, slightly slower, or slightly faster depending on the scene and GPU in question.
+Overall, we get some very nice quality wins, simplify the code, and reduce our memory usage. Performance tends to be either about the same, slightly slower, or slightly faster depending on the GPU and scene you're benchmarking.
+
+TODO: Screenshots of non-denoised unified vs non-unified vs reference
 
 ### Downsides
 
@@ -255,6 +265,8 @@ Shadow boundaries where some pixels prefer GI, and some prefer DI, get a bit wor
 Another downside is that a big unified pathtracing kernel uses more registers than separate kernels, which reduces occupancy and can hurt performance. It's not typically a huge loss, but it's something to be aware of.
 
 The real issue is that we're no longer tracing paths for both the primary vertex's diffuse _and_ specular lobes every frame. Before, we had dedicated passes for diffuse and specular GI paths (really just a single-bounce for diffuse GI, we weren't doing a full path), but now we're only tracing a single path, with stochastic lobe selection for dielectric materials that have two lobes. Tracing two separate paths would be too expensive.
+
+TODO: Screenshot of zero day before unified, and after unified with no specular boost
 
 Remember from the last post that dielectric materials are implemented as a thin specular lobe layered _over_ a diffuse lobe. Depending on what angle you view it at, the top specular layer gets a certain percentage of the energy, with the rest being transmitted to the diffuse layer beneath it. When picking a BRDF lobe to follow to keep tracing the path, we can importance sample the two layers according to these percentages, biasing towards picking the lobe that will receive a higher amount of energy.
 
@@ -282,49 +294,69 @@ fn specular_lobe_sampling_probability(rho: LobeReflectances, perceptual_roughnes
 
 The logic is pretty simple: for smooth dielectric surfaces, ReSTIR will _already_ reduce noise from diffuse paths through reservoir reuse. Since we're not resampling specular paths, it makes more sense to allocate a higher percentage of our initial samples towards specular paths, since they don't have any form of ReSTIR to help them out unlike diffuse paths. Additionally, sharp specular reflections are simply more detailed than blurry diffuse reflections, and therefore the denoiser needs more samples in order to properly reconstruct them.
 
+TODO: Screenshot of specular boost
+
 ## Saying Goodbye to ReSTIR
 
-So, we just spent all that time, and really the last 2 years talking about ReSTIR. That's a lot of time invested into it.
+So, we just spent all that time, and really I've spent the last year or two talking about and working to improve ReSTIR. That's a lot of time invested.
 
-The thing is... Do we really need ReSTIR?
+The thing is, a few weeks after landing the unified ReSTIR rewrite, I started to think... Do we even really need ReSTIR?
 
-As great as ReSTIR is, it's actually quite expensive, costing 4 rays for resampling in current versions of Solari.
+As great as ReSTIR is, it's actually quite expensive, costing 4 rays for resampling just two extra reservoirs (1 temporal, 1 spatial) in the current version of Solari.
 
-And then we run into the issues with correlations. As I talked about above, ReSTIR just... doesn't play well with current denoisers.
+And then you run into issues with correlations. As I talked about above, ReSTIR just... doesn't play well with current denoiser designs.
+
+### What in the Denoiser?
+
+I'm going to go on a bit of a tangent here, but bear with me.
 
 When you think about it, what actually _is_ a denoiser doing anyways?
 
-Denoising is essentially signal smoothing. The radiance of a pixel can be thought of as a function, except in pathtracing it would be prohibitively expensive to calculate the full function. Instead, we sample the function, calculating its value at discrete points. This is what produces the noisy input we feed a denoiser.
+Denoising is essentially signal smoothing. The radiance of a pixel can be thought of as a function, which I'll simplify down to a 2d function for the purposes of this metaphor.
+
+TODO: Screenshot of 2d function
+
+However in pathtracing, it would be prohibitively expensive to calculate the full function. Instead, we sample the function, calculating its value at discrete points. This is what produces the noisy input we feed a denoiser.
+
+TODO: Screenshot of sampled function
 
 The denoiser can then look at those points, and try to "guess", and fill in the rest of the function, usually by interpolating (averaging) neighboring points together.
+
+TODO: Screenshot of "guessing" the function well
 
 If the input samples are a good representation of the overall function, then the denoiser can do a pretty good job at getting close to what the function should be.
 
 If the input samples _aren't_ a good representation, well, then the denoiser is going to do a poor job of guessing. This is where denoiser artifacts and blurriness come from.
 
+TODO: Screenshot of "guessing" the function poorly
+
 Now, denoisers have an advantage - they can look at multiple pixels at once. The good thing is, lighting tends to be a pretty "smooth" signal. It fades out smoothly over a distance, and doesn't tend to change that drastically between pixels. So long as _some_ of the nearby pixels have a good estimate of the incoming radiance, modern denoisers can do a pretty solid job at reconstructing a smooth lighting signal.
+
+TODO: Screenshot of noisy render where it's easy to see the pattern despite the missing pixels
 
 Now, after reading that, does my description of denoisers sound... familiar?
 
-It's very similar to what ReSTIR is doing. In ReSTIR, we're taking discrete paths, and shifting them to terminate at a different pixel, re-evaluating how much radiance the path should give under the new conditions. We do this spatially and temporally. We're reusing paths between pixels.
+It's very similar to what ReSTIR is doing. In ReSTIR, we're taking discrete paths, and shifting them to terminate at different pixels, re-evaluating how much radiance the path should give under the new conditions. We do this spatially and temporally, reusing paths between pixels.
 
-Denoisers do the same, just with pixel radiance, instead of samples.
+Denoisers do the same, just with path _radiance_, instead of the paths themselves.
 
-The advantage of denoisers is that interpolating pixels is pretty cheap, relative to shifting a whole path.
+The advantage of denoisers is that interpolating color data is pretty cheap, relative to shifting a whole path and having to trace new rays.
 
 In ReSTIR, more than a single temporal and spatial sample is too expensive for realtime (that's 4 rays/pixel, which even then is a decent chunk of performance). Denoisers, on the other hand, through the use of CNNs and transformers, can afford to look at tons of other pixels.
 
-Moreover, while denoisers can more easily cause bias, they don't cause any issues with correlations. And even with ReSTIR, we need a denoiser anyways.
+Moreover, while denoisers can more easily cause bias, they don't cause any issues with correlations. And even with ReSTIR, we need a denoiser anyways, so - why not rely more heavily on the denoiser?
 
 Testing I've done shows that current (v4.5) versions of DLSS-RR just... don't really need ReSTIR a lot of the time. Our GI signal is already dense enough for DLSS-RR to do a perfectly good job. Our DI signal is pretty undersampled if you have more than a few lights, as RIS is not sufficient, but even then it tends to manifest as shadows that fade out at a distance, which - ever used a shadow map?
 
-If this still sounds like a crazy idea to you, consider - lots of games are doing quarter-res GI as-is. Denoisers can already deal with a fairly noisy signal - we don't need it to be _that_ dense. ReSTIR is often overkill.
+TODO: Screenshots of comparisons between restir on/off in bistro
+
+If this still sounds like a crazy idea to you, consider - lots of games are currentlu doing quarter resolution and even variable resolution GI. Denoisers are already designed to deal with a fairly noisy signal - we don't need it to be _that_ dense. ReSTIR is often overkill.
 
 With this in mind, I've made the decision to disable ReSTIR by default in Solari 0.20. There's no point in deleting it outright as it can help in tricky scenes, and it's still useful for DI for now, but users should consider whether they actually need it or not.
 
-In the future, I'll be considering ways to more cheaply guide the initial sampling process, rather than making ReSTIR smarter at reusing existing samples.
+In the future, I'll be focusing more on ways to cheaply guide the initial sampling process, rather than focusing on making ReSTIR smarter at reusing those samples.
 
-For instance, we can reallocate paths from pixels in neighborhoods with simple lighting, and spend them on pixels with more complicated lighting conditions.
+For instance, we can reallocate paths from pixels in neighborhoods with simple, easy to sanple lighting conditions, and spend them on pixels with more complicated lighting conditions (variable rate pathtracing).
 
 And I'm going to look into cheaper methods like MegaLights or light clustering to guide DI sampling, in addition to RIS.
 
@@ -334,9 +366,13 @@ In Solari 0.20, I spent a good few weeks working on improving the guide buffers 
 
 A lot of this was trial and error via AI to make test scenes and generate comparison videos. I had a "feeling" that reflections were a bit blurry and shimmery, but it was hard to really tell for sure. I did a _lot_ of pixel peeping during this time.
 
-The changes are pretty complicated, and not very scientific, but it boiled down to doing primary surface replacement (PSR) on more types of materials and with more guide buffers (depth, regular non-specular motion vectors, etc). Review [the code](https://github.com/bevyengine/bevy/pull/25423) if you're interested in exactly what changed.
+The changes are pretty complicated, and not very scientific, but it boiled down to doing primary surface replacement (PSR) on more types of materials and with more guide buffers (depth, regular non-specular motion vectors, etc).
 
 In previous versions of Solari, PSR was done only for perfectly smooth metals. Now we've expanded it to dielectrics and slightly less smooth metals, with pretty good results!
+
+TODO: Video comparison of zero day
+
+Review [the code](https://github.com/bevyengine/bevy/pull/25423) if you're interested in exactly what changed.
 
 I would love if NVIDIA could publish some official docs on what the right way to do PSR is with DLSS-RR.
 
@@ -346,15 +382,45 @@ Another big goal for me this development cycle was to improve Solari's CPU perfo
 
 Bevy is very modular, and Solari is no exception. The entire raytracing scene code is one plugin, with the realtime lighting plugin being another, and the reference pathtracer a third plugin.
 
-Previously the raytracing scene code was functional, but very naive. It rebuilt the scene from scratch every frame, iterating over every mesh, light source, and material in the scene.
+Previously, the raytracing scene code was functional, but very naive. It rebuilt the scene from scratch every frame, iterating over every mesh, light source, and material in the scene.
 
 Now, with a _lot_ of ugly and careful code, and after a long time instrumenting things and comparing Tracy traces, Solari has much better CPU performance!
+
+TODO: Before/after tracy screenshots
 
 Similar to past efforts for the standard renderer over the last several Bevy releases, Solari now caches the entire scene, and does incremental updates to both the render world ECS and GPU buffers using tools like Bevy's change detection and [AtomicSparseBufferVec](https://docs.rs/bevy/latest/bevy/render/render_resource/struct.AtomicSparseBufferVec.html).
 
 Additionally, TLAS builds are now much more GPU driven. Partially to avoid wgpu overhead, and mainly to avoid uploading a large amount of data to the GPU every frame, TLAS instances are now written to a buffer on the GPU via a compute shader.
 
-Every frame, the compute shader iterates over the existing list of entity transform/meshes on the GPU, and simply copies the transform and BLAS address of each entity into a new buffer. GPU -> GPU copies are much faster than doing a second set of CPU->GPU copies for transforms :)
+Every frame, the compute shader iterates over the existing list of entity transforms on the GPU, and simply copies the transform and BLAS address of each entity into a new buffer. GPU -> GPU copies are much faster than doing a second set of CPU->GPU copies for the whole list of transforms!
+
+```rust
+@group(0) @binding(0) var<storage, read> transforms: array<array<vec4<f32>, 3>>;
+@group(0) @binding(1) var<storage, read> blas_refs: array<vec2<u32>>;
+@group(0) @binding(2) var<storage, read_write> instances: array<TlasInstance>;
+
+struct TlasInstance {
+    transform: array<vec4<f32>, 3>,
+    custom_data_and_mask: u32,
+    sbt_offset_and_flags: u32,
+    blas_ref: vec2<u32>,
+}
+
+@compute @workgroup_size(64, 1, 1)
+fn setup_tlas_instances(@builtin(global_invocation_id) global_id: vec3<u32>) {
+    let slot = global_id.x;
+    if slot >= arrayLength(&instances) || slot >= arrayLength(&blas_refs) || slot >= arrayLength(&transforms) {
+        return;
+    }
+
+    instances[slot] = TlasInstance(
+        transforms[slot],
+        (slot & 0xFFFFFFu) | 0xFF000000u,
+        0u,
+        blas_refs[slot],
+    );
+}
+```
 
 ## Atmosphere and Skybox Lighting
 
@@ -364,8 +430,10 @@ It's pretty simple for now - just sample the cubemap when on ray miss, and fold 
 
 In the future, we'll want to do NEE against the cubemap and build a hierarchical CDF to accelerate sampling for NEE, but for now the simple method works pretty well.
 
-This feature is part of a shift in my focus towards getting Solari to support more features to bring it up to parity with Bevy's standard renderer. In particular, in the future, I'd like to support the remaining rect/point/spotlight types, animated meshes, and alpha masked and transparent/transmissive/refractive materials.
+TODO: Atmosphere and maybe envmaplight screenshots
+
+This feature is part of a shift in my focus towards getting Solari to support more rendering features to bring it up to parity with Bevy's standard renderer. In particular, I'd like to add support to Solari for the remaining rect/point/spotlight types, animated meshes, and alpha masked and transparent/transmissive/refractive materials.
 
 Light transport is good and all, and of course I will continue to experiment in that department and always work to improve performance, but I'd like Solari to reach a more usable state in the near future.
 
-With that, I'll leave you some pretty pictures of Bevy's Atmosphere + Solari. Thanks for reading, and look forward to the release of Bevy 0.20 soon!
+And with that, we're at the end of the blog post. Thanks for reading, and look forward to the release of Bevy 0.20 soon!
