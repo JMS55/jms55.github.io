@@ -25,12 +25,12 @@ This section is going to start off with a good bit of math, but we'll get to the
 
 ### MIS for the Combined Estimator
 
-In pathtracing, when combining multiple sampling strategies (ways of generating samples, also called _domains_), you need to apply proper MIS weights to obtain both unbiased rendering, and optimal variance reduction.
+In pathtracing, when combining multiple sampling strategies (ways of generating samples, also called _domains_), you need to apply proper MIS[^1] weights to obtain both unbiased rendering, and optimal variance reduction.
 
 Typically, you would use something like the balance heuristic to compute MIS weights.
 
 Given a sample $a$ from strategy A, and sample $b$ from strategy B, in order to combine them you would start by computing the following 4 values:
-1. $p_A(a)$ - The PDF of sample $a$ as if it were sampled from strategy A
+1. $p_A(a)$ - The PDF[^2] of sample $a$ as if it were sampled from strategy A
 2. $p_B(b)$ - The PDF of sample $b$ as if it were sampled from strategy B
 3. $p_A(b)$ - The PDF of sample $b$ as if it were sampled from strategy A (a different domain!)
 4. $p_B(a)$ - The PDF of sample $a$ as if it were sampled from strategy B (a different domain!)
@@ -57,15 +57,15 @@ $$f_{a,b} = f_1 + f_2$$
 
 ### MIS in RIS
 
-In RIS, instead of _combining_ samples, you aim to _select_ a single "best" sample by randomly choosing from the samples with weights proportional to each sample's contribution.
+In RIS[^3], instead of _combining_ samples, you aim to _select_ a single "best" sample by randomly choosing from the samples with weights proportional to each sample's contribution.
 
 As part of RIS, you always need to compute MIS weights for each sample. You can use a constant $1/N$ MIS weight for every sample if all samples are from the same domain, but with multiple domains you need e.g. the balance heuristic. See [A Gentle Introduction to ReSTIR](https://intro-to-restir.cwyman.org/presentations/2023ReSTIR_Course_Notes.pdf) for details if the process of RIS with MIS is unfamiliar to you.
 
 To give a concrete multi-domain example, let's say you're generating the "initial" reservoir for ReSTIR, and are doing RIS over the unshadowed light contributions of two different light samples.
 
-The first sample is drawn by randomly selecting an emissive mesh, then randomly selecting a triangle in that mesh, and then randomly selecting a front-facing point on that triangle (this is NEE).
+The first sample is drawn by randomly selecting an emissive mesh, then randomly selecting a triangle in that mesh, and then randomly selecting a front-facing point on that triangle (this is NEE[^4]).
 
-The second sample is drawn by shooting a ray according to the current pixel's BRDF, and hitting a point on an emissive mesh (this is BRDF sampling).
+The second sample is drawn by shooting a ray according to the current pixel's BRDF[^5], and hitting a point on an emissive mesh (this is BRDF sampling).
 
 We have two different strategies: NEE and BRDF sampling. In order to do RIS over the two samples, we need to calculate MIS weights for each sample.
 
@@ -466,3 +466,9 @@ This feature is part of a shift in my focus towards getting Solari to support mo
 Light transport is good and all, and of course I will continue to experiment in that department and always work to improve performance, but I'd like Solari to reach a more usable state in the near future.
 
 And with that, we're at the end of the blog post. Thanks for reading, and look forward to the release of Bevy 0.20 soon!
+
+[^1]: Multiple Importance Sampling
+[^2]: Probability Density Function
+[^3]: Resampled Importance Sampling
+[^4]: Next-Event Estimation
+[^5]: Bidirectional Reflectance Distribution Function
