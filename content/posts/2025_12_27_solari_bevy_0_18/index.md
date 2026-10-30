@@ -12,7 +12,7 @@ It's been approximately three months since [my last post](@/posts/2025_09_20_sol
 
 Like last time, this cycle has seen me focused entirely on Solari - Bevy's next-gen, fully dynamic raytraced lighting system, allowing artists and developers to get high quality lighting - without having to spend any time on static baking.
 
-{{ figure(src="headline.png", caption="PICA PICA using Solari in Bevy 0.18") }}
+{{ <figure src="headline.png" caption="PICA PICA using Solari in Bevy 0.18" /> }}
 
 Before getting into what's changed in this release, let's take a quick look back at where Solari was in Bevy 0.17.
 
@@ -51,7 +51,7 @@ Of course, games want more than just purely diffuse materials. Most PBR material
 
 In Bevy 0.18, Solari now supports specular materials using a multiscattering GGX lobe, which gets added to the diffuse lobe.
 
-{{ figure(src="dragons_realtime.png", caption="Metallic and non-metallic meshes of varying roughness") }}
+{{ <figure src="dragons_realtime.png" caption="Metallic and non-metallic meshes of varying roughness" /> }}
 
 ### BRDF Evaluation
 
@@ -239,8 +239,8 @@ To get around this, when importance sampling the specular BRDF for a material wi
 
 This restores mirror-like behavior, while still preventing NaNs in BRDF evaluation.
 
-{{ figure(src="without_mirror_fix.png", caption="Without the fix - a little blurry") }}
-{{ figure(src="with_mirror_fix.png", caption="With the fix - perfect mirror!") }}
+{{ <figure src="without_mirror_fix.png" caption="Without the fix - a little blurry" /> }}
+{{ <figure src="with_mirror_fix.png" caption="With the fix - perfect mirror!" /> }}
 
 ### Specular DI
 
@@ -294,7 +294,7 @@ The diffuse lobe is handled by the existing ReSTIR GI pass. ReSTIR GI resampling
 
 For the ReSTIR GI final shading step, we're still shading using only the diffuse lobe, but now we need to skip shading metallic pixels that don't have a diffuse lobe.
 
-{{ figure(src="diffuse_gi.png", caption="Diffuse GI only - metallic surfaces are black because they don't have any diffuse contribution") }}
+{{ <figure src="diffuse_gi.png" caption="Diffuse GI only - metallic surfaces are black because they don't have any diffuse contribution" /> }}
 
 ### Specular GI
 
@@ -335,7 +335,7 @@ For glossy or mirror surfaces, we need to trace a new path, following the best d
 
 The full code for `trace_glossy_path` is a bit long, so I'm just going to link to the [source on GitHub](https://github.com/bevyengine/bevy/blob/64c7bec4068aa063bfaa2cddcb90733f0e081cf8/crates/bevy_solari/src/realtime/specular_gi.wgsl#L71-L150).
 
-{{ figure(src="specular_gi.png", caption="Specular GI only") }}
+{{ <figure src="specular_gi.png" caption="Specular GI only" /> }}
 
 The basic outline is:
 * We trace up to three bounces (after three bounces, the quality loss from skipping further bounces is minimal)
@@ -396,18 +396,18 @@ fn unpack_resolved_light_sample(packed: ResolvedLightSamplePacked, exposure: f32
 
 With this fix, we're much closer to matching the reference.
 
-{{ figure(src="energy_loss.png", caption="Energy loss due to poor encoding of radiance in light tiles") }}
-{{ figure(src="energy_loss_fixed.png", caption="Correct energy due to a better encoding") }}
+{{ <figure src="energy_loss.png" caption="Energy loss due to poor encoding of radiance in light tiles" /> }}
+{{ <figure src="energy_loss_fixed.png" caption="Correct energy due to a better encoding" /> }}
 
 ## Resampling Correlations/Bias
 
 One of the problems I wasn't able to solve in Bevy 0.17 was ReSTIR DI correlations introducing artifacts when denoising with DLSS-RR.
 
-{{ figure(src="di_correlations.png", caption="Correlations from ReSTIR DI confusing the denoiser") }}
+{{ <figure src="di_correlations.png" caption="Correlations from ReSTIR DI confusing the denoiser" /> }}
 
 For ReSTIR GI, I was able to solve this with permutation sampling during temporal reuse. But for ReSTIR DI, trying to use permutation sampling led to artifacts on shadow penumbras due to the way I was doing visibility reuse.
 
-{{ figure(src="di_permutation_artifacts.png", caption="Visibility reuse messing up shadows when using permutation sampling") }}
+{{ <figure src="di_permutation_artifacts.png" caption="Visibility reuse messing up shadows when using permutation sampling" /> }}
 
 I played with resampling ordering a bit more this cycle, and was able to come up with a solution.
 
@@ -457,13 +457,13 @@ If you were to feed forward the second visibility test, the following might happ
 
 Reusing visibility like this leads to bias in the form of shadows that "halo" objects, expanding further out than they should.
 
-{{ figure(src="di_feed_forward_bad.png", caption="Feeding forward final visibility leads to over-shadowing artifacts") }}
+{{ <figure src="di_feed_forward_bad.png" caption="Feeding forward final visibility leads to over-shadowing artifacts" /> }}
 
 While so far I've only talked about DI resampling, these changes actually apply to GI resampling too. Solari's ReSTIR GI pass now uses the same modified ordering as the DI resampling, which fixes indirect shadow artifacts. It's just that incorrect shadow edges are not as obvious with GI as they are for DI, so it's less important.
 
 One final note on DI resampling: like we were doing with ReSTIR GI, we now use the balance heuristic for ReSTIR DI resampling, instead of constant MIS weights. This makes a small difference (hence why I never noticed it until now), but it _does_ slightly increase emissive light brightness, matching the pathtraced reference better.
 
-{{ figure(src="di_good_018.png", caption="Final ReSTIR DI output after all the changes") }}
+{{ <figure src="di_good_018.png" caption="Final ReSTIR DI output after all the changes" /> }}
 
 ## World Cache Improvements
 
@@ -591,7 +591,7 @@ No more performance wasted on areas the camera will never see!
 
 ### Misc Cache Tweaks
 
-{{ figure(src="bistro_trace.png", caption="NSight trace of Bistro showing an expensive and spiky world cache update") }}
+{{ <figure src="bistro_trace.png" caption="NSight trace of Bistro showing an expensive and spiky world cache update" /> }}
 
 Finally, I tweaked a bunch of other things based on my testing in Bistro:
 
@@ -675,23 +675,23 @@ All results were captured on an RTX 3080 locked to base clocks in NSight, at 160
 
 ### PICA PICA
 
-{{ figure(src="pica_pica_realtime.png", caption="PICA PICA - Solari realtime") }}
-{{ figure(src="pica_pica_reference.png", caption="PICA PICA - Pathtraced reference (ignore the black noise - it's a bug)") }}
+{{ <figure src="pica_pica_realtime.png" caption="PICA PICA - Solari realtime" /> }}
+{{ <figure src="pica_pica_reference.png" caption="PICA PICA - Pathtraced reference (ignore the black noise - it's a bug)" /> }}
 
 ### Bistro
 
-{{ figure(src="bistro_realtime.png", caption="Bistro - Solari realtime (ignore the foliage - Solari doesn't support alpha masks yet)") }}
-{{ figure(src="bistro_reference.png", caption="Bistro - Pathtraced reference") }}
+{{ <figure src="bistro_realtime.png" caption="Bistro - Solari realtime (ignore the foliage - Solari doesn't support alpha masks yet)" /> }}
+{{ <figure src="bistro_reference.png" caption="Bistro - Pathtraced reference" /> }}
 
 ### Dragons
 
-{{ figure(src="dragons_realtime.png", caption="Dragons - Solari realtime") }}
-{{ figure(src="dragons_reference.png", caption="Dragons - Pathtraced reference") }}
+{{ <figure src="dragons_realtime.png" caption="Dragons - Solari realtime" /> }}
+{{ <figure src="dragons_reference.png" caption="Dragons - Pathtraced reference" /> }}
 
 ### Cornell Box
 
-{{ figure(src="cornell_box_realtime.png", caption="Cornell Box - Solari realtime") }}
-{{ figure(src="cornell_box_reference.png", caption="Cornell Box - Pathtraced reference") }}
+{{ <figure src="cornell_box_realtime.png" caption="Cornell Box - Solari realtime" /> }}
+{{ <figure src="cornell_box_reference.png" caption="Cornell Box - Pathtraced reference" /> }}
 
 ### Performance
 

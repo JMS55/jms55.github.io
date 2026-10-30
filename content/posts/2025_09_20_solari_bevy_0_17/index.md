@@ -79,9 +79,9 @@ Onto the frame breakdown!
 
 The first step of Solari is also the most boring: rasterize a standard GBuffer.
 
-{{ figure(src="gbuffer_base_color.png", caption="Base color") }}
-{{ figure(src="gbuffer_normals.png", caption="Normals") }}
-{{ figure(src="gbuffer_position.png", caption="Position reconstructed from depth buffer") }}
+{{ <figure src="gbuffer_base_color.png" caption="Base color" /> }}
+{{ <figure src="gbuffer_normals.png" caption="Normals" /> }}
+{{ <figure src="gbuffer_position.png" caption="Position reconstructed from depth buffer" /> }}
 
 #### Why Raster?
 
@@ -140,12 +140,11 @@ Initial sampling uses 32 samples from a light tile (more on this later), and cho
 
 After choosing the best sample, we trace a ray to test visibility, setting the unbiased contribution weight to 0 in the case of occlusion.
 
-{% note() %}
-All raytracing in Solari is handled via inline ray queries. Wgpu does not yet support raytracing pipelines, so I haven't gotten a chance to play around with them.
-{% end %}
+> [!NOTE]
+> All raytracing in Solari is handled via inline ray queries. Wgpu does not yet support raytracing pipelines, so I haven't gotten a chance to play around with them.
 
-{{ figure(src="noisy_di_one_sample.png", caption="One candidate sample DI") }}
-{{ figure(src="noisy_di_32_samples.png", caption="32 candidate sample DI, one sample chosen via RIS") }}
+{{ <figure src="noisy_di_one_sample.png" caption="One candidate sample DI" /> }}
+{{ <figure src="noisy_di_32_samples.png" caption="32 candidate sample DI, one sample chosen via RIS" /> }}
 
 #### DI Temporal Resampling
 
@@ -176,17 +175,17 @@ We must also trace a ray to test visibility, as the reservoir comes from a neigh
 
 Unlike a lot of other ReSTIR implementations, we only ever use 1 spatial sample. Using more than 1 sample does not tend to improve quality, and increases performance costs. We cannot, however, skip spatial resampling entirely. Having a source of new samples from other pixels is crucial to prevent artifacts from temporal resampling.
 
-{{ figure(src="spatial_baseline.jpg", caption="1 random spatial sample, 6.4 ms") }}
+{{ <figure src="spatial_baseline.jpg" caption="1 random spatial sample, 6.4 ms" /> }}
 
 Spatial sampling is probably the least well-researched part of ReSTIR. I tried a couple of other schemes, including trying to reuse reservoirs across a workgroup/subgroup similar to [Histogram Stratification for Spatio-Temporal Reservoir Sampling](https://iribis.github.io/publication/2025_Stratified_Histogram_Resampling), but none of them worked out well.
 
 Subgroup-level resampling was very cheap, but had tiling artifacts, and was not easily portable to different machines with different amounts of threads per workgroup.
 
-{{ figure(src="spatial_subgroup.jpg", caption="Subgroup-level spatial resampling, 7.3 ms") }}
+{{ <figure src="spatial_subgroup.jpg" caption="Subgroup-level spatial resampling, 7.3 ms" /> }}
 
 Workgroup-level resampling had much better quality, but was twice as expensive compared to 1 spatial sample, and introduced correlations that broke the denoiser.
 
-{{ figure(src="spatial_workgroup.jpg", caption="Workgroup-level spatial resampling, 12 ms") }}
+{{ <figure src="spatial_workgroup.jpg" caption="Workgroup-level spatial resampling, 12 ms" /> }}
 
 In the end, I stuck with the 1 random spatial sample I described above.
 
@@ -200,7 +199,7 @@ I did try out shading the pixel using all 3 samples (initial, temporal, and spat
 
 Overall the DI pass uses two raytraces per pixel (1 initial, 1 spatial).
 
-{{ figure(src="noisy_di.png", caption="DI with 32 initial candidates, 1 temporal resample, and 1 spatial resample") }}
+{{ <figure src="noisy_di.png" caption="DI with 32 initial candidates, 1 temporal resample, and 1 spatial resample" /> }}
 
 ### ReSTIR GI
 
@@ -238,7 +237,7 @@ We start by tracing a ray along a random direction chosen from a uniform hemisph
 
 At the ray's hit point, we need to obtain an estimate of the incoming irradiance, which becomes the outgoing radiance towards the current pixel, i.e. the path's contribution.
 
-{{ figure(src="noisy_gi_one_sample.png", caption="One sample GI") }}
+{{ <figure src="noisy_gi_one_sample.png" caption="One sample GI" /> }}
 
 To obtain irradiance, we query the world cache at the hit point (more on this later).
 
@@ -280,11 +279,11 @@ Temporal reservoir selection for GI is a little different from DI.
 
 In addition to reprojecting based on motion vectors, we jitter the reprojected location by a few pixels in either direction using [permutation sampling](https://www.amazon.com/GPU-Zen-Advanced-Rendering-Techniques/dp/B0DNXNM14K). This essentially adds a small spatial component to the temporal resampling, which helps break up temporal correlations.
 
-{{ figure(src="no_permutation_sampling.png", caption="No permutation sampling: The denoiser (DLSS-RR) produces blotchy noise") }}
+{{ <figure src="no_permutation_sampling.png" caption="No permutation sampling: The denoiser (DLSS-RR) produces blotchy noise" /> }}
 
 I also tried permutation sampling for ReSTIR DI, and while it did reduce correlation artifacts, it also added even worse artifacts because we reuse visibility, which becomes very obvious under permutation sampling. Tracing an extra ray to validate visibility would fix this, but I'm not quite ready to pay that performance cost.
 
-{{ figure(src="di_permutation_sampling.png", caption="DI: Permutation sampling and visibility reuse do not work well together") }}
+{{ <figure src="di_permutation_sampling.png" caption="DI: Permutation sampling and visibility reuse do not work well together" /> }}
 
 Spatial reservoir selection for GI is identical to DI.
 
@@ -308,7 +307,7 @@ Since we're using DLSS-RR for denoising, we can simply add the GI on top of the 
 
 Overall the GI pass uses two raytraces per pixel (1 initial, 1 spatial), same as DI.
 
-{{ figure(src="noisy_gi.png", caption="GI with 1 initial candidate, 1 temporal resample, and 1 spatial resample") }}
+{{ <figure src="noisy_gi.png" caption="GI with 1 initial candidate, 1 temporal resample, and 1 spatial resample" /> }}
 
 ### Interlude: What is ReSTIR Doing?
 
@@ -567,7 +566,7 @@ fn compute_checksum(world_position: vec3<u32>, world_normal: vec3<u32>) -> u32 {
 }
 ```
 
-{{ figure(src="world_cache_far.png", caption="World cache from further away, showing LOD") }}
+{{ <figure src="world_cache_far.png" caption="World cache from further away, showing LOD" /> }}
 
 #### Cache Decay
 
@@ -650,8 +649,8 @@ As an example: In frame 5, world cache cell A samples a light source. In frame 6
 
 By having the cache sample itself, we get full-length multi-bounce paths, instead of just single-bounce paths. In indoor scenes that make heavy use of indirect lighting, the difference is pretty dramatic.
 
-{{ figure(src="cornell_box_no_multi_bounce.png", caption="Single-bounce lighting") }}
-{{ figure(src="cornell_box_multi_bounce.png", caption="Multi-bounce lighting") }}
+{{ <figure src="cornell_box_no_multi_bounce.png" caption="Single-bounce lighting" /> }}
+{{ <figure src="cornell_box_multi_bounce.png" caption="Multi-bounce lighting" /> }}
 
 #### Cache Blend
 
@@ -684,20 +683,19 @@ fn blend_new_samples(@builtin(global_invocation_id) active_cell_id: vec3<u32>) {
 
 Once we have our noisy estimate of the scene, we run it through DLSS-RR to upscale, antialias, and denoise it.
 
-{{ figure(src="noisy_full.png", caption="Noisy and aliased image") }}
-{{ figure(src="denoised_full.png", caption="Denoised and antialiased image") }}
-{{ figure(src="pathtraced.png", caption="Pathtraced reference") }}
+{{ <figure src="noisy_full.png" caption="Noisy and aliased image" /> }}
+{{ <figure src="denoised_full.png" caption="Denoised and antialiased image" /> }}
+{{ <figure src="pathtraced.png" caption="Pathtraced reference" /> }}
 
 While ideally we would be able to configure DLSS-RR to read directly from our GBuffer, we unfortunately need a small pass to first copy from the GBuffer to some standalone textures. DLSS-RR will read these textures as inputs to help guide the denoising pass.
 
 DLSS-RR is called via the [dlss_wgpu](https://crates.io/crates/dlss_wgpu) wrapper I wrote, which is integrated into bevy_anti_alias as a Bevy plugin.
 
-{% note() %}
-The dlss_wgpu crate is standalone, and can also be used by non-Bevy projects that are using wgpu!
-{% end %}
+> [!NOTE]
+> The dlss_wgpu crate is standalone, and can also be used by non-Bevy projects that are using wgpu!
 
-{{ figure(src="denoised_di.png", caption="Denoised and antialiased image - DI only") }}
-{{ figure(src="denoised_gi.png", caption="Denoised and antialiased image - GI only") }}
+{{ <figure src="denoised_di.png" caption="Denoised and antialiased image - DI only" /> }}
+{{ <figure src="denoised_gi.png" caption="Denoised and antialiased image - GI only" /> }}
 
 ## Performance
 
@@ -705,9 +703,9 @@ The dlss_wgpu crate is standalone, and can also be used by non-Bevy projects tha
 
 Timings for all scenes were measured on an RTX 3080, rendered at 1600x900, and upscaled to 3200x1800 using DLSS-RR performance mode.
 
-{{ figure(src="pica_pica_perf.png", caption="PICA PICA") }}
-{{ figure(src="bistro_perf.png", caption="Bistro") }}
-{{ figure(src="cornell_box_perf.png", caption="Cornell Box") }}
+{{ <figure src="pica_pica_perf.png" caption="PICA PICA" /> }}
+{{ <figure src="bistro_perf.png" caption="Bistro" /> }}
+{{ <figure src="cornell_box_perf.png" caption="Cornell Box" /> }}
 
 <!-- |                Pass               | PICA PICA Duration (ms) | Bistro Duration (ms) | Cornell Box Duration (ms) | Dependent On |
 |:---------------------------------:|:-----------------------:|:--------------------:|:-------------------------:|:------------:|
@@ -763,7 +761,7 @@ The ReSTIR DI initial and temporal pass is mainly limited by loads from global m
 
 The ReSTIR DI spatial and shade pass, and both ReSTIR GI passes, are limited by raytracing throughput (yellow bar).
 
-{{ figure(src="nsight_trace.png", caption="NSight Graphics GPU Trace") }}
+{{ <figure src="nsight_trace.png" caption="NSight Graphics GPU Trace" /> }}
 
 There are typically three ways to improve memory-bound shaders:
 1. Loading less data
@@ -850,7 +848,7 @@ reservoir.radiance = direct_lighting.radiance;
 reservoir.unbiased_contribution_weight = direct_lighting.inverse_pdf * uniform_hemisphere_inverse_pdf();
 ```
 
-{{ figure(src="no_world_cache.png", caption="Alternate GI scheme, without the world cache") }}
+{{ <figure src="no_world_cache.png" caption="Alternate GI scheme, without the world cache" /> }}
 
 Despite the alternate scheme having higher variance and no multibounce pathtracing, it's actually _brighter_ than using the world cache. For some reason, the voxelized nature of the world cache leads to a loss of energy.
 

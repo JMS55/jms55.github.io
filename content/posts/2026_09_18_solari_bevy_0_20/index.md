@@ -17,7 +17,7 @@ Whereas last cycle was mostly incremental improvements, this cycle was the compl
 
 Lots to cover, so let's get started!
 
-{{ figure(src="headline.png", caption="Zero Day rendered in realtime via Bevy Solari 0.20") }}
+{{ <figure src="headline.png" caption="Zero Day rendered in realtime via Bevy Solari 0.20" /> }}
 
 ## Reducing Shadow Lag
 
@@ -268,9 +268,9 @@ More important than the memory savings, there are a bunch of other improvements 
 
 Overall, we get some very nice quality wins, simplify the code, and reduce our memory usage. Performance tends to be either about the same, slightly slower, or slightly faster depending on the GPU and scene you're benchmarking.
 
-{{ figure(src="pica_pica_reference.png", caption="Pathtraced PICA PICA scene") }}
-{{ figure(src="before_unifed_pica_pica.png", caption="Separate ReSTIR DI and GI passes, no denoising") }}
-{{ figure(src="unified_pica_pica.png", caption="Unified ReSTIR, no denoising - less biased and less visibility noise") }}
+{{ <figure src="pica_pica_reference.png" caption="Pathtraced PICA PICA scene" /> }}
+{{ <figure src="before_unifed_pica_pica.png" caption="Separate ReSTIR DI and GI passes, no denoising" /> }}
+{{ <figure src="unified_pica_pica.png" caption="Unified ReSTIR, no denoising - less biased and less visibility noise" /> }}
 
 ### Downsides
 
@@ -282,7 +282,7 @@ Another downside is that a big unified pathtracing kernel uses more registers th
 
 The real issue is that we're no longer tracing paths for both the primary vertex's diffuse _and_ specular lobes every frame. Before, we had dedicated passes for diffuse and specular GI paths (really just a single-bounce for diffuse GI, we weren't doing a full path), but now we're only tracing a single path, with stochastic lobe selection for dielectric materials that have two lobes. Tracing two separate paths would be too expensive.
 
-{{ figure(src="no_specular_boost.png", caption="Standard BRDF sampling - specular reflections are badly undersampled") }}
+{{ <figure src="no_specular_boost.png" caption="Standard BRDF sampling - specular reflections are badly undersampled" /> }}
 
 Remember from the last post that dielectric materials are implemented as a thin specular lobe layered _over_ a diffuse lobe. Depending on what angle you view it at, the top specular layer gets a certain percentage of the energy, with the rest being transmitted to the diffuse layer beneath it. When picking a BRDF lobe to follow to keep tracing the path, we can importance sample the two layers according to these percentages, biasing towards picking the lobe that will receive a higher amount of energy.
 
@@ -310,7 +310,7 @@ fn specular_lobe_sampling_probability(rho: LobeReflectances, perceptual_roughnes
 
 The logic is pretty simple: for smooth dielectric surfaces, ReSTIR will _already_ reduce noise from diffuse paths through reservoir reuse. Since we're not resampling specular paths, it makes more sense to allocate a higher percentage of our initial samples towards specular paths, since they don't have any form of ReSTIR to help them out unlike diffuse paths. Additionally, sharp specular reflections are simply more detailed than blurry diffuse reflections, and therefore the denoiser needs more samples in order to properly reconstruct them.
 
-{{ figure(src="specular_boost.png", caption="With specular boost - noticeably cleaner reflections") }}
+{{ <figure src="specular_boost.png" caption="With specular boost - noticeably cleaner reflections" /> }}
 
 ## Saying Goodbye to ReSTIR
 
@@ -330,21 +330,21 @@ When you think about it, what actually _is_ a denoiser doing anyways?
 
 Denoising is essentially signal smoothing. The radiance of a pixel can be thought of as a function, which I'll simplify down to a 2d function for the purposes of this metaphor.
 
-{{ figure(src="denoiser_function.svg", caption="Ground truth pathtracing - perfectly noise free, but impossible to construct") }}
+{{ <figure src="denoiser_function.svg" caption="Ground truth pathtracing - perfectly noise free, but impossible to construct" /> }}
 
 However in pathtracing, it would be prohibitively expensive to calculate the full function. Instead, we sample the function, calculating its value at discrete points. This is what produces the noisy input we feed a denoiser.
 
-{{ figure(src="denoiser_samples.svg", caption="What the pathtracer hands the denoiser: the function evaluated at a handful of discrete points") }}
+{{ <figure src="denoiser_samples.svg" caption="What the pathtracer hands the denoiser: the function evaluated at a handful of discrete points" /> }}
 
 The denoiser can then look at those points, and try to "guess", and fill in the rest of the function, usually by interpolating (averaging) neighboring points together.
 
-{{ figure(src="denoiser_good.svg", caption="With enough samples, interpolating neighbors together lands close to the real function") }}
+{{ <figure src="denoiser_good.svg" caption="With enough samples, interpolating neighbors together lands close to the real function" /> }}
 
 If the input samples are a good representation of the overall function, then the denoiser can do a pretty good job at getting close to what the function should be.
 
 If the input samples _aren't_ a good representation, well, then the denoiser is going to do a poor job of guessing. This is where denoiser artifacts and blurriness come from.
 
-{{ figure(src="denoiser_poor.svg", caption="With poorly selected samples, the denoiser guesses the function wrong") }}
+{{ <figure src="denoiser_poor.svg" caption="With poorly selected samples, the denoiser guesses the function wrong" /> }}
 
 Now, denoisers have an advantage - they can look at multiple pixels at once. The good thing is, lighting tends to be a pretty "smooth" signal. It fades out smoothly over a distance, and doesn't tend to change that drastically between pixels. So long as _some_ of the nearby pixels have a good estimate of the incoming radiance, modern denoisers can do a pretty solid job at reconstructing a smooth lighting signal.
 
@@ -352,8 +352,8 @@ Now, after reading that, does my description of denoisers sound... familiar?
 
 It's very similar to what ReSTIR is doing. In ReSTIR, we're taking discrete paths, and shifting them to terminate at different pixels, re-evaluating how much radiance the path should give under the new conditions. We do this spatially and temporally, reusing paths between pixels.
 
-{{ figure(src="bistro_noisy.png", caption="Bistro without ReSTIR, before denoising") }}
-{{ figure(src="bistro_noisy_restir.png", caption="Bistro with ReSTIR, before denoising") }}
+{{ <figure src="bistro_noisy.png" caption="Bistro without ReSTIR, before denoising" /> }}
+{{ <figure src="bistro_noisy_restir.png" caption="Bistro with ReSTIR, before denoising" /> }}
 
 Denoisers do the same, just with path _radiance_, instead of the paths themselves.
 
@@ -365,8 +365,8 @@ Moreover, while denoisers can more easily cause bias, they don't cause any issue
 
 Testing I've done shows that current (v4.5) versions of DLSS-RR just... don't really need ReSTIR a lot of the time. Our GI signal is already dense enough for DLSS-RR to do a perfectly good job. Our DI signal is pretty undersampled if you have more than a few lights, as RIS is not sufficient, but even then it tends to manifest as shadows that fade out at a distance, which - ever used a shadow map?
 
-{{ figure(src="bistro_denoised.png", caption="Bistro without ReSTIR, after DLSS-RR - missing some shadows") }}
-{{ figure(src="bistro_restir_denoised.png", caption="Bistro with ReSTIR, after DLSS-RR") }}
+{{ <figure src="bistro_denoised.png" caption="Bistro without ReSTIR, after DLSS-RR - missing some shadows" /> }}
+{{ <figure src="bistro_restir_denoised.png" caption="Bistro with ReSTIR, after DLSS-RR" /> }}
 
 If this still sounds like a crazy idea to you, consider - lots of games are currently doing quarter resolution and even variable resolution GI. Denoisers are already designed to deal with a fairly noisy signal - we don't need it to be _that_ dense. ReSTIR is often overkill.
 
@@ -411,11 +411,11 @@ Bevy is very modular, and Solari is no exception. The entire raytracing scene co
 
 Previously, the raytracing scene code was functional, but very naive. It rebuilt the scene from scratch every frame, iterating over every mesh, light source, and material in the scene.
 
-{{ figure(src="before_tracy.png", caption="Tracy CPU trace, before optimization") }}
+{{ <figure src="before_tracy.png" caption="Tracy CPU trace, before optimization" /> }}
 
 Now, with a _lot_ of ugly and careful code, and after a long time instrumenting things and comparing Tracy traces, Solari has much better CPU performance!
 
-{{ figure(src="after_tracy.png", caption="Tracy CPU trace, after optimization - now GPU bound (prepare_windows)") }}
+{{ <figure src="after_tracy.png" caption="Tracy CPU trace, after optimization - now GPU bound (prepare_windows)" /> }}
 
 Similar to past efforts for the standard renderer over the last several Bevy releases, Solari now caches the entire scene, and does incremental updates to both the render world ECS and GPU buffers using tools like Bevy's change detection and [AtomicSparseBufferVec](https://docs.rs/bevy/latest/bevy/render/render_resource/struct.AtomicSparseBufferVec.html).
 
@@ -459,7 +459,7 @@ It's pretty simple for now - just sample the cubemap when on ray miss, and fold 
 
 In the future, we'll want to do NEE against the cubemap and build a hierarchical CDF to accelerate sampling for NEE, but for now the simple method works pretty well.
 
-{{ figure(src="atmosphere.png", caption="Procedural atmosphere rendering used for lighting via Solari") }}
+{{ <figure src="atmosphere.png" caption="Procedural atmosphere rendering used for lighting via Solari" /> }}
 
 This feature is part of a shift in my focus towards getting Solari to support more rendering features to bring it up to parity with Bevy's standard renderer. In particular, I'd like to add support to Solari for the remaining rect/point/spotlight types, animated meshes, and alpha masked and transparent/transmissive/refractive materials.
 

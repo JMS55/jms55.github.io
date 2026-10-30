@@ -14,7 +14,7 @@ Compared to 0.18, this cycle was lighter on big features. Most of my time went i
 
 I also spent a significant chunk of this cycle researching light sampling techniques to improve NEE, though that work is still ongoing, and hasn't produced any concrete PRs yet. More on that later.
 
-{{ figure(src="headline_many_lights.png", caption="A scene lit purely by 441 emissive sphere meshes, stress testing light sampling.") }}
+{{ <figure src="headline_many_lights.png" caption="A scene lit purely by 441 emissive sphere meshes, stress testing light sampling." /> }}
 
 Here's a summary of what's changed in Solari for Bevy 0.19:
 
@@ -39,8 +39,8 @@ This cycle, I spent a lot of time fixing or mitigating these issues.
 
 In Bevy 0.18, perfect mirrors were handled by clamping roughness to 0.001, and then special-casing the GGX VNDF sampling to reflect perfectly at that threshold. This worked for sampling, but the microfacet BRDF evaluation was never designed to handle near-zero roughness — it produced black line artifacts on mirror surfaces.
 
-{{ figure(src="mirror_artifacts_before.png", caption="Black line artifacts (bottom right) from the hacked microfacet BRDF") }}
-{{ figure(src="mirror_artifacts_after.png", caption="Fixed mirrors with the dedicated mirror BRDF") }}
+{{ <figure src="mirror_artifacts_before.png" caption="Black line artifacts (bottom right) from the hacked microfacet BRDF" /> }}
+{{ <figure src="mirror_artifacts_after.png" caption="Fixed mirrors with the dedicated mirror BRDF" /> }}
 
 The fix was to stop trying to hack the microfacet BRDF, and instead introduce a proper mirror BRDF. Roughness is no longer clamped to a minimum — true zero-roughness materials are now allowed.
 
@@ -74,7 +74,7 @@ As part of this change, cos_theta (the `NdotL` term from the rendering equation)
 
 One of the open issues from 0.18 was that mirror reflections had denoising artifacts — cross-hatching patterns when the camera was static, and ghosting when objects in reflections moved.
 
-{{ figure(src="mirror_denoising_before.png", caption="Cross-hatching artifacts without PSR") }}
+{{ <figure src="mirror_denoising_before.png" caption="Cross-hatching artifacts without PSR" /> }}
 
 The root cause is that DLSS Ray Reconstruction uses guide buffers (normals, depth, motion vectors) from the primary surface to denoise. But for a mirror, the primary surface is just a flat reflective plane — the denoiser has no information about the geometry visible _in_ the reflection.
 
@@ -82,9 +82,8 @@ To fix this, I implemented primary surface replacement (PSR), a technique descri
 
 The idea is to trace through mirror bounces until we hit a non-mirror surface, then replace the primary surface's guide buffer data with that surface's data. The denoiser then sees the actual reflected geometry instead of the flat mirror.
 
-{% note() %}
-Currently, I only apply PSR to smooth metals. I didn't get great results from applying it to smooth non-metals.
-{% end %}
+> [!NOTE]
+> Currently, I only apply PSR to smooth metals. I didn't get great results from applying it to smooth non-metals.
 
 The tricky part is computing correct motion vectors for the reflected surface. We need to account for the mirror transformations, which means chaining [Householder reflection matrices](https://en.wikipedia.org/wiki/Householder_transformation) across each mirror bounce:
 
@@ -102,11 +101,10 @@ fn reflection_matrix(plane_normal: vec3f) -> mat3x3<f32> {
 
 For each mirror bounce, we multiply the accumulated rotation matrix by the reflection matrix of that surface's normal. When we finally hit a non-mirror surface, we use this accumulated matrix to transform the hit position into a "virtual" position as seen through the mirror chain, and compute motion vectors from that.
 
-{% note() %}
-This technique assumes a flat surface, and is incorrect for curved mirrors like a sphere.
-{% end %}
+> [!NOTE]
+> This technique assumes a flat surface, and is incorrect for curved mirrors like a sphere.
 
-{{ figure(src="mirror_denoising_after.png", caption="Improved mirror reflections with PSR") }}
+{{ <figure src="mirror_denoising_after.png" caption="Improved mirror reflections with PSR" /> }}
 
 In practice, while PSR itself gave massive improvements, I haven't really noticed any benefit from implementing specular motion vectors. More testing is needed; DLSS-RR is a little picky, and expects guide buffers to be calculated in the same way it was trained on — I could just be implementing things in a way DLSS-RR does not like.
 
@@ -118,7 +116,7 @@ While this works, it's a little naive. A series of semi-rough bounces is basical
 
 The fix was to switch to a path termination heuristic inspired by [RTXGI](https://github.com/NVIDIAGameWorks/RTXGI), which accounts for the cumulative spread of the full path. Path spread can be approximated by a cone based on the roughness of the surface a ray is coming from, and the distance the ray traveled. When the base of the cone is larger than the size of the world cache cell we're sampling from, it's safe to terminate into the world cache.
 
-{{ figure(src="path_spread.svg", caption="Cumulative path spread grows with each bounce until it exceeds the world cache cell size, triggering termination") }}
+{{ <figure src="path_spread.svg" caption="Cumulative path spread grows with each bounce until it exceeds the world cache cell size, triggering termination" /> }}
 
 This improves performance by terminating paths sooner when appropriate. However, there are still visible artifacts when transitioning between LOD levels of the world cache — the lighting can pop or shift as the path termination crosses a LOD boundary. Unlike ReSTIR GI for diffuse, there are no temporal reservoirs to hide the transition. Smoothing out these transitions is still an open problem.
 
@@ -128,7 +126,7 @@ In 0.18, Solari's BRDF for non-metals simply added the diffuse and specular lobe
 
 This is what [Filament](https://google.github.io/filament/main/filament.html) does (which is what Bevy's BRDF is based on), but it's wrong. In reality, the specular lobe sits _on top of_ the diffuse lobe as a separate layer. Light has to pass through the specular layer to reach the diffuse layer, and then pass through it again on the way out. The Fresnel equations govern how much light is reflected vs transmitted at each crossing. Ignoring this means the BRDF produces too much energy — both lobes claim the full incoming light, when they should be sharing it.
 
-{{ figure(src="brdf_before.png", caption="Incorrect BRDF code rendered via Solari's pathtracer") }}
+{{ <figure src="brdf_before.png" caption="Incorrect BRDF code rendered via Solari's pathtracer" /> }}
 
 Fixing this was the biggest correctness change of the cycle, and I owe a big thanks to [Matt Kielan](https://www.linkedin.com/in/matt-kielan-9b054a165) for guiding me through this (I spent a _lot_ of time trying to figure out what I was doing wrong before I learned about this), along with the INF-handling MIS code from earlier.
 
@@ -183,7 +181,7 @@ let specular_weight = 1.0 - diffuse_weight;
 
 At grazing angles, most energy goes to the specular lobe, so the pathtracer samples it more often. At normal incidence, more energy goes to the diffuse lobe.
 
-{{ figure(src="brdf_after.png", caption="Correct BRDF code rendered via Solari's pathtracer") }}
+{{ <figure src="brdf_after.png" caption="Correct BRDF code rendered via Solari's pathtracer" /> }}
 
 ### VNDF Sample Validation
 
@@ -224,9 +222,8 @@ var cell_size = get_cell_size(world_position, view_position);
 #endif
 ```
 
-{% note() %}
-As an optimization, I only apply this to the first bounce of ReSTIR GI. Queries as part of world cache update continue to use a coarser LOD.
-{% end %}
+> [!NOTE]
+> As an optimization, I only apply this to the first bounce of ReSTIR GI. Queries as part of world cache update continue to use a coarser LOD.
 
 Combined with making LOD transitions less aggressive and reducing the finest LOD cell size (from 0.25m to 0.15m), this greatly reduces light leaks near corners. It doesn't fix light leaks entirely (especially since I turned world cache jitter back on this cycle), but it helps.
 
@@ -234,7 +231,7 @@ Combined with making LOD transitions less aggressive and reducing the finest LOD
 
 The finer resolution helps with quality, but it also means more active cells, which hurts performance a fair amount.
 
-{{ figure(src="bistro_all_cells_update.png", caption="2.65ms to update every world cache cell in Bistro") }}
+{{ <figure src="bistro_all_cells_update.png" caption="2.65ms to update every world cache cell in Bistro" /> }}
 
 To compensate, we now randomly skip updating cells once the count exceeds 40,000:
 
@@ -246,7 +243,7 @@ if rand_f(&rng) >= f32(WORLD_CACHE_CELL_UPDATES_SOFT_CAP) / f32(world_cache_acti
 
 Stochastic world cache updates keep the performance hit down in larger scenes, at the cost of less reactive lighting.
 
-{{ figure(src="bistro_stochastic_cells_update.png", caption="0.47ms to update a random 40,000 world cache cells in Bistro") }}
+{{ <figure src="bistro_stochastic_cells_update.png" caption="0.47ms to update a random 40,000 world cache cells in Bistro" /> }}
 
 I'm overall not super happy with the world cache, and plan to continue iterating on it, or explore alternative solutions.
 
@@ -258,11 +255,11 @@ As part of this change I also split the DI and GI world cache sampling steps int
 
 This cycle I also improved the algorithm for finding valid spatial samples from neighboring pixels during ReSTIR DI and GI spatial resampling. In areas with challenging geometry like curved surfaces or cracks between meshes, pixels were unable to find a valid neighbor, hurting quality.
 
-{{ figure(src="old_spatial_resampling.png", caption="Pink pixels have no valid spatial sample (before)") }}
+{{ <figure src="old_spatial_resampling.png" caption="Pink pixels have no valid spatial sample (before)" /> }}
 
 The fix was pretty simple: Although we only pick 1 spatial sample, we attempt to find a valid neighbor up to 5 times. Before we were using a fixed sampling radius, but now after every failed attempt, we halve the sampling radius.
 
-{{ figure(src="new_spatial_resampling.png", caption="Far fewer pixels missing spatial samples (after)") }}
+{{ <figure src="new_spatial_resampling.png" caption="Far fewer pixels missing spatial samples (after)" /> }}
 
 ### Skip ReSTIR GI for Smooth Metals
 
@@ -272,7 +269,7 @@ Finally, a simple optimization: smooth metallic surfaces have zero diffuse contr
 
 Besides the BRDF work, the other major time sink this cycle was researching better light sampling. Currently, Solari's light sampling is brute force — we take completely random samples from the scene's lights and use RIS to pick one that is likely to contribute the most (not counting visibility). This works, but it's very inefficient, especially for large scenes with many lights, where most of them don't contribute to a given pixel.
 
-{{ figure(src="32_sample_ris.png", caption="Many lights scene, direct lighting only, no denoising, 32 random sample RIS") }}
+{{ <figure src="32_sample_ris.png" caption="Many lights scene, direct lighting only, no denoising, 32 random sample RIS" /> }}
 
 The obvious question is: can we do better by precomputing which lights matter _where_?
 
@@ -298,7 +295,7 @@ It's not quite as good as algorithms that store the importance of each light lik
 
 The results are pretty good!
 
-{{ figure(src="32_sample_grid_ris.png", caption="Many lights scene, direct lighting only, no denoising, 32 sample RIS from the light grid") }}
+{{ <figure src="32_sample_grid_ris.png" caption="Many lights scene, direct lighting only, no denoising, 32 sample RIS from the light grid" /> }}
 
 However, there are still some unsolved problems:
 

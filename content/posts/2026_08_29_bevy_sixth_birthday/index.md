@@ -26,13 +26,13 @@ For those of you who haven't been following, Bevy Solari is a realtime pathtrace
 
 I've written [plenty of articles on Solari](/tags/raytracing) before, but the TLDR is that I want to make lighting more accessible to beginners, and push the boundaries of what Bevy is capable of. Rather than having to learn a mix of shadow maps, lightmap baking, light probe baking, environment maps, screen space methods, what their pitfalls and limitations are, and spending hours tweaking things, pathtracing replaces all that complexity with a single, much easier to reason about lighting algorithm.
 
-{{ figure(src="zorah1_albedo.png", caption=" ") }}
-{{ figure(src="zorah2_albedo.png", caption="NVIDIA Zorah Scene, albedo rendering (no lighting)") }}
+{{ <figure src="zorah1_albedo.png" caption=" " /> }}
+{{ <figure src="zorah2_albedo.png" caption="NVIDIA Zorah Scene, albedo rendering (no lighting)" /> }}
 
 Solari has been a years-long project, but it's finally becoming production ready, and I'm really happy with what I've ended up with!
 
-{{ figure(src="zorah1_lit.png", caption=" ") }}
-{{ figure(src="zorah2_lit.png", caption="NVIDIA Zorah Scene, Solari rendering") }}
+{{ <figure src="zorah1_lit.png" caption=" " /> }}
+{{ <figure src="zorah2_lit.png" caption="NVIDIA Zorah Scene, Solari rendering" /> }}
 
 It's been a long, _long_ journey through several different rewrites:
 * Lumen/AMD GI like screen-space probes (diffuse GI only), a spatial hashing based world irradiance cache, and a spherical-harmonic based spatial denoiser
@@ -44,15 +44,15 @@ It's been a long, _long_ journey through several different rewrites:
 * Another complete rewrite, now with a single unified pathtracer tracing direct and indirect diffuse and specular lighting, and a single ReSTIR pass resampling everything using the reconnection shift
 * DLSS-RR 4.5 has gotten so good, ReSTIR is now optional!
 
-{{ figure(src="cascades.png", caption="Cornell Box, old version of Solari GI from 2023, screen-space probes with world-space radiance cascade intervals") }}
-{{ figure(src="cascades_merged.png", caption="The cascades merged together") }}
+{{ <figure src="cascades.png" caption="Cornell Box, old version of Solari GI from 2023, screen-space probes with world-space radiance cascade intervals" /> }}
+{{ <figure src="cascades_merged.png" caption="The cascades merged together" /> }}
 
 There's still a decent amount to do, notably supporting transparent materials and more types of light sources, but the core lighting algorithm is pretty solid!
 
 I'm really proud of how everything's turned out. Expect another blog post on Solari soon for Bevy 0.20, where I'll cover things in more detail, and stay tuned for a formal publication coming at the end of the year that I can't talk about too much yet :)
 
-{{ figure(src="zero_day_albedo.png", caption=" ") }}
-{{ figure(src="zero_day.png", caption="NVIDIA Zero Day Scene, Solari rendering") }}
+{{ <figure src="zero_day_albedo.png" caption=" " /> }}
+{{ <figure src="zero_day.png" caption="NVIDIA Zero Day Scene, Solari rendering" /> }}
 
 #### dlss_wgpu
 
