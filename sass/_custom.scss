@@ -1,0 +1,24 @@
+// Site-specific overrides on top of the serene theme's styles.
+// Everything here is loaded after themes/serene/sass/main.scss (see main.scss).
+
+/* post titles: larger, tighter to the date line
+  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
+
+.prose h1 {
+  font-size: 2em;
+  margin: 1.5em 0 0.35em;
+}
+
+/* homepage avatar: square instead of round
+  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
+
+body.homepage #info img {
+  border-radius: 0;
+}
+
+/* no extra gap when a post starts with a heading
+  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
+
+.prose #post-info + :is(h1, h2, h3, h4, h5, h6) {
+  margin-top: 0;
+}
